@@ -19,6 +19,10 @@ void setup(void) {
   delay(250);
   digitalWrite(PA5, HIGH);
   delay(250);
+  digitalWrite(PA5, LOW);
+  delay(250);
+  digitalWrite(PA5, HIGH);
+  delay(250);
 }
 
 void loop(void)
