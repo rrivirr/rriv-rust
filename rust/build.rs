@@ -32,7 +32,7 @@ fn macos_copy_memory_x() {
 
 fn main() {
     println!("build.rs");
-    macos_copy_memory_x();
+    // macos_copy_memory_x();
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")
         .expect("CARGO_MANIFEST_DIR env var is not defined"));
     println!("CARGO_MANIFEST_DIR: {:?}", crate_dir);
