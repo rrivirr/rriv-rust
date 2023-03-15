@@ -1,0 +1,9 @@
+[default.general]
+chip = "stm32f103rb"
+
+
+[default.rtt]
+enabled = false
+
+[default.gdb]
+enabled = false
