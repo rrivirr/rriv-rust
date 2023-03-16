@@ -9,7 +9,7 @@
 
 extern crate alloc;
 
-use core::{default::Default, u8};
+use core::{default::Default, u8, ffi::c_void};
 use alloc::{boxed::Box, alloc::Layout}; // vec::{self, Vec}
 use panic_halt as _;
 // use core::panic::PanicInfo;
@@ -25,11 +25,6 @@ use unwrap_infallible::UnwrapInfallible;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
-
-pub struct SerialInterfaceContext {
-    rx: Rx<pac::USART2>,
-    tx: Tx<pac::USART2>,
-}
 
 fn alloc_heap() {
     // Initialize the allocator BEFORE you use it
@@ -49,13 +44,15 @@ fn oom(_: Layout) -> ! {
     loop {}
 }
 
-// #[panic_handler]
-// fn panic(_: &PanicInfo) -> ! {
-//     loop {}
-// }
+#[repr(C)]
+pub(crate) struct SerialInterfaceContext {
+    rx: Rx<pac::USART2>,
+    tx: Tx<pac::USART2>,
+}
+
 
 #[no_mangle]
-pub unsafe extern "C" fn rust_serial_interface_new() -> *mut SerialInterfaceContext {
+pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
     
     alloc_heap();
     
@@ -106,25 +103,25 @@ pub unsafe extern "C" fn rust_serial_interface_new() -> *mut SerialInterfaceCont
         rx: serial.rx,
         tx: serial.tx,
     };
-    Box::into_raw(Box::new(context))
+    Box::into_raw(Box::new(context)) as *mut c_void
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn rust_serial_read(serial_ptr: *mut SerialInterfaceContext) -> u8 {
+pub unsafe extern "C" fn rust_serial_read(serial_ptr: *mut c_void) -> u8 {
     
-    let mut serial_context = Box::from_raw(serial_ptr);
+    let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
     let rx = &mut serial_context.rx;
     // Read the byte that was just sent. Blocks until the read is complete
     block!(rx.read()).unwrap()
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn rust_serial_write(serial_ptr: *mut SerialInterfaceContext, value: u8) {
-    let CR: u8 = b'\r';
-    let LF: u8 = b'\n';
-    let mut serial_context = Box::from_raw(serial_ptr);
+pub unsafe extern "C" fn rust_serial_write(serial_ptr: *mut c_void, value: u8) {
+    let cr: u8 = b'\r';
+    let lf: u8 = b'\n';
+    let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
     let tx = &mut serial_context.tx;
     block!(tx.write(value)).unwrap_infallible();
-    block!(tx.write(LF)).unwrap_infallible();
-    block!(tx.write(CR)).unwrap_infallible();
+    block!(tx.write(lf)).unwrap_infallible();
+    block!(tx.write(cr)).unwrap_infallible();
 }
