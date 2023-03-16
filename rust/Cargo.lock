@@ -374,7 +374,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rust_serial"
+name = "rust_serial_tester"
 version = "0.1.0"
 dependencies = [
  "cbindgen",
