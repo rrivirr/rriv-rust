@@ -1,10 +1,10 @@
 #include <Arduino.h>
 extern "C" {
-  #include "rust_serial.h"
+  #include "../../rust/rust_serial.h"
 }
 
 
-SerialInterfaceContext * rustSerial;
+void * rustSerial;
 
 void setup(void) {
   pinMode(PA5, OUTPUT);

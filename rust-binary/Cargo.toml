@@ -16,7 +16,6 @@ cortex-m-rt = "0.7.3"
 panic-halt = "0.2.0"
 unwrap-infallible = "0.1.5"
 stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103"] }
-embedded-alloc = "0.5.0"
 
 [build-dependencies]
 cbindgen = "0.24.3"

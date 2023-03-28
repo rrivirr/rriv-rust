@@ -3,16 +3,15 @@
 //! You have to short the TX and RX pins to make this program work
 
 #![allow(clippy::empty_loop)]
-#![no_main]
 #![no_std]
+#![no_main]
 #![feature(alloc_error_handler)]
 
 extern crate alloc;
 
-use core::{default::Default, u8, ffi::c_void};
-use alloc::{boxed::Box, alloc::Layout}; // vec::{self, Vec}
+use core::{default::Default, u8, ffi::c_void, mem::MaybeUninit};
+use alloc::{boxed::Box, alloc::Layout};
 use panic_halt as _;
-// use core::panic::PanicInfo;
 use nb::block;
 use embedded_alloc::Heap;
 use stm32f1xx_hal::{
@@ -25,18 +24,17 @@ use unwrap_infallible::UnwrapInfallible;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
+const CR: u8 = b'\r';
+const LF: u8 = b'\n';
+const HEAP_SIZE: usize = 128;
+static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
 
+
+// Initialize the allocator BEFORE you use it
 fn alloc_heap() {
-    // Initialize the allocator BEFORE you use it
     {
-        use core::mem::MaybeUninit;
-        const HEAP_SIZE: usize = 1024;
-        static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
         unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
     }
-
-    // let mut xs = Vec::new();
-    // xs.push(1);
 }
 
 #[alloc_error_handler]
@@ -44,6 +42,8 @@ fn oom(_: Layout) -> ! {
     loop {}
 }
 
+/// <div rustbindgen nocopy></div>
+/// <div rustbindgen opaque></div>
 #[repr(C)]
 pub(crate) struct SerialInterfaceContext {
     rx: Rx<pac::USART2>,
@@ -99,29 +99,36 @@ pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
         Config::default().baudrate(9600.bps()),
         &clocks,
     );
-    let context = SerialInterfaceContext {
+    let mut context = SerialInterfaceContext {
         rx: serial.rx,
         tx: serial.tx,
     };
-    Box::into_raw(Box::new(context)) as *mut c_void
+    context.tx.write(b'\r').unwrap();
+    let serial_ptr = Box::into_raw(Box::new(context)) as *mut c_void;
+    let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
+    block!(serial_context.tx.write(b'S')).unwrap_infallible();
+    block!(serial_context.tx.write(b'T')).unwrap_infallible();
+    block!(serial_context.tx.write(b'A')).unwrap_infallible();
+    block!(serial_context.tx.write(b'R')).unwrap_infallible();
+    block!(serial_context.tx.write(b'T')).unwrap_infallible();
+    block!(serial_context.tx.write(CR)).unwrap_infallible();
+    block!(serial_context.tx.write(LF)).unwrap_infallible();
+    Box::into_raw(serial_context) as *mut c_void
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_serial_read(serial_ptr: *mut c_void) -> u8 {
     
     let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
-    let rx = &mut serial_context.rx;
     // Read the byte that was just sent. Blocks until the read is complete
-    block!(rx.read()).unwrap()
+    let charr = block!(serial_context.rx.read()).unwrap();
+    Box::into_raw(serial_context);
+    charr
 }
 
 #[no_mangle]
 pub unsafe extern "C" fn rust_serial_write(serial_ptr: *mut c_void, value: u8) {
-    let cr: u8 = b'\r';
-    let lf: u8 = b'\n';
     let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
-    let tx = &mut serial_context.tx;
-    block!(tx.write(value)).unwrap_infallible();
-    block!(tx.write(lf)).unwrap_infallible();
-    block!(tx.write(cr)).unwrap_infallible();
+    block!(serial_context.tx.write(value)).unwrap_infallible();
+    Box::into_raw(serial_context);
 }
