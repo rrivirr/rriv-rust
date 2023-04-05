@@ -1,0 +1,26 @@
+[package]
+name = "rust_serial_tester"
+version = "0.1.0"
+edition = "2021"
+
+# Note: header file generation happens in build.rs
+[lib]
+name = "rust_serial"
+crate-type = ["staticlib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+embedded-hal = "0.2.7"
+nb = "1"
+cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.3"
+# Panic behaviour, see https://crates.io/keywords/panic-impl for alternatives
+panic-halt = "0.2.0"
+unwrap-infallible = "0.1.5"
+stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103"] }
+embedded-alloc = "0.5.0"
+
+[build-dependencies]
+cbindgen = "0.24.3"
+bindgen = "0.64.0"
