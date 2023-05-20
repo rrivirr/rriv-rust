@@ -1,4 +1,5 @@
 #![no_std]
+// https://ferrous-systems.com/blog/test-embedded-app/
 
 const BUFFER_NUM: i32 = BUFFER_NUM;
 
@@ -7,37 +8,40 @@ struct CommandRecognizer {
   receiving: bool,
   pendingMessages: u16,
   messageReady: bool,
-  buffer: [[char; 100]; ::BUFFER_NUM],
+  // buffer: [[char; 100]; ::BUFFER_NUM],
   firstBuffer: u16,
   currentBuffer: u16,
   commandPos: u16,
 }
 
 
-// impl Default for CommandRecognizer {
-//   fn default() -> Self {
-//       CommandRecognizer {
-//         receiving: false,
-//         pendingMessages: 0,extern crate std;extern crate std;
-//         firstBuffer: 0,
-//         currentBuffer: 0
-//       }
-//    }
-// }
+impl Default for CommandRecognizer {
+  fn default() -> Self {
+      CommandRecognizer {
+        receiving: false,
+        pendingMessages: 0,
+        firstBuffer: 0,
+        currentBuffer: 0,
+        messageReady: true,
+        commandPos: 0,
+        messageReady: false//,
+        // buffer :
+      }
+   }
+}
 
 impl CommandRecognizer {
 
   fn processCharacter(character: char) -> char {
 
-    if( character == "\r" ){extern crate std;
+    if( character == "\r" ){
       receiving = false;
       pendingMessages = pendingMessages + 1;
       currentBuffer = currentBuffer + 1;
-      messageReady = true;
       return
     }
 
-    if( receiving == true ){extern crate std;
+    if( receiving == true ){
       return
     }
 
@@ -52,12 +56,12 @@ impl CommandRecognizer {
   }
 
   fn addCharacterToBuffer(character: char) {
-    buffer[currentBuffer][commandPos] = character;
+    // buffer[currentBuffer][commandPos] = character;
     commandPos = commandPos + 1;
   }
 }
 
-
+extern crate std;
 #[cfg(test)]
 extern crate std;
 mod tests {
