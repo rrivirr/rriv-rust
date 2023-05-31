@@ -8,7 +8,7 @@ struct CommandRecognizer {
   receiving: bool,
   pendingMessages: usize,
   messageReady: bool,
-  buffer: [[char; 100]; BUFFER_NUM],
+  // buffer: [[char; 100]; BUFFER_NUM],
   firstBuffer: usize,
   currentBuffer: usize,
   commandPos: usize,
@@ -21,7 +21,9 @@ impl CommandRecognizer {
       receiving: false,
       pendingMessages: 0,
       firstBuffer: 0,
-      currentBuffer: 0
+      currentBuffer: 0,
+      messageReady: false,
+      commandPos: 0
     }
  }
 
@@ -50,7 +52,7 @@ impl CommandRecognizer {
   }
 
   fn addCharacterToBuffer(&self, character: char) {
-    self.buffer[self.currentBuffer][self.commandPos] = character;
+    // self.buffer[self.currentBuffer][self.commandPos] = character;
     self.commandPos = self.commandPos + 1;
   }
 }
