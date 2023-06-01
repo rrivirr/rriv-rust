@@ -1,0 +1,1 @@
+arm-none-eabi-ar t ./librust_serial.a | grep compiler_builtins | xargs -n 15 -I % arm-none-eabi-ar dv ./librust_serial.a %
