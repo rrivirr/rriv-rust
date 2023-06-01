@@ -1,2 +1,7 @@
-rust-binary/target
-cpp/.vscode
+target/
+board/target/
+
+
+
+
+.DS_Store
