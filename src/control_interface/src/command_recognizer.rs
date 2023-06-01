@@ -1,4 +1,4 @@
-// #![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_std)]
 // https://ferrous-systems.com/blog/test-embedded-app/
 
 const BUFFER_NUM: usize = 10;
@@ -8,7 +8,7 @@ struct CommandRecognizer {
   receiving: bool,
   pendingMessages: usize,
   messageReady: bool,
-  // buffer: [[char; 100]; BUFFER_NUM],
+  buffer: [[char; 100]; BUFFER_NUM],
   firstBuffer: usize,
   currentBuffer: usize,
   commandPos: usize,
@@ -23,7 +23,8 @@ impl CommandRecognizer {
       firstBuffer: 0,
       currentBuffer: 0,
       messageReady: false,
-      commandPos: 0
+      commandPos: 0,
+      buffer: [ [ 0u8, ..100], ..BUFFER_NUM]
     }
  }
 
@@ -52,19 +53,19 @@ impl CommandRecognizer {
   }
 
   fn addCharacterToBuffer(&self, character: char) {
-    // self.buffer[self.currentBuffer][self.commandPos] = character;
+    self.buffer[self.currentBuffer][self.commandPos] = character;
     self.commandPos = self.commandPos + 1;
   }
 }
 
 
-// #[cfg(test)]
-// mod tests {
-//   use super::*;
+#[cfg(test)]
+mod tests {
+  use super::*;
 
-//   #[test]
-//   fn test_result() {
+  #[test]
+  fn test_result() {
 
-//     assert_eq!(true, false)
-//   }
-// }
+    assert_eq!(true, false)
+  }
+}
