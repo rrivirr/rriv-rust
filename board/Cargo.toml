@@ -5,6 +5,7 @@ members = ["rriv-0-4"]
 authors = ["m. interrupt"]
 edition = "2021"
 description = "RRIV board packages"
+
 # this workspace for code that:
 # - compiled for a specific target board/platform
 # - depends on hardware peripherals
