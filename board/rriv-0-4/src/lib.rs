@@ -1,9 +1,5 @@
-//! Serial interface loopback test
-//!
-//! You have to short the TX and RX pins to make this program work
-
 #![allow(clippy::empty_loop)]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![no_main]
 #![feature(alloc_error_handler)]
 
@@ -19,14 +15,12 @@ use stm32f1xx_hal::{
     pac::interrupt,
     prelude::*,
     serial::*,
-    serial::{Config, Rx, Serial},
+    serial::{Config, Rx, Serial as Hal_Serial},
 };
 use unwrap_infallible::UnwrapInfallible;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
-const CR: u8 = b'\r';
-const LF: u8 = b'\n';
 const HEAP_SIZE: usize = 128;
 static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
 
@@ -45,16 +39,18 @@ fn oom(_: Layout) -> ! {
 /// <div rustbindgen nocopy></div>
 /// <div rustbindgen opaque></div>
 #[repr(C)]
-pub(crate) struct SerialInterfaceContext {
-    rx: Rx<pac::USART2>,
+pub(crate) struct Serial {
     tx: Tx<pac::USART2>,
 }
 
-static mut TX: Option<Tx<pac::USART2>> = None;
 static mut RX: Option<Rx<pac::USART2>> = None;
 
+pub(crate) struct Board {
+    pub serial: Serial,
+}
+
 #[no_mangle]
-pub unsafe extern "C" fn rust_serial_interface_new() {
+pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
     alloc_heap();
 
     // Get access to the device specific peripherals from the peripheral access crate
@@ -68,60 +64,30 @@ pub unsafe extern "C" fn rust_serial_interface_new() {
     // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
     // `clocks`
     let clocks = rcc.cfgr.freeze(&mut flash.acr);
-
     // Prepare the alternate function I/O registers
     let mut afio = p.AFIO.constrain();
-
     // Prepare the GPIOB peripheral
     let mut gpioa = p.GPIOA.split();
-
-    // USART1
-    // let tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-    // let rx = gpioa.pa10;
-
-    // USART1
-    // let tx = gpiob.pb6.into_alternate_push_pull(&mut gpiob.crl);
-    // let rx = gpiob.pb7;
-
     // USART2
-    let tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-    let rx = gpioa.pa3;
-
-    // // USART3
-    // // Configure pb10 as a push_pull output, this will be the tx pin
-    // let tx = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-    // // Take ownp.USART2usart device. Take ownership over the USART register and tx/rx pins. The rest of
-    // the registers are used to enable and configure the device.
-    // let mut SERIAL:Serial<stm32f1xx_hal::pac::USART2, (stm32f1xx_hal::gpio::Pin<'A', 2, stm32f1xx_hal::gpio::Alternate>, stm32f1xx_hal::gpio::Pin<'A', 3>)> = Serial::new(
-    let serial = Serial::new(
+    let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
+    let rx_pin = gpioa.pa3;
+    // Init Serial
+    let mut serial = Hal_Serial::new(
         p.USART2,
-        (tx, rx),
+        (tx_pin, rx_pin),
         &mut afio.mapr,
         Config::default().baudrate(115200.bps()),
         &clocks,
     );
-    let mut context = SerialInterfaceContext {
-        rx: serial.rx,
-        tx: serial.tx,
-    };
-    context.tx.write(b'\r').unwrap();
+    serial.rx.listen();
+    let context = Serial { tx: serial.tx };
     let serial_ptr = Box::into_raw(Box::new(context)) as *mut c_void;
-    let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
-    block!(serial_context.tx.write(b'S')).unwrap_infallible();
-    block!(serial_context.tx.write(b'T')).unwrap_infallible();
-    block!(serial_context.tx.write(b'A')).unwrap_infallible();
-    block!(serial_context.tx.write(b'R')).unwrap_infallible();
-    block!(serial_context.tx.write(b'T')).unwrap_infallible();
-    block!(serial_context.tx.write(CR)).unwrap_infallible();
-    block!(serial_context.tx.write(LF)).unwrap_infallible();
-    serial_context.rx.listen();
-    serial_context.rx.listen_idle();
+    let serial_context = Box::from_raw(serial_ptr as *mut Serial);
     cortex_m::interrupt::free(|_| unsafe {
-        TX.replace(serial_context.tx);
-        RX.replace(serial_context.rx);
+        RX = Some(serial.rx);
     });
     cortex_m::peripheral::NVIC::unmask(pac::Interrupt::USART2);
-    // Box::into_raw(serial_context) as *mut c_void
+    Box::into_raw(serial_context) as *mut c_void
 }
 
 // #[no_mangle]
