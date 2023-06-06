@@ -1,10 +1,18 @@
 [default.general]
 chip = "stm32f103rb"
 
-
 [default.rtt]
 enabled = false
 
-
 [default.gdb]
 enabled = false
+
+
+[debug.general]
+chip = "stm32f103rb"
+
+[debug.rtt]
+enabled = true
+
+[debug.gdb]
+enabled = true

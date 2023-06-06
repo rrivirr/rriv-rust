@@ -22,6 +22,34 @@
             "sourceLanguages": [
                 "rust"
             ]
+        },
+        {
+            "type": "probe-rs-debug",
+            "request": "launch",
+            "name": "app probe-rs-debug",
+            "cwd": "${workspaceFolder}/board",
+            "runtimeExecutable": "probe-rs-debugger",
+            "runtimeArgs": [
+                "debug"
+            ],
+            "chip": "stm32f103rb",
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "resetAfterFlashing": true,
+                "haltAfterReset": false
+            },
+            "coreConfigs": [
+                {
+                    "coreIndex": 0,
+                    "programBinary": "${workspaceFolder}/board/target/thumbv7m-none-eabi/debug/app", //!MODIFY
+                    "svdFile": "${workspaceFolder}/board/CMSIS.SVD" //!MODIFY
+                }
+            ],
+            "env": {
+                //!MODIFY (or remove)
+                "RUST_LOG": "info" // If you set this variable, check the VSCode console log window for the location of the log file.
+            },
+            "consoleLogLevel": "Console" //Info, Debug
         }
     ],
 }

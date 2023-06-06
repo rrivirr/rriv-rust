@@ -1,5 +1,5 @@
 [workspace]
-members = ["rriv-0-4"]
+members = ["app", "rriv-0-4"]
 
 [workspace.package]
 authors = ["m. interrupt"]
