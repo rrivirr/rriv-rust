@@ -3,6 +3,21 @@
 version = 3
 
 [[package]]
+name = "app"
+version = "0.1.0"
+dependencies = [
+ "cbindgen",
+ "cortex-m",
+ "cortex-m-rt",
+ "embedded-hal",
+ "nb 1.1.0",
+ "panic-halt",
+ "rtt-target",
+ "stm32f1xx-hal",
+ "unwrap-infallible",
+]
+
+[[package]]
 name = "atty"
 version = "0.2.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -517,8 +532,19 @@ dependencies = [
  "embedded-hal",
  "nb 1.1.0",
  "panic-halt",
+ "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",
+]
+
+[[package]]
+name = "rtt-target"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3afa12c77ba1b9bf560e4039a9b9a08bb9cde0e9e6923955eeb917dd8d5cf303"
+dependencies = [
+ "critical-section",
+ "ufmt-write",
 ]
 
 [[package]]
@@ -721,6 +747,12 @@ checksum = "f4f7f0dd8d50a853a531c426359045b1998f04219d88799810762cd4ad314234"
 dependencies = [
  "serde",
 ]
+
+[[package]]
+name = "ufmt-write"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e87a2ed6b42ec5e28cc3b94c09982969e9227600b2e3dcbc1db927a84c06bd69"
 
 [[package]]
 name = "unicode-ident"

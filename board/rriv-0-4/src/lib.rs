@@ -1,32 +1,30 @@
-//! Serial interface loopback test
-//!
-//! You have to short the TX and RX pins to make this program work
-
 #![allow(clippy::empty_loop)]
-#![no_std]
+#![cfg_attr(not(test), no_std)]
 #![no_main]
 #![feature(alloc_error_handler)]
 
 extern crate alloc;
 
 use alloc::{alloc::Layout, boxed::Box};
-use core::{default::Default, ffi::c_void, mem::MaybeUninit, u8};
+use core::{cell::RefCell, default::Default, ffi::c_void, mem::MaybeUninit, ops::DerefMut, u8};
+use cortex_m::{
+    asm::{dmb, dsb},
+    interrupt::Mutex,
+    peripheral::NVIC,
+};
 use embedded_alloc::Heap;
-use nb::block;
 use panic_halt as _;
+use rtt_target::{rprintln, rtt_init_print};
 use stm32f1xx_hal::{
+    gpio::{self, OpenDrain, Output, PinState},
     pac,
     pac::interrupt,
     prelude::*,
-    serial::*,
-    serial::{Config, Rx, Serial},
+    serial::{Config, Rx, Serial as Hal_Serial, Tx},
 };
-use unwrap_infallible::UnwrapInfallible;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
-const CR: u8 = b'\r';
-const LF: u8 = b'\n';
 const HEAP_SIZE: usize = 128;
 static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
 
@@ -42,86 +40,89 @@ fn oom(_: Layout) -> ! {
     loop {}
 }
 
-/// <div rustbindgen nocopy></div>
-/// <div rustbindgen opaque></div>
+// type RedLed = gpio::Pin<'C', 7, Output<OpenDrain>>;
+
+// static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
+
+static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
+
 #[repr(C)]
-pub(crate) struct SerialInterfaceContext {
-    rx: Rx<pac::USART2>,
+pub(crate) struct Serial {
     tx: Tx<pac::USART2>,
 }
 
-static mut TX: Option<Tx<pac::USART2>> = None;
-static mut RX: Option<Rx<pac::USART2>> = None;
+/// <div rustbindgen nocopy></div>
+/// <div rustbindgen opaque></div>
+pub(crate) struct Board {
+    pub serial: Serial,
+}
+
+impl Board {
+    fn init() -> Self {
+        // Initialize the allocator
+        alloc_heap();
+        rtt_init_print!();
+        // Get access to the device specific peripherals from the peripheral access crate
+        let p = pac::Peripherals::take().unwrap();
+
+        // Take ownership over the raw flash and rcc devices and convert them into the corresponding
+        // HAL structs
+        let mut flash = p.FLASH.constrain();
+        let rcc = p.RCC.constrain();
+
+        // Freeze the configuration of all the clocks in the system
+        // and store the frozen frequencies in `clocks`
+        let clocks = rcc.cfgr.freeze(&mut flash.acr);
+
+        // Prepare the alternate function I/O registers
+        let mut afio = p.AFIO.constrain();
+
+        // Prepare the peripherals
+        let mut gpioa = p.GPIOA.split();
+        // let mut gpioc = p.GPIOC.split();
+
+        // USART2
+        let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
+        let rx_pin = gpioa.pa3;
+
+        // Init Serial
+        rprintln!("initializing serial");
+        let mut serial = Hal_Serial::new(
+            p.USART2,
+            (tx_pin, rx_pin),
+            &mut afio.mapr,
+            Config::default().baudrate(115200.bps()),
+            &clocks,
+        );
+
+        rprintln!("serial rx.listen()");
+        serial.rx.listen();
+        serial.rx.listen_idle();
+
+        // let led = gpioc
+        //     .pc7
+        //     .into_open_drain_output_with_state(&mut gpioc.crl, PinState::Low);
+
+        cortex_m::interrupt::free(|cs| {
+            RX.borrow(cs).replace(Some(serial.rx));
+            // WAKE_LED.borrow(cs).replace(Some(led));
+        });
+
+        rprintln!("unmasking USART2 interrupt");
+        unsafe {
+            NVIC::unmask(pac::Interrupt::USART2);
+        }
+
+        Board {
+            serial: Serial { tx: serial.tx },
+        }
+    }
+}
 
 #[no_mangle]
-pub unsafe extern "C" fn rust_serial_interface_new() {
-    alloc_heap();
-
-    // Get access to the device specific peripherals from the peripheral access crate
-    let p = pac::Peripherals::take().unwrap();
-
-    // Take ownership over the raw flash and rcc devices and convert them into the corresponding
-    // HAL structs
-    let mut flash = p.FLASH.constrain();
-    let rcc = p.RCC.constrain();
-
-    // Freeze the configuration of all the clocks in the system and store the frozen frequencies in
-    // `clocks`
-    let clocks = rcc.cfgr.freeze(&mut flash.acr);
-
-    // Prepare the alternate function I/O registers
-    let mut afio = p.AFIO.constrain();
-
-    // Prepare the GPIOB peripheral
-    let mut gpioa = p.GPIOA.split();
-
-    // USART1
-    // let tx = gpioa.pa9.into_alternate_push_pull(&mut gpioa.crh);
-    // let rx = gpioa.pa10;
-
-    // USART1
-    // let tx = gpiob.pb6.into_alternate_push_pull(&mut gpiob.crl);
-    // let rx = gpiob.pb7;
-
-    // USART2
-    let tx = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-    let rx = gpioa.pa3;
-
-    // // USART3
-    // // Configure pb10 as a push_pull output, this will be the tx pin
-    // let tx = gpiob.pb10.into_alternate_push_pull(&mut gpiob.crh);
-    // // Take ownp.USART2usart device. Take ownership over the USART register and tx/rx pins. The rest of
-    // the registers are used to enable and configure the device.
-    // let mut SERIAL:Serial<stm32f1xx_hal::pac::USART2, (stm32f1xx_hal::gpio::Pin<'A', 2, stm32f1xx_hal::gpio::Alternate>, stm32f1xx_hal::gpio::Pin<'A', 3>)> = Serial::new(
-    let serial = Serial::new(
-        p.USART2,
-        (tx, rx),
-        &mut afio.mapr,
-        Config::default().baudrate(115200.bps()),
-        &clocks,
-    );
-    let mut context = SerialInterfaceContext {
-        rx: serial.rx,
-        tx: serial.tx,
-    };
-    context.tx.write(b'\r').unwrap();
-    let serial_ptr = Box::into_raw(Box::new(context)) as *mut c_void;
-    let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
-    block!(serial_context.tx.write(b'S')).unwrap_infallible();
-    block!(serial_context.tx.write(b'T')).unwrap_infallible();
-    block!(serial_context.tx.write(b'A')).unwrap_infallible();
-    block!(serial_context.tx.write(b'R')).unwrap_infallible();
-    block!(serial_context.tx.write(b'T')).unwrap_infallible();
-    block!(serial_context.tx.write(CR)).unwrap_infallible();
-    block!(serial_context.tx.write(LF)).unwrap_infallible();
-    serial_context.rx.listen();
-    serial_context.rx.listen_idle();
-    cortex_m::interrupt::free(|_| unsafe {
-        TX.replace(serial_context.tx);
-        RX.replace(serial_context.rx);
-    });
-    cortex_m::peripheral::NVIC::unmask(pac::Interrupt::USART2);
-    // Box::into_raw(serial_context) as *mut c_void
+pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
+    let board = Board::init();
+    Box::into_raw(Box::new(board)) as *mut c_void
 }
 
 // #[no_mangle]
@@ -142,12 +143,21 @@ pub unsafe extern "C" fn rust_serial_interface_new() {
 
 #[interrupt]
 unsafe fn USART2() {
-    cortex_m::interrupt::free(|_| {
-        if let Some(rx) = RX.as_mut() {
+    cortex_m::interrupt::free(|cs| {
+        if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
+                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                //     led.is_set_low();
+                // }
+                dsb();
                 if let Ok(char) = nb::block!(rx.read()) {
                     // process_character(char);
+                    rprintln!("serial rx char: {}", char);
                 }
+                dmb();
+                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                //     led.is_set_high();
+                // }
                 rx.listen_idle();
             }
         }

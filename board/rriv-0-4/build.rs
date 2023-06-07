@@ -10,11 +10,11 @@
 
 extern crate bindgen;
 
+use bindgen::CargoCallbacks;
 use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
-use bindgen::CargoCallbacks;
 
 fn macos_copy_memory_x() {
     // Put `memory.x` in our output directory and ensure it's
@@ -36,12 +36,12 @@ fn macos_copy_memory_x() {
 fn main() {
     println!("build.rs");
     // macos_copy_memory_x();
-    let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")
-        .expect("CARGO_MANIFEST_DIR env var is not defined"));
+    let crate_dir = PathBuf::from(
+        env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR env var is not defined"),
+    );
     println!("CARGO_MANIFEST_DIR: {:?}", crate_dir);
 
-    let out_dir = PathBuf::from(env::var("OUT_DIR")
-        .expect("OUT_DIR env var is not defined"));
+    let out_dir = PathBuf::from(env::var("OUT_DIR").expect("OUT_DIR env var is not defined"));
     println!("OUT_DIR: {:?}", out_dir);
 
     let config = cbindgen::Config::from_file("cbindgen.toml")
@@ -52,14 +52,22 @@ fn main() {
     // added question to this issue: https://github.com/rust-lang/cargo/issues/6790
     // for now, CARGO_MANIFEST_DIR (crate_dir) seems reasonable
 
-    let headers_path_str = crate_dir.join("rust_serial.h").into_os_string().into_string().unwrap();
-    let bindings_path_str = crate_dir.join("bindings.rs").into_os_string().into_string().unwrap();
+    let headers_path_str = crate_dir
+        .join("rriv-0-4.h")
+        .into_os_string()
+        .into_string()
+        .unwrap();
+    let bindings_path_str = crate_dir
+        .join("bindings.rs")
+        .into_os_string()
+        .into_string()
+        .unwrap();
     cbindgen::generate_with_config(&crate_dir, config)
         .unwrap()
         .write_to_file(headers_path_str.clone());
-    
+
     let bindings = bindgen::Builder::default()
-        // The target 
+        // The target
         .clang_arg("--target=thumbv7m-none-eabi")
         // Bindgen should use core::ffi::c_void for void* type instead of os::raw::c_void (return type void)
         .use_core()
