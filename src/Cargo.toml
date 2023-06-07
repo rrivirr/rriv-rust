@@ -1,5 +1,5 @@
 [workspace]
-members = ["src/control_interface"]
+members = ["control_interface"]
 
 [workspace.package]
 authors = ["m. interrupt"]
