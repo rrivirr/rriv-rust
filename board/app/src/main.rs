@@ -1,8 +1,8 @@
-//! Tests static lib
+//! This app tests the static rriv board lib
 
 #![allow(clippy::empty_loop)]
+#![cfg_attr(not(test), no_std)]
 #![no_main]
-#![no_std]
 
 use core::ffi::c_void;
 use core::panic::PanicInfo;
