@@ -1,13 +1,14 @@
 //#![cfg_attr(not(test), no_std)]
 // https://ferrous-systems.com/blog/test-embedded-app/
 
-const BUFFER_NUM: usize = 10;
+const BUFFER_NUM: usize = 11;  // Includes an extra empty cell for end marker
+const BUFFER_SIZE: usize = 100;
 
 // #[derive(Default)]
 struct CommandRecognizer {
   receiving: bool,
   message_ready: bool,
-  buffer: [[char; 100]; BUFFER_NUM],
+  buffer: [[char; BUFFER_SIZE]; BUFFER_NUM],
   cur: usize,
   end: usize,
   command_pos: usize,
@@ -22,7 +23,7 @@ impl CommandRecognizer {
       end: BUFFER_NUM - 1,
       message_ready: false,
       command_pos: 0,
-      buffer: [ [ '\0'; 100]; BUFFER_NUM]
+      buffer: [ [ '\0'; BUFFER_SIZE]; BUFFER_NUM]
     }
  }
 
@@ -57,8 +58,8 @@ impl CommandRecognizer {
   }
 
   fn pending_message_count(&mut self) -> usize {
-    println!("{} {} {}", self.cur, self.end, self.end % ( BUFFER_NUM - 1 ));
-    return self.cur - self.end % ( BUFFER_NUM - 1 )
+    println!("{} {}", self.cur, self.end );
+    return self.cur - (self.end + 1) % BUFFER_NUM
   }
 }
 
@@ -86,6 +87,7 @@ mod tests {
 
   #[test]
   fn test_message_ready() {
+
     let mut command_recognizer = CommandRecognizer::default();
     command_recognizer.process_character('{');
     command_recognizer.process_character('\r');
