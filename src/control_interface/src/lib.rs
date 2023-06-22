@@ -1,3 +1,7 @@
+#![cfg_attr(not(test), no_std)]
+mod command_recognizer;
+
+
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }
