@@ -22,7 +22,8 @@ extern "C" {
 #[entry]
 fn main() -> ! {
     unsafe {
-        let _s = rust_serial_interface_new();
+        // let _s = rust_serial_interface_new();
+        rust_serial_interface_new();
         loop {}
     }
 }
