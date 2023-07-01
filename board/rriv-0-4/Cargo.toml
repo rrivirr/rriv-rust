@@ -24,6 +24,9 @@ unwrap-infallible = "0.1.5"
 stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103"] }
 embedded-alloc = "0.5.0"
 rtt-target = "0.4.0"
+serde_json = { version = "1.0.64", default-features = false, features = [
+    "alloc",
+] }
 
 [build-dependencies]
 cbindgen = "0.24.3"

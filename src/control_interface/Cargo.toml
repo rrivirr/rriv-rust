@@ -6,8 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-
-
+ahash = "0.8.3"
+hashbrown = { version = "0.14.0", default-features = false, features = [
+    "ahash",
+] }
 
 [lib]
 name = "control_interface"

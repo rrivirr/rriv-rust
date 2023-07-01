@@ -119,11 +119,18 @@ impl Board {
     }
 }
 
+// TODO:: Move interface_new and register_command to App
 #[no_mangle]
 pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
     let board = Board::init();
     Box::into_raw(Box::new(board)) as *mut c_void
 }
+// something like this and make sure the command is the right arg for CString
+// #[no_mangle]
+// pub extern "C" fn rust_serial_register_command(serial_ptr: *mut c_void, command: *mut c_void, registration: *mut c_void) {
+//     let mut board = unsafe { &mut *(serial_ptr as *mut Board) };
+//     board.register_command(&mut command, &mut registration as *mut RegisteredCommand as *mut c_void);
+// }
 
 // #[no_mangle]
 // pub unsafe extern "C" fn rust_serial_read(serial_ptr: *mut c_void) -> u8 {
