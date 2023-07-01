@@ -10,9 +10,11 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "embedded-hal",
+ "false",
  "nb 1.1.0",
  "panic-halt",
  "rtt-target",
+ "serde_json",
  "stm32f1xx-hal",
  "unwrap-infallible",
 ]
@@ -264,6 +266,12 @@ dependencies = [
  "cc",
  "libc",
 ]
+
+[[package]]
+name = "false"
+version = "0.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "849bcc293a0d93c4d4adbebc8decf828a832a1d5e445af888cd99bc81ec0f96b"
 
 [[package]]
 name = "fastrand"
@@ -533,6 +541,7 @@ dependencies = [
  "nb 1.1.0",
  "panic-halt",
  "rtt-target",
+ "serde_json",
  "stm32f1xx-hal",
  "unwrap-infallible",
 ]
@@ -619,9 +628,9 @@ dependencies = [
 
 [[package]]
 name = "serde_json"
-version = "1.0.96"
+version = "1.0.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "057d394a50403bcac12672b2b18fb387ab6d289d957dab67dd201875391e52f1"
+checksum = "46266871c240a00b8f503b877622fe33430b3c7d963bdc0f2adc511e54a1eae3"
 dependencies = [
  "itoa",
  "ryu",

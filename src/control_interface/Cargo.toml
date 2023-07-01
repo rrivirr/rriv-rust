@@ -10,9 +10,6 @@ ahash = "0.8.3"
 hashbrown = { version = "0.14.0", default-features = false, features = [
     "ahash",
 ] }
-serde_json = { version = "1.0.64", default-features = false, features = [
-    "alloc",
-] }
 
 [lib]
 name = "control_interface"
