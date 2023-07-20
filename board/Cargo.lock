@@ -13,6 +13,7 @@ dependencies = [
  "nb 1.1.0",
  "panic-halt",
  "rriv-0-4",
+ "rriv-datalogger",
  "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",
@@ -207,6 +208,13 @@ dependencies = [
  "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",
+]
+
+[[package]]
+name = "rriv-datalogger"
+version = "0.1.0"
+dependencies = [
+ "rriv-0-4",
 ]
 
 [[package]]

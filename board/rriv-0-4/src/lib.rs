@@ -38,8 +38,7 @@ pub struct Board {
 }
 
 impl Board {
-    pub fn init() -> Self {
-
+    pub fn new() -> Self {
 
         // Get access to the device specific peripherals from the peripheral access crate
         let p = pac::Peripherals::take().unwrap();
@@ -99,11 +98,11 @@ impl Board {
 }
 
 // TODO:: Move interface_new and register_command to App
-#[no_mangle]
-pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
-    let board = Board::init();
-    Box::into_raw(Box::new(board)) as *mut c_void
-}
+// #[no_mangle]
+// pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
+//     let board = Board::init();
+//     Box::into_raw(Box::new(board)) as *mut c_void
+// }
 
 // something like this and make sure the command is the right arg for CString
 // #[no_mangle]
