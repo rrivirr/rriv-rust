@@ -1,6 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 mod command_recognizer;
-pub mod command_register;
+pub mod command_registry;
 
 pub fn add(left: usize, right: usize) -> usize {
     left + right

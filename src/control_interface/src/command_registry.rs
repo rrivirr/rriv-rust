@@ -1,10 +1,10 @@
-use core::ffi::c_void;
-use core::slice;
-use core::str::from_utf8_unchecked;
+extern crate alloc;
+use alloc::{format, string::String};
+use core::ffi::{c_void, CStr};
 use hashbrown::HashMap;
 
 #[repr(C)]
-#[derive(Eq, Hash, PartialEq)]
+#[derive(Debug, Eq, Hash, PartialEq)]
 pub enum Command {
     DataloggerSet = 0,
     DataloggerGet = 1,
@@ -45,10 +45,8 @@ pub enum Command {
     Unknown = 36,
 }
 impl Command {
-    pub fn from_cstr(cstr: *const i8, len: usize) -> Self {
-        let str_slice =
-            unsafe { from_utf8_unchecked(slice::from_raw_parts(cstr as *const u8, len)) };
-        match str_slice {
+    pub fn from_str(cmd_str: &str) -> Self {
+        match cmd_str {
             "datalogger_set" => Command::DataloggerSet,
             "datalogger_get" => Command::DataloggerGet,
             "datalogger_reset" => Command::DataloggerReset,
@@ -109,26 +107,36 @@ impl CommandRegister {
     pub fn register_command(&mut self, command: Command, action_fn: extern "C" fn(*mut c_void)) {
         self.command_map.insert(command, action_fn);
     }
+    pub fn register_command_str(&mut self, command: &str, action_fn: extern "C" fn(*mut c_void)) {
+        let command = Command::from_str(command);
+        self.register_command(command, action_fn);
+    }
     pub fn is_registered(&self, command: Command) -> bool {
         self.command_map.contains_key(&command)
     }
     pub fn get_action_fn(&self, command: Command) -> Option<extern "C" fn(*mut c_void)> {
         self.command_map.get(&command).copied()
     }
+    pub fn get_command_from_parts(&self, object: &str, action: &str) -> Command {
+        let command_str = format!("{}_{}", object, action);
+        Command::from_str(&command_str)
+    }
 }
 
+/// TODO: This does not belong here.
 /*
 Register the command with the CommandRegister
 Return a raw pointer to the CommandRegister
 */
 #[no_mangle]
 pub unsafe extern "C" fn register_command(
-    command: Command,
+    command_registry: *mut CommandRegister,
+    command: *const u8,
     action_fn: extern "C" fn(*mut c_void),
-    command_register: *mut CommandRegister,
 ) -> *mut CommandRegister {
-    (*command_register).register_command(command, action_fn);
-    command_register
+    let cmd_str = CStr::from_ptr(command as *const i8).to_str().unwrap();
+    (*command_registry).register_command_str(cmd_str, action_fn);
+    command_registry
 }
 
 #[cfg(test)]
@@ -138,10 +146,30 @@ mod tests {
     fn test_command_registration() {
         static NUM_COMMANDS: usize = 32;
         let command_map = HashMap::with_capacity(NUM_COMMANDS);
-        let mut command_register = CommandRegister::new(command_map);
+        let mut command_registry = CommandRegister::new(command_map);
         let command = Command::DataloggerSet;
-        extern "C" fn action_fn(_: *mut c_void) {}
-        command_register.register_command(command, action_fn);
-        assert!(command_register.is_registered(Command::DataloggerSet));
+        extern "C" fn action_fn_1(_: *mut c_void) {}
+        command_registry.register_command(command, action_fn_1);
+        assert!(command_registry.is_registered(Command::DataloggerSet));
+    }
+    #[test]
+    fn test_command_registration_str() {
+        static NUM_COMMANDS: usize = 32;
+        let command_map = HashMap::with_capacity(NUM_COMMANDS);
+        let mut command_registry = CommandRegister::new(command_map);
+        let cmd_str = "datalogger_set";
+        extern "C" fn action_fn_2(_: *mut c_void) {}
+        command_registry.register_command_str(cmd_str, action_fn_2);
+        assert!(command_registry.is_registered(Command::DataloggerSet));
+    }
+    #[test]
+    fn test_get_command_from_parts() {
+        let command_map = HashMap::with_capacity(32);
+        let command_registry = CommandRegister::new(command_map);
+        let command = Command::DataloggerSet;
+        let object = "datalogger";
+        let action = "set";
+        let command_from_parts = command_registry.get_command_from_parts(object, action);
+        assert_eq!(command, command_from_parts);
     }
 }
