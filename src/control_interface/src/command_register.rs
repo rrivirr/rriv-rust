@@ -103,7 +103,9 @@ pub struct CommandRegister {
 }
 
 impl CommandRegister {
-    pub fn new(command_map: CommandMap) -> Self {
+    pub fn new() -> Self {
+        static NUM_COMMANDS: usize = 40;
+        let command_map = HashMap::with_capacity(NUM_COMMANDS);
         CommandRegister { command_map }
     }
     pub fn register_command(&mut self, command: Command, action_fn: extern "C" fn(*mut c_void)) {
@@ -136,9 +138,7 @@ mod tests {
     use super::*;
     #[test]
     fn test_command_registration() {
-        static NUM_COMMANDS: usize = 32;
-        let command_map = HashMap::with_capacity(NUM_COMMANDS);
-        let mut command_register = CommandRegister::new(command_map);
+        let mut command_register = CommandRegister::new();
         let command = Command::DataloggerSet;
         extern "C" fn action_fn(_: *mut c_void) {}
         command_register.register_command(command, action_fn);
