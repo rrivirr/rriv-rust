@@ -18,13 +18,20 @@ use stm32f1xx_hal::{
     prelude::*,
     serial::{Config, Rx, Serial as Hal_Serial, Tx},
 };
+use core::marker::{Send, Sync};
 
 
 // type RedLed = gpio::Pin<'C', 7, Output<OpenDrain>>;
 
 // static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
+pub trait RXProcessor {
+    fn process_character(& mut self, character: char);
+}
+
+
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
+static RX_PROCESSOR: Mutex<RefCell<Option<Box<dyn RXProcessor + Send + Sync>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Serial {
@@ -92,9 +99,16 @@ impl Board {
         }
 
         Board {
-            serial: Serial { tx: serial.tx },
+            serial: Serial { tx: serial.tx }
         }
     }
+
+    pub fn set_rx_processor(&mut self, rx_processor_set: Box<dyn RXProcessor + Send + Sync>){
+        cortex_m::interrupt::free(|cs| {
+            RX_PROCESSOR.borrow(cs).replace(Some(rx_processor_set));
+        });    
+    }
+
 }
 
 // TODO:: Move interface_new and register_command to App
@@ -136,9 +150,13 @@ unsafe fn USART2() {
                 //     led.is_set_low();
                 // }
                 dsb();
-                if let Ok(char) = nb::block!(rx.read()) {
-                    // process_character(char);
-                    rprintln!("serial rx char: {}", char);
+                if let Ok(c) = nb::block!(rx.read()) {
+
+                    rprintln!("serial rx char: {}", c);
+                    if let Some( processor )  = RX_PROCESSOR.borrow(cs).borrow_mut().deref_mut() {
+                        processor.process_character(c as char);
+                    }
+     
                 }
                 dmb();
                 // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {

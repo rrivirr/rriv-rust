@@ -7,5 +7,7 @@ edition = "2021"
 
 [dependencies]
 hashbrown = "0.14"
+rriv-0-4 = { path = "../../board/rriv-0-4" }
+
 
 
