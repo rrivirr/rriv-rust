@@ -2,28 +2,65 @@
 
 #![allow(clippy::empty_loop)]
 #![cfg_attr(not(test), no_std)]
+#![feature(alloc_error_handler)]
+#![feature(prelude_2024)]
 #![no_main]
 
-use core::panic::PanicInfo;
-use core::ptr::null_mut;
+// use core::panic::PanicInfo;
+// use core::ptr::null_mut;
 use cortex_m_rt::entry;
 // use rtt_target::{rprintln, rtt_init_print};
+extern crate rriv_0_4;
+use rriv_0_4::Board;
+use rtt_target::{rprintln, rtt_init_print};
+extern crate alloc;
+use alloc::{alloc::Layout, boxed::Box};
+use core::{cell::RefCell, default::Default, ffi::c_void, option::{Option, Option::*}, result::Result::*, mem::MaybeUninit, ops::DerefMut, u8, prelude::rust_2024::*, *};
+// use alloc::{alloc::Layout, boxed::Box};
+use embedded_alloc::Heap;
+use panic_halt as _;
 
-#[panic_handler]
-fn panic(_: &PanicInfo) -> ! {
+
+
+// #[panic_handler]
+// fn panic(_: &PanicInfo) -> ! {
+//     loop {}
+// }
+
+// #[link(name = "rriv_0_4", kind = "static")]
+// extern "C" {
+//     pub fn rust_serial_interface_new() -> *mut c_void;
+// }
+
+#[global_allocator]
+static HEAP: Heap = Heap::empty();
+const HEAP_SIZE: usize = 128;
+static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+
+// Initialize the allocator BEFORE you use it
+fn alloc_heap() {
+    {
+        unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
+    }
+}
+
+#[alloc_error_handler]
+fn oom(_: Layout) -> ! {
     loop {}
 }
 
-#[link(name = "rriv_0_4", kind = "static")]
-extern "C" {
-    pub fn rust_serial_interface_new() -> *mut c_void;
-}
 
 #[entry]
 fn main() -> ! {
+
+    alloc_heap();
+    // Initialize the allocator
+    rtt_init_print!();
+
+    let board = Board::init();
     unsafe {
-        // let _s = rust_serial_interface_new();
-        rust_serial_interface_new();
+    //     // let _s = rust_serial_interface_new();
+    //     rust_serial_interface_new();
         loop {}
     }
 }
@@ -77,12 +114,8 @@ fn main() -> ! {
 //         "telemeter_reset" => Command::TelemeterReset,
 //         "board_version" => Command::BoardVersion,
 //         "board_firmware_warranty" => Command::BoardFirmwareWarranty,
-//         "board_firmware_conditions" => Command::BoardFirmwareConditions,
-//         "board_firmware_license" => Command::BoardFirmwareLicense,
-//         "board_rtc_set" => Command::BoardRtcSet,
-//         "board_rtc_get" => Command::BoardRtcGet,
-//         "board_restart" => Command::BoardRestart,
-//         "board_i2c_list" => Command::BoardI2cList,
+//         "board_firmware_conditions" => Command::BoardFirmwa        alloc_heap();
+
 //         "board_memory_check" => Command::BoardMemoryCheck,
 //         "board_mcu_stop" => Command::BoardMcuStop,
 //         "board_mcu_sleep" => Command::BoardMcuSleep,

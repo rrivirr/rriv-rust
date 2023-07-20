@@ -1,44 +1,24 @@
-#![allow(clippy::empty_loop)]
 #![cfg_attr(not(test), no_std)]
-#![no_main]
-#![feature(alloc_error_handler)]
 
 extern crate alloc;
 
-use alloc::{alloc::Layout, boxed::Box};
-use core::{cell::RefCell, default::Default, ffi::c_void, mem::MaybeUninit, ops::DerefMut, u8};
+use alloc::{boxed::Box};
+use core::{cell::RefCell, default::Default, ffi::c_void, option::{Option, Option::*}, result::Result::*, ops::DerefMut, concat, format_args};
 use cortex_m::{
     asm::{dmb, dsb},
     interrupt::Mutex,
     peripheral::NVIC,
 };
-use embedded_alloc::Heap;
+use rtt_target::{rprintln};
 use panic_halt as _;
-use rtt_target::{rprintln, rtt_init_print};
 use stm32f1xx_hal::{
-    gpio::{self, OpenDrain, Output, PinState},
+    // gpio::{self, OpenDrain, Output, PinState},
     pac,
     pac::interrupt,
     prelude::*,
     serial::{Config, Rx, Serial as Hal_Serial, Tx},
 };
 
-#[global_allocator]
-static HEAP: Heap = Heap::empty();
-const HEAP_SIZE: usize = 128;
-static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
-
-// Initialize the allocator BEFORE you use it
-fn alloc_heap() {
-    {
-        unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
-    }
-}
-
-#[alloc_error_handler]
-fn oom(_: Layout) -> ! {
-    loop {}
-}
 
 // type RedLed = gpio::Pin<'C', 7, Output<OpenDrain>>;
 
@@ -47,21 +27,20 @@ fn oom(_: Layout) -> ! {
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
-pub(crate) struct Serial {
+pub struct Serial {
     tx: Tx<pac::USART2>,
 }
 
 /// <div rustbindgen nocopy></div>
 /// <div rustbindgen opaque></div>
-pub(crate) struct Board {
+pub struct Board {
     pub serial: Serial,
 }
 
 impl Board {
-    fn init() -> Self {
-        // Initialize the allocator
-        alloc_heap();
-        rtt_init_print!();
+    pub fn init() -> Self {
+
+
         // Get access to the device specific peripherals from the peripheral access crate
         let p = pac::Peripherals::take().unwrap();
 
@@ -125,6 +104,7 @@ pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
     let board = Board::init();
     Box::into_raw(Box::new(board)) as *mut c_void
 }
+
 // something like this and make sure the command is the right arg for CString
 // #[no_mangle]
 // pub extern "C" fn rust_serial_register_command(serial_ptr: *mut c_void, command: *mut c_void, registration: *mut c_void) {
@@ -170,3 +150,4 @@ unsafe fn USART2() {
         }
     })
 }
+

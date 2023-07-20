@@ -58,7 +58,6 @@ impl CommandRecognizer {
   }
 
   fn pending_message_count(&mut self) -> usize {
-    println!("{} {}", self.cur, self.end );
     return self.cur - (self.end + 1) % BUFFER_NUM
   }
 }
