@@ -7,4 +7,7 @@ edition = "2021"
 
 [dependencies]
 rriv-0-4 = { path = "../../board/rriv-0-4" }
+control_interface = { path = "../control_interface" }
+hashbrown = "0.14"
+
 

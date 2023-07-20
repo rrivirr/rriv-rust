@@ -5,7 +5,7 @@ const BUFFER_NUM: usize = 11;  // Includes an extra empty cell for end marker
 const BUFFER_SIZE: usize = 100;
 
 // #[derive(Default)]
-struct CommandRecognizer {
+pub struct CommandRecognizer {
   receiving: bool,
   message_ready: bool,
   buffer: [[char; BUFFER_SIZE]; BUFFER_NUM],
@@ -16,7 +16,7 @@ struct CommandRecognizer {
 
 impl CommandRecognizer {
 
-  fn default() -> Self {
+  pub fn default() -> Self {
     Self {
       receiving: false,
       cur: 0,
@@ -57,7 +57,7 @@ impl CommandRecognizer {
     self.command_pos = self.command_pos + 1;
   }
 
-  fn pending_message_count(&mut self) -> usize {
+  pub fn pending_message_count(&mut self) -> usize {
     return self.cur - (self.end + 1) % BUFFER_NUM
   }
 }
