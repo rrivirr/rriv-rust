@@ -1,10 +1,31 @@
 //#![cfg_attr(not(test), no_std)]
 // https://ferrous-systems.com/blog/test-embedded-app/
+use rriv_0_4::RXProcessor;
+
 
 const BUFFER_NUM: usize = 11;  // Includes an extra empty cell for end marker
 const BUFFER_SIZE: usize = 100;
 
-// #[derive(Default)]
+pub struct CharacterProcessor<'a> {
+  buffer: &'a  mut [[char; BUFFER_SIZE]; BUFFER_NUM]
+}
+
+impl CharacterProcessor<'_> {
+  pub fn new( buffer: &  mut [[char; BUFFER_SIZE]; BUFFER_NUM]) -> CharacterProcessor{
+    CharacterProcessor {
+      buffer: buffer
+    }
+  }
+}
+
+impl RXProcessor for CharacterProcessor<'_> {
+ fn process_character(& mut self, character: char) {
+    // This should unsafely access the buffer bookeeping to process the character
+    self.buffer[0][1] = character;
+ }
+}
+
+// refactor this so the data struct is separate and can be shared
 pub struct CommandRecognizer {
   receiving: bool,
   message_ready: bool,
@@ -26,6 +47,10 @@ impl CommandRecognizer {
       buffer: [ [ '\0'; BUFFER_SIZE]; BUFFER_NUM]
     }
  }
+
+  pub fn getRXProcessor(&mut self) -> CharacterProcessor {
+    CharacterProcessor::new( &mut self.buffer)
+  }
 
   fn process_character(&mut self, character: char) {
 
@@ -82,7 +107,8 @@ mod tests {
     command_recognizer.process_character('\r');
 
     assert_eq!(false, command_recognizer.receiving)
-  }
+  }use rriv_0_4::Board;
+
 
   #[test]
   fn test_message_ready() {

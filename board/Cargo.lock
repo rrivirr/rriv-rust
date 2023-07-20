@@ -86,6 +86,7 @@ name = "control_interface"
 version = "0.1.0"
 dependencies = [
  "hashbrown",
+ "rriv-0-4",
 ]
 
 [[package]]
