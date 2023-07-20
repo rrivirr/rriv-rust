@@ -10,8 +10,7 @@
 // use core::ptr::null_mut;
 use cortex_m_rt::entry;
 // use rtt_target::{rprintln, rtt_init_print};
-extern crate rriv_0_4;
-use rriv_0_4::Board;
+
 use rtt_target::{rprintln, rtt_init_print};
 extern crate alloc;
 use alloc::{alloc::Layout, boxed::Box};
@@ -20,6 +19,11 @@ use core::{cell::RefCell, default::Default, ffi::c_void, option::{Option, Option
 use embedded_alloc::Heap;
 use panic_halt as _;
 
+extern crate rriv_0_4;
+use rriv_0_4::Board;
+
+extern crate rriv_datalogger;
+use rriv_datalogger::DataLogger;
 
 
 // #[panic_handler]
@@ -57,12 +61,12 @@ fn main() -> ! {
     // Initialize the allocator
     rtt_init_print!();
 
-    let board = Board::init();
-    unsafe {
-    //     // let _s = rust_serial_interface_new();
-    //     rust_serial_interface_new();
-        loop {}
+    let board = Board::new();
+    let mut datalogger = DataLogger::new(board);
+    loop {
+        datalogger.run_loop_iteration();
     }
+
 }
 
 //// I think this is for the services crate..
