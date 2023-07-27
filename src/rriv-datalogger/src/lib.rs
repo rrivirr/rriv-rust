@@ -1,7 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 
 // use control_interface::{, command_register::CommandRegistry};
-use hashbrown::HashMap;
 use rriv_0_4::Board;
 
 extern crate alloc;
@@ -59,9 +58,11 @@ pub mod command_service {
 
     impl CommandService {
         pub fn new() -> Self {
+            static NUM_COMMANDS: usize = 32;
+            let command_map = HashMap::with_capacity(NUM_COMMANDS);
             CommandService {
                 command_data: Mutex::new(RefCell::new(CommandData::default())),
-                registry: CommandRegistry::new(),
+                registry: CommandRegistry::new(command_map),
             }
         }
 
