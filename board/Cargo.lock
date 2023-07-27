@@ -263,6 +263,7 @@ name = "rriv-datalogger"
 version = "0.1.0"
 dependencies = [
  "control_interface",
+ "cortex-m",
  "hashbrown",
  "rriv-0-4",
 ]

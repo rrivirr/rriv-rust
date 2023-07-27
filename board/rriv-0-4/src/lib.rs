@@ -25,7 +25,7 @@ use core::marker::{Send, Sync};
 
 // static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
-pub trait RXProcessor {
+pub trait RXProcessor: {
     fn process_character(& mut self, character: char);
 }
 
@@ -103,10 +103,10 @@ impl Board {
         }
     }
 
-    pub fn set_rx_processor(&mut self, rx_processor_set: Box<dyn RXProcessor + Send + Sync>){
-        cortex_m::interrupt::free(|cs| {
-            RX_PROCESSOR.borrow(cs).replace(Some(rx_processor_set));
-        });    
+    pub fn set_rx_processor(&mut self, rx_processor_set: Box<dyn RXProcessor + Send + Sync + 'static>){
+        // cortex_m::interrupt::free(|cs| {
+        //     RX_PROCESSOR.borrow(cs).replace(Some(rx_processor_set));
+        // });    
     }
 
 }
