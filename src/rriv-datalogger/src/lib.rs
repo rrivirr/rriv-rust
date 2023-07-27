@@ -7,19 +7,24 @@ use hashbrown::HashMap;
 
 pub struct DataLogger {
   pub board: Board,
-  pub command_serivce: CommandService
+  pub command_service: CommandService
 }
 
 impl DataLogger {
   pub fn new(board: Board) -> Self {
     DataLogger {
       board: board,
-      command_serivce: CommandService::new()
+      command_service: CommandService::new()
     }    
   }
 
+  pub fn setup(&mut self) {
+    // TODO: self.command_service.setup(board)
+    board.set_rx_processor(self.command_service.recognizer.getRXProcessor())
+  }
+
   pub fn run_loop_iteration(&mut self) {
-    if self.command_serivce.recognizer.pending_message_count() > 0 {
+    if self.command_service.recognizer.pending_message_count() > 0 {
       // process the message
     }
   }
