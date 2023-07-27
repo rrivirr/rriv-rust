@@ -9,5 +9,6 @@ edition = "2021"
 rriv-0-4 = { path = "../../board/rriv-0-4" }
 control_interface = { path = "../control_interface" }
 hashbrown = "0.14"
+cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 
 

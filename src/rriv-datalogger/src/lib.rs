@@ -1,46 +1,121 @@
 #![cfg_attr(not(test), no_std)]
 
-use rriv_0_4::Board;
-use control_interface::{command_recognizer::CommandRecognizer, command_register::CommandRegister};
+// use control_interface::{, command_register::CommandRegister};
 use hashbrown::HashMap;
+use rriv_0_4::Board;
 
+extern crate alloc;
+use alloc::boxed::Box;
+
+use core::{
+    borrow::BorrowMut,
+    cell::{Ref, RefCell, RefMut},
+};
+use cortex_m::interrupt::Mutex;
 
 pub struct DataLogger {
-  pub board: Board,
-  pub command_service: CommandService
+    pub board: Board,
+    pub command_service: command_service::CommandService,
 }
 
 impl DataLogger {
-  pub fn new(board: Board) -> Self {
-    DataLogger {
-      board: board,
-      command_service: CommandService::new()
-    }    
-  }
-
-  pub fn setup(&mut self) {
-    // TODO: self.command_service.setup(board)
-    board.set_rx_processor(self.command_service.recognizer.getRXProcessor())
-  }
-
-  pub fn run_loop_iteration(&mut self) {
-    if self.command_service.recognizer.pending_message_count() > 0 {
-      // process the message
+    pub fn new(board: Board) -> Self {
+        DataLogger {
+            board: board,
+            command_service: command_service::CommandService::new(),
+        }
     }
-  }
+
+    pub fn setup(&mut self) {
+        // setup each service
+        self.command_service.setup(&mut self.board)
+    }
+
+    pub fn run_loop_iteration(&mut self) {
+        self.command_service.run_loop_iteration();
+    }
 }
 
-pub struct CommandService {
-  registry: CommandRegister,
-  recognizer: CommandRecognizer
-}
+pub mod command_service {
+    use control_interface::command_recognizer::{CommandData, CommandRecognizer};
+    use control_interface::command_register::CommandRegister;
+    use hashbrown::HashMap;
+    use rriv_0_4::{Board, RXProcessor};
 
-impl CommandService {
-  pub fn new() -> Self {
-    CommandService {
-      registry: CommandRegister::new(),
-      recognizer: CommandRecognizer::default()
+    extern crate alloc;
+    use alloc::boxed::Box;
+
+    use core::{
+        borrow::BorrowMut,
+        cell::{Ref, RefCell, RefMut},
+    };
+    use cortex_m::interrupt::Mutex;
+
+    pub struct CommandService {
+        command_data: Mutex<RefCell<CommandData>>,
+        registry: CommandRegister,
+        // recognizer: CommandRecognizer,
     }
-  }
 
+    impl CommandService {
+        pub fn new() -> Self {
+            CommandService {
+                command_data: Mutex::new(RefCell::new(CommandData::default())),
+                registry: CommandRegister::new(),
+            }
+        }
+
+        pub fn setup(&mut self, board: &mut Board) {
+            let rxProcessor = Box::new(CharacterProcessor::new(&mut self.command_data)); // TODO: command data needs to be static??
+            // Matty suggests leaking the object?
+            board.set_rx_processor(rxProcessor)
+        }
+
+
+
+        fn pending_message_count(&mut self) -> usize {
+            cortex_m::interrupt::free(|cs| {
+                let command_data = self.command_data.borrow(cs).borrow();
+                return CommandRecognizer::pending_message_count(command_data);
+            })
+        }
+
+        fn take_command(&mut self) -> [char; 100] {
+            cortex_m::interrupt::free(|cs| {
+                let mut command_data = self.command_data.borrow(cs).borrow_mut();
+                return CommandRecognizer::take_command(command_data);
+            })
+        }
+
+        pub fn run_loop_iteration(&mut self) {
+            if self.pending_message_count() > 0 {
+                let command = self.take_command();
+                // self.registry.
+                // do stuff with the command
+            }
+        }
+    }
+
+    pub struct CharacterProcessor<'a> {
+        command_data: &'a mut Mutex<RefCell<CommandData>>,
+    }
+
+    impl CharacterProcessor<'_> {
+        pub fn new(command_data: &mut Mutex<RefCell<CommandData>>) -> CharacterProcessor {
+            CharacterProcessor {
+                command_data: command_data,
+            }
+        }
+
+        pub fn function_name() {}
+    }
+
+    impl RXProcessor for CharacterProcessor<'_> {
+        fn process_character(&mut self, character: char) {
+            cortex_m::interrupt::free(|cs| {
+                let mut command_data = self.command_data.borrow(cs).borrow_mut();
+                CommandRecognizer::process_character(command_data, character);
+            })
+        }
+    }
 }
