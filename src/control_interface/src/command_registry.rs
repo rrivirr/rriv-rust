@@ -96,13 +96,13 @@ pub struct CommandRegistration {
 
 type CommandMap = HashMap<Command, extern "C" fn(*mut c_void)>;
 
-pub struct CommandRegister {
+pub struct CommandRegistry {
     command_map: CommandMap,
 }
 
-impl CommandRegister {
+impl CommandRegistry {
     pub fn new(command_map: CommandMap) -> Self {
-        CommandRegister { command_map }
+        CommandRegistry { command_map }
     }
     pub fn register_command(&mut self, command: Command, action_fn: extern "C" fn(*mut c_void)) {
         self.command_map.insert(command, action_fn);
@@ -125,15 +125,15 @@ impl CommandRegister {
 
 /// TODO: This does not belong here.
 /*
-Register the command with the CommandRegister
-Return a raw pointer to the CommandRegister
+Register the command with the CommandRegistry
+Return a raw pointer to the CommandRegistry
 */
 #[no_mangle]
 pub unsafe extern "C" fn register_command(
-    command_registry: *mut CommandRegister,
+    command_registry: *mut CommandRegistry,
     command: *const u8,
     action_fn: extern "C" fn(*mut c_void),
-) -> *mut CommandRegister {
+) -> *mut CommandRegistry {
     let cmd_str = CStr::from_ptr(command as *const i8).to_str().unwrap();
     (*command_registry).register_command_str(cmd_str, action_fn);
     command_registry
@@ -146,7 +146,7 @@ mod tests {
     fn test_command_registration() {
         static NUM_COMMANDS: usize = 32;
         let command_map = HashMap::with_capacity(NUM_COMMANDS);
-        let mut command_registry = CommandRegister::new(command_map);
+        let mut command_registry = CommandRegistry::new(command_map);
         let command = Command::DataloggerSet;
         extern "C" fn action_fn_1(_: *mut c_void) {}
         command_registry.register_command(command, action_fn_1);
@@ -156,7 +156,7 @@ mod tests {
     fn test_command_registration_str() {
         static NUM_COMMANDS: usize = 32;
         let command_map = HashMap::with_capacity(NUM_COMMANDS);
-        let mut command_registry = CommandRegister::new(command_map);
+        let mut command_registry = CommandRegistry::new(command_map);
         let cmd_str = "datalogger_set";
         extern "C" fn action_fn_2(_: *mut c_void) {}
         command_registry.register_command_str(cmd_str, action_fn_2);
@@ -165,7 +165,7 @@ mod tests {
     #[test]
     fn test_get_command_from_parts() {
         let command_map = HashMap::with_capacity(32);
-        let command_registry = CommandRegister::new(command_map);
+        let command_registry = CommandRegistry::new(command_map);
         let command = Command::DataloggerSet;
         let object = "datalogger";
         let action = "set";

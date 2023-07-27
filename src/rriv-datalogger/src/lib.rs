@@ -1,6 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 
-// use control_interface::{, command_register::CommandRegister};
+// use control_interface::{, command_register::CommandRegistry};
 use hashbrown::HashMap;
 use rriv_0_4::Board;
 
@@ -38,7 +38,7 @@ impl DataLogger {
 
 pub mod command_service {
     use control_interface::command_recognizer::{CommandData, CommandRecognizer};
-    use control_interface::command_register::CommandRegister;
+    use control_interface::command_registry::CommandRegistry;
     use hashbrown::HashMap;
     use rriv_0_4::{Board, RXProcessor};
 
@@ -53,7 +53,7 @@ pub mod command_service {
 
     pub struct CommandService {
         command_data: Mutex<RefCell<CommandData>>,
-        registry: CommandRegister,
+        registry: CommandRegistry,
         // recognizer: CommandRecognizer,
     }
 
@@ -61,17 +61,15 @@ pub mod command_service {
         pub fn new() -> Self {
             CommandService {
                 command_data: Mutex::new(RefCell::new(CommandData::default())),
-                registry: CommandRegister::new(),
+                registry: CommandRegistry::new(),
             }
         }
 
         pub fn setup(&mut self, board: &mut Board) {
             let rxProcessor = Box::new(CharacterProcessor::new(&mut self.command_data)); // TODO: command data needs to be static??
-            // Matty suggests leaking the object?
+                                                                                         // Matty suggests leaking the object?
             board.set_rx_processor(rxProcessor)
         }
-
-
 
         fn pending_message_count(&mut self) -> usize {
             cortex_m::interrupt::free(|cs| {
