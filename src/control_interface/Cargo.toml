@@ -8,6 +8,8 @@ edition = "2021"
 [dependencies]
 hashbrown = "0.14"
 rriv-0-4 = { path = "../../board/rriv-0-4" }
+cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
+
 
 
 
