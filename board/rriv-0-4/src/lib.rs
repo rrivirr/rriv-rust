@@ -2,15 +2,26 @@
 
 extern crate alloc;
 
-use alloc::{boxed::Box};
-use core::{cell::RefCell, default::Default, ffi::c_void, option::{Option, Option::*}, result::Result::*, ops::DerefMut, concat, format_args};
+use alloc::boxed::Box;
+use core::borrow::BorrowMut;
+use core::marker::{Send, Sync};
+use core::{
+    cell::RefCell,
+    concat,
+    default::Default,
+    ffi::c_void,
+    format_args,
+    ops::DerefMut,
+    option::{Option, Option::*},
+    result::Result::*,
+};
 use cortex_m::{
     asm::{dmb, dsb},
     interrupt::Mutex,
     peripheral::NVIC,
 };
-use rtt_target::{rprintln};
 use panic_halt as _;
+use rtt_target::rprintln;
 use stm32f1xx_hal::{
     // gpio::{self, OpenDrain, Output, PinState},
     pac,
@@ -18,20 +29,17 @@ use stm32f1xx_hal::{
     prelude::*,
     serial::{Config, Rx, Serial as Hal_Serial, Tx},
 };
-use core::marker::{Send, Sync};
-
 
 // type RedLed = gpio::Pin<'C', 7, Output<OpenDrain>>;
 
 // static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
-pub trait RXProcessor: {
-    fn process_character(& mut self, character: char);
+pub trait RXProcessor: Send + Sync {
+    fn process_character(&'static self, character: char);
 }
 
-
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static RX_PROCESSOR: Mutex<RefCell<Option<Box<dyn RXProcessor + Send + Sync>>>> = Mutex::new(RefCell::new(None));
+static RX_PROCESSOR: Mutex<RefCell<Option<&dyn RXProcessor>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Serial {
@@ -46,7 +54,6 @@ pub struct Board {
 
 impl Board {
     pub fn new() -> Self {
-
         // Get access to the device specific peripherals from the peripheral access crate
         let p = pac::Peripherals::take().unwrap();
 
@@ -99,16 +106,13 @@ impl Board {
         }
 
         Board {
-            serial: Serial { tx: serial.tx }
+            serial: Serial { tx: serial.tx },
         }
     }
 
-    pub fn set_rx_processor(&mut self, rx_processor_set: Box<dyn RXProcessor + Send + Sync + 'static>){
-        // cortex_m::interrupt::free(|cs| {
-        //     RX_PROCESSOR.borrow(cs).replace(Some(rx_processor_set));
-        // });    
+    pub fn get_rx_processor(&self) -> &'static Mutex<RefCell<Option<&dyn RXProcessor>>> {
+        &RX_PROCESSOR
     }
-
 }
 
 // TODO:: Move interface_new and register_command to App
@@ -151,12 +155,12 @@ unsafe fn USART2() {
                 // }
                 dsb();
                 if let Ok(c) = nb::block!(rx.read()) {
-
                     rprintln!("serial rx char: {}", c);
-                    if let Some( processor )  = RX_PROCESSOR.borrow(cs).borrow_mut().deref_mut() {
+                    let r = RX_PROCESSOR.borrow(cs);
+
+                    if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c as char);
                     }
-     
                 }
                 dmb();
                 // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
@@ -167,4 +171,3 @@ unsafe fn USART2() {
         }
     })
 }
-

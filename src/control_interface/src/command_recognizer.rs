@@ -2,8 +2,6 @@
 
 // https://ferrous-systems.com/blog/test-embedded-app/
 
-
-
 use core::{
     borrow::BorrowMut,
     cell::{Ref, RefCell, RefMut},
@@ -36,7 +34,7 @@ impl CommandData {
 }
 pub struct CommandRecognizer {}
 impl CommandRecognizer {
-    pub fn process_character(mut command_data: RefMut<CommandData>, character: char) {
+    pub fn process_character(mut command_data: &mut CommandData, character: char) {
         let receiving = command_data.receiving;
         let starting = character == '{';
 
@@ -67,11 +65,11 @@ impl CommandRecognizer {
         command_data.command_pos = command_data.command_pos + 1;
     }
 
-    pub fn pending_message_count(mut command_data: Ref<CommandData>) -> usize {
+    pub fn pending_message_count(command_data: &CommandData) -> usize {
         return command_data.cur - (command_data.end + 1) % BUFFER_NUM;
     }
 
-    pub fn take_command(mut command_data: RefMut<CommandData>) -> [char; 100] {
+    pub fn take_command(mut command_data: &mut CommandData) -> [char; 100] {
         let command = command_data.buffer[(command_data.end + 1) % BUFFER_NUM];
         command_data.end = (command_data.end + 1) % BUFFER_NUM; // review this in a sec
         return command;

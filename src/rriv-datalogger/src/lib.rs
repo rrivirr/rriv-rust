@@ -44,14 +44,16 @@ pub mod command_service {
     extern crate alloc;
     use alloc::boxed::Box;
 
+    use core::ops::{Deref, DerefMut};
     use core::{
         borrow::BorrowMut,
         cell::{Ref, RefCell, RefMut},
     };
     use cortex_m::interrupt::Mutex;
 
+    static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
+
     pub struct CommandService {
-        command_data: Mutex<RefCell<CommandData>>,
         registry: CommandRegistry,
         // recognizer: CommandRecognizer,
     }
@@ -60,29 +62,45 @@ pub mod command_service {
         pub fn new() -> Self {
             static NUM_COMMANDS: usize = 32;
             let command_map = HashMap::with_capacity(NUM_COMMANDS);
+            // set the static, shareable command data
+            cortex_m::interrupt::free(|cs| {
+                *COMMAND_DATA.borrow(cs).borrow_mut() = Some(CommandData::default());
+            });
             CommandService {
-                command_data: Mutex::new(RefCell::new(CommandData::default())),
                 registry: CommandRegistry::new(command_map),
             }
         }
 
         pub fn setup(&mut self, board: &mut Board) {
-            let rxProcessor = Box::new(CharacterProcessor::new(&mut self.command_data)); // TODO: command data needs to be static??
-                                                                                         // Matty suggests leaking the object?
-            board.set_rx_processor(rxProcessor)
+            let rx_processor = Box::new(CharacterProcessor::new(self.get_command_data()));
+            // TODO: command data needs to be static??
+            // Matty suggests leaking the object?
+            // board.set_rx_processor(rx_processor)
         }
-
-        fn pending_message_count(&mut self) -> usize {
+        
+        /// get access to the static, shareable command data
+        fn get_command_data(&self) -> &'static Mutex<RefCell<Option<CommandData>>> {
+            &COMMAND_DATA
+        }
+        fn pending_message_count(&self) -> usize {
             cortex_m::interrupt::free(|cs| {
-                let command_data = self.command_data.borrow(cs).borrow();
-                return CommandRecognizer::pending_message_count(command_data);
+                let command_data = self.get_command_data().borrow(cs).borrow();
+                if let Some(command_data) = command_data.deref() {
+                    CommandRecognizer::pending_message_count(&command_data)
+                } else {
+                    0
+                }
             })
         }
 
         fn take_command(&mut self) -> [char; 100] {
             cortex_m::interrupt::free(|cs| {
-                let mut command_data = self.command_data.borrow(cs).borrow_mut();
-                return CommandRecognizer::take_command(command_data);
+                let mut command_data = self.get_command_data().borrow(cs).borrow_mut();
+                if let Some(command_data) = command_data.deref_mut() {
+                    CommandRecognizer::take_command(command_data)
+                } else {
+                    [0 as char; 100]
+                }
             })
         }
 
@@ -95,25 +113,24 @@ pub mod command_service {
         }
     }
 
+    /// I believe the lifetimes here are generic over the lifetime of the CommandData
     pub struct CharacterProcessor<'a> {
-        command_data: &'a mut Mutex<RefCell<CommandData>>,
+        command_data: &'a Mutex<RefCell<Option<CommandData>>>,
     }
 
-    impl CharacterProcessor<'_> {
-        pub fn new(command_data: &mut Mutex<RefCell<CommandData>>) -> CharacterProcessor {
-            CharacterProcessor {
-                command_data: command_data,
-            }
+    impl<'a> CharacterProcessor<'a> {
+        pub fn new(command_data: &Mutex<RefCell<Option<CommandData>>>) -> CharacterProcessor {
+            CharacterProcessor { command_data }
         }
-
-        pub fn function_name() {}
     }
 
-    impl RXProcessor for CharacterProcessor<'_> {
-        fn process_character(&mut self, character: char) {
+    impl<'a, 'b> RXProcessor for CharacterProcessor<'a> {
+        fn process_character(&self, character: char) {
             cortex_m::interrupt::free(|cs| {
                 let mut command_data = self.command_data.borrow(cs).borrow_mut();
-                CommandRecognizer::process_character(command_data, character);
+                if let Some(command_data) = command_data.deref_mut() {
+                    CommandRecognizer::process_character(command_data, character);
+                }
             })
         }
     }
