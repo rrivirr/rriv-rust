@@ -1,5 +1,5 @@
 extern crate alloc;
-use alloc::{format, string::String};
+use alloc::format;
 use core::ffi::{c_void, CStr};
 use hashbrown::HashMap;
 

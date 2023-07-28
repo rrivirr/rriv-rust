@@ -1,12 +1,6 @@
-// #![cfg_attr(not(test), no_std)]
+#![cfg_attr(not(test), no_std)]
 
 // https://ferrous-systems.com/blog/test-embedded-app/
-
-use core::{
-    borrow::BorrowMut,
-    cell::{Ref, RefCell, RefMut},
-    ops::DerefMut,
-};
 
 pub const BUFFER_NUM: usize = 11; // Includes an extra empty cell for end marker
 pub const BUFFER_SIZE: usize = 100;
@@ -38,7 +32,7 @@ impl CommandRecognizer {
         let receiving = command_data.receiving;
         let starting = character == '{';
 
-        if receiving && !starting {
+        if receiving && starting {
             // meaningless character
             return;
         }
@@ -47,7 +41,6 @@ impl CommandRecognizer {
             command_data.receiving = false;
             command_data.cur = (command_data.cur + 1) % BUFFER_NUM;
             command_data.message_ready = true;
-            return;
         }
 
         if starting {
@@ -60,7 +53,7 @@ impl CommandRecognizer {
         }
 
         let cur = command_data.cur;
-        let pos = command_data.command_pos;
+        let pos: usize = command_data.command_pos;
         command_data.buffer[cur][pos] = character;
         command_data.command_pos = command_data.command_pos + 1;
     }
@@ -76,86 +69,109 @@ impl CommandRecognizer {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
+#[cfg(test)]
+mod tests {
 
-//     #[test]
-//     fn test_receiving() {
-//         let mut command_recognizer = CommandRecognizer::default();
-//         command_recognizer.process_character('{');
+    use super::*;
 
-//         assert_eq!(true, command_recognizer.receiving)
-//     }
+    #[test]
+    fn test_receiving() {
+        let mut command_data: CommandData = CommandData::default();
+        CommandRecognizer::process_character(&mut command_data, '{');
 
-//     #[test]
-//     fn test_receiving_done() {
-//         let mut command_recognizer = CommandRecognizer::default();
-//         command_recognizer.process_character('{');
-//         command_recognizer.process_character('\r');
+        assert_eq!(true, command_data.receiving);
+    }
 
-//         assert_eq!(false, command_recognizer.receiving)
-//     }
+    #[test]
+    fn test_receiving_done() {
+        let mut command_data: CommandData = CommandData::default();
+        CommandRecognizer::process_character(&mut command_data, '{');
+        CommandRecognizer::process_character(&mut command_data, '\r');
 
-//     #[test]
-//     fn test_message_ready() {
-//         let mut command_recognizer = CommandRecognizer::default();
-//         command_recognizer.process_character('{');
-//         command_recognizer.process_character('\r');
+        assert_eq!(false, command_data.receiving);
+    }
 
-//         assert_eq!(true, command_recognizer.message_ready)
-//     }
+    #[test]
+    fn test_message_ready() {
+        let mut command_data = CommandData::default();
+        CommandRecognizer::process_character(&mut command_data, '{');
+        CommandRecognizer::process_character(&mut command_data, '\r');
 
-//     #[test]
-//     fn test_message_saved() {
-//         let mut command_recognizer = CommandRecognizer::default();
-//         let command = "{\"cmd\":\"set\",\"object\":\"sensor\"}\r";
-//         for c in command.chars() {
-//             command_recognizer.process_character(c);
-//         }
+        assert_eq!(true, command_data.message_ready)
+    }
 
-//         assert_eq!(true, command_recognizer.message_ready);
+    #[test]
+    fn test_message_saved() {
+        let mut command_data = CommandData::default();
+        let command = "{\"cmd\":\"set\",\"object\":\"sensor\"}\r";
+        for c in command.chars() {
+            CommandRecognizer::process_character(&mut command_data, c);
+        }
 
-//         println!("{}", command);
-//         println!(
-//             "{}",
-//             command_recognizer.buffer[0]
-//                 .iter()
-//                 .cloned()
-//                 .collect::<String>()
-//         );
+        assert_eq!(true, command_data.message_ready);
 
-//         let mut matching = true;
-//         for (i, c) in command.chars().enumerate() {
-//             if c == '\r' {
-//                 break;
-//             }
-//             if command_recognizer.buffer[0][i] != c {
-//                 println!("// {} {}", c, command_recognizer.buffer[0][i]);
-//                 matching = false;
-//             }
-//         }
-//         assert_eq!(true, matching);
-//     }
+        println!("{}", command);
+        println!(
+            "{}",
+            command_data.buffer[0].iter().cloned().collect::<String>()
+        );
 
-//     #[test]
-//     fn test_multiple_messages() {
-//         let mut command_recognizer: CommandRecognizer = CommandRecognizer::default();
-//         let command = "{\"cmd\":\"set\",\"object\":\"sensor\"}\r";
-//         let command2 = "{\"cmd\":\"set\",\"object\":\"actuator\"}\r";
-//     }
+        let mut matching = true;
+        for (i, c) in command.chars().enumerate() {
+            if c == '\r' {
+                break;
+            }
+            if command_data.buffer[0][i] != c {
+                println!("// {} {}", c, command_data.buffer[0][i]);
+                matching = false;
+            }
+        }
+        assert_eq!(true, matching);
+    }
 
-//     #[test]
-//     fn test_many_messages() {
-//         let mut command_recognizer: CommandRecognizer = CommandRecognizer::default();
-//         let command = "{\"cmd\":\"set\",\"object\":\"sensor\"}\r";
+    #[test]
+    fn test_multiple_messages() {
+        let mut command_data = CommandData::default();
+        let command = "{\"cmd\":\"set\",\"object\":\"sensor\"}\r";
+        let command2 = "{\"cmd\":\"set\",\"object\":\"actuator\"}\r";
+        for c in command.chars() {
+            CommandRecognizer::process_character(&mut command_data, c);
+        }
+        for c in command2.chars() {
+            CommandRecognizer::process_character(&mut command_data, c);
+        }
+        // check that there are commands ready
+        assert_eq!(true, command_data.message_ready);
+        // check that there are two commands ready
+        assert_eq!(2, CommandRecognizer::pending_message_count(&command_data));
+        // check that the first command is correct
+        let mut matching = true;
+        for (i, c) in command.chars().enumerate() {
+            if c == '\r' {
+                break;
+            }
+            if command_data.buffer[0][i] != c {
+                println!("// {} {}", c, command_data.buffer[0][i]);
+                matching = false;
+            }
+        }
+        assert_eq!(true, matching);
+    }
 
-//         for _i in 0..10 {
-//             for c in command.chars() {
-//                 command_recognizer.process_character(c);
-//             }
-//         }
-//         println!("count {}", command_recognizer.pending_message_count());
-//         assert_eq!(10, command_recognizer.pending_message_count())
-//     }
-// }
+    #[test]
+    fn test_many_messages() {
+        let mut command_data = CommandData::default();
+        let command = "{\"cmd\":\"set\",\"object\":\"sensor\"}\r";
+
+        for _i in 0..10 {
+            for c in command.chars() {
+                CommandRecognizer::process_character(&mut command_data, c);
+            }
+        }
+        println!(
+            "count {}",
+            CommandRecognizer::pending_message_count(&command_data)
+        );
+        assert_eq!(10, CommandRecognizer::pending_message_count(&command_data))
+    }
+}

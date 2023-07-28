@@ -2,14 +2,11 @@
 
 extern crate alloc;
 
-use alloc::boxed::Box;
-use core::borrow::BorrowMut;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
     concat,
     default::Default,
-    ffi::c_void,
     format_args,
     ops::DerefMut,
     option::{Option, Option::*},
