@@ -72,16 +72,17 @@ pub mod command_service {
         }
 
         pub fn setup(&mut self, board: &mut Board) {
-            let rx_processor = Box::new(CharacterProcessor::new(self.get_command_data()));
+            let rx_processor = Box::new(CharacterProcessor{});
             // TODO: command data needs to be static??
             // Matty suggests leaking the object?
-            // board.set_rx_processor(rx_processor)
+            board.set_rx_processor(rx_processor)
         }
         
         /// get access to the static, shareable command data
         fn get_command_data(&self) -> &'static Mutex<RefCell<Option<CommandData>>> {
             &COMMAND_DATA
         }
+
         fn pending_message_count(&self) -> usize {
             cortex_m::interrupt::free(|cs| {
                 let command_data = self.get_command_data().borrow(cs).borrow();
@@ -114,21 +115,14 @@ pub mod command_service {
     }
 
     /// I believe the lifetimes here are generic over the lifetime of the CommandData
-    pub struct CharacterProcessor<'a> {
-        command_data: &'a Mutex<RefCell<Option<CommandData>>>,
-    }
+    pub struct CharacterProcessor {}
 
-    impl<'a> CharacterProcessor<'a> {
-        pub fn new(command_data: &Mutex<RefCell<Option<CommandData>>>) -> CharacterProcessor {
-            CharacterProcessor { command_data }
-        }
-    }
-
-    impl<'a, 'b> RXProcessor for CharacterProcessor<'a> {
+    impl RXProcessor for CharacterProcessor {
         fn process_character(&self, character: char) {
             cortex_m::interrupt::free(|cs| {
-                let mut command_data = self.command_data.borrow(cs).borrow_mut();
-                if let Some(command_data) = command_data.deref_mut() {
+
+                let mut command_data = COMMAND_DATA.borrow(cs).borrow_mut();
+                if let Some( ref mut command_data) = command_data.deref_mut() {
                     CommandRecognizer::process_character(command_data, character);
                 }
             })

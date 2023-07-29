@@ -1,5 +1,5 @@
 [workspace]
-members = ["control_interface"]
+members = ["rriv-datalogger","control_interface"]
 
 [workspace.package]
 authors = ["m. interrupt"]

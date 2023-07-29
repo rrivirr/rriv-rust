@@ -2,6 +2,7 @@
 
 extern crate alloc;
 
+use alloc::boxed::Box;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
@@ -32,11 +33,11 @@ use stm32f1xx_hal::{
 // static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
 pub trait RXProcessor: Send + Sync {
-    fn process_character(&'static self, character: char);
+    fn process_character(&self, character: char);
 }
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static RX_PROCESSOR: Mutex<RefCell<Option<&dyn RXProcessor>>> = Mutex::new(RefCell::new(None));
+static RX_PROCESSOR: Mutex<RefCell<Option<Box<dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Serial {
@@ -107,9 +108,17 @@ impl Board {
         }
     }
 
-    pub fn get_rx_processor(&self) -> &'static Mutex<RefCell<Option<&dyn RXProcessor>>> {
-        &RX_PROCESSOR
+    // pub fn get_rx_processor(&self) -> &'static Mutex<RefCell<Option<&dyn RXProcessor>>> {
+    //     &RX_PROCESSOR
+    // }
+
+    pub fn set_rx_processor(&mut self, rx_processor_set: Box<dyn RXProcessor + Send + Sync + 'static>){
+        cortex_m::interrupt::free(|cs| {
+            RX_PROCESSOR.borrow(cs).replace(Some(rx_processor_set));
+        });
     }
+
+
 }
 
 // TODO:: Move interface_new and register_command to App
@@ -145,19 +154,25 @@ impl Board {
 #[interrupt]
 unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
+
+
+
         if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
                 // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
                 //     led.is_set_low();
                 // }
                 dsb();
+
                 if let Ok(c) = nb::block!(rx.read()) {
                     rprintln!("serial rx char: {}", c);
-                    let r = RX_PROCESSOR.borrow(cs);
 
-                    if let Some(processor) = r.borrow_mut().deref_mut() {
+                    let r = RX_PROCESSOR.borrow(cs);
+                    let rb = r.borrow();
+                    if let Some( processor) = rb.as_deref() {
                         processor.process_character(c as char);
-                    }
+                    }         
+  
                 }
                 dmb();
                 // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
