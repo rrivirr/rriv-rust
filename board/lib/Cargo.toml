@@ -3,6 +3,13 @@ name = "rriv-0-4"
 version = "0.1.0"
 edition = "2021"
 
+# Note: header file generation happens in build.rs
+[lib]
+crate-type = ["staticlib"]
+bench = false
+doctest = false
+test = false
+
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -15,4 +22,10 @@ cortex-m-rt = "0.7.3"
 panic-halt = "0.2.0"
 unwrap-infallible = "0.1.5"
 stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103"] }
+embedded-alloc = "0.5.0"
 rtt-target = "0.4.0"
+
+
+[build-dependencies]
+cbindgen = "0.24.3"
+bindgen = "0.64.0"
