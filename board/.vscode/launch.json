@@ -4,7 +4,7 @@
         {
             "type": "lldb",
             "request": "launch",
-            "name": "Compile package for RRIV board 0.4",
+            "name": "Compile board",
             "cargo": {
                 "args": [
                     "build",

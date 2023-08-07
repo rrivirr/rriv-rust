@@ -1,16 +1,8 @@
 #![cfg_attr(not(test), no_std)]
 
 // use control_interface::{, command_register::CommandRegistry};
-use rriv_0_4::Board;
-
 extern crate alloc;
-use alloc::boxed::Box;
-
-use core::{
-    borrow::BorrowMut,
-    cell::{Ref, RefCell, RefMut},
-};
-use cortex_m::interrupt::Mutex;
+use rriv_0_4::Board;
 
 pub struct DataLogger {
     pub board: Board,
@@ -20,7 +12,7 @@ pub struct DataLogger {
 impl DataLogger {
     pub fn new(board: Board) -> Self {
         DataLogger {
-            board: board,
+            board,
             command_service: command_service::CommandService::new(),
         }
     }
@@ -44,11 +36,8 @@ pub mod command_service {
     extern crate alloc;
     use alloc::boxed::Box;
 
+    use core::cell::RefCell;
     use core::ops::{Deref, DerefMut};
-    use core::{
-        borrow::BorrowMut,
-        cell::{Ref, RefCell, RefMut},
-    };
     use cortex_m::interrupt::Mutex;
 
     static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
@@ -77,7 +66,7 @@ pub mod command_service {
             // Matty suggests leaking the object?
             // board.set_rx_processor(rx_processor)
         }
-        
+
         /// get access to the static, shareable command data
         fn get_command_data(&self) -> &'static Mutex<RefCell<Option<CommandData>>> {
             &COMMAND_DATA

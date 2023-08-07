@@ -1,21 +1,14 @@
 #![cfg_attr(not(test), no_std)]
-//! This app tests the static rriv board lib
-
 #![allow(clippy::empty_loop)]
 #![feature(alloc_error_handler)]
 #![feature(prelude_2024)]
 #![no_main]
 
-// use core::panic::PanicInfo;
-// use core::ptr::null_mut;
 use cortex_m_rt::entry;
-// use rtt_target::{rprintln, rtt_init_print};
-
 use rtt_target::{rprintln, rtt_init_print};
 extern crate alloc;
-use alloc::{alloc::Layout, boxed::Box};
-use core::{cell::RefCell, default::Default, ffi::c_void, option::{Option, Option::*}, result::Result::*, mem::MaybeUninit, ops::DerefMut, u8, prelude::rust_2024::*, *};
-// use alloc::{alloc::Layout, boxed::Box};
+use alloc::alloc::Layout;
+use core::{mem::MaybeUninit, prelude::rust_2024::*, u8, *};
 use embedded_alloc::Heap;
 use panic_halt as _;
 
@@ -24,7 +17,6 @@ use rriv_0_4::Board;
 
 extern crate rriv_datalogger;
 use rriv_datalogger::DataLogger;
-
 
 // #[panic_handler]
 // fn panic(_: &PanicInfo) -> ! {
@@ -53,10 +45,8 @@ fn oom(_: Layout) -> ! {
     loop {}
 }
 
-
 #[entry]
 fn main() -> ! {
-
     alloc_heap();
     // Initialize the allocator
     rtt_init_print!();
@@ -66,7 +56,6 @@ fn main() -> ! {
     loop {
         datalogger.run_loop_iteration();
     }
-
 }
 
 //// I think this is for the services crate..
