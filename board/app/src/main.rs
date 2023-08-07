@@ -1,7 +1,7 @@
+#![cfg_attr(not(test), no_std)]
 //! This app tests the static rriv board lib
 
 #![allow(clippy::empty_loop)]
-#![cfg_attr(not(test), no_std)]
 #![feature(alloc_error_handler)]
 #![feature(prelude_2024)]
 #![no_main]

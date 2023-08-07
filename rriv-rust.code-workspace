@@ -14,5 +14,7 @@
 		"[rust]": {
 			"editor.defaultFormatter": "rust-lang.rust-analyzer"
 		},
+		"probe-rs-debugger.debuggerExecutable": "probe-rs-debugger",
+		"rust-analyzer.check.allTargets": false,
 	}
 }
