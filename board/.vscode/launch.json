@@ -9,7 +9,7 @@
                 "args": [
                     "build",
                     "--manifest-path",
-                    "${workspaceFolder}/board/Cargo.toml",
+                    "${workspaceFolder}/Cargo.toml",
                     "-p=rriv-0-4"
                 ],
                 "filter": {
@@ -18,7 +18,7 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}/board/",
+            "cwd": "${workspaceFolder}/",
             "sourceLanguages": [
                 "rust"
             ]
@@ -41,8 +41,8 @@
             "coreConfigs": [
                 {
                     "coreIndex": 0,
-                    "programBinary": "${workspaceFolder}/board/target/thumbv7m-none-eabi/debug/app", //!MODIFY
-                    "svdFile": "${workspaceFolder}/board/CMSIS.SVD" //!MODIFY
+                    "programBinary": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/app", //!MODIFY
+                    "svdFile": "${workspaceFolder}/CMSIS.SVD" //!MODIFY
                 }
             ],
             "env": {

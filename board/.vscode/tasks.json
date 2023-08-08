@@ -9,7 +9,7 @@
                 "--target",
                 "thumbv7m-none-eabi",
                 "--manifest-path",
-                "${workspaceFolder}/board/Cargo.toml",
+                "${workspaceFolder}/Cargo.toml",
                 "-p=rriv-0-4"
             ],
             "problemMatcher": [
