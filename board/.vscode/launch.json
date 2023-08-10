@@ -1,38 +1,18 @@
 {
     "version": "0.2.0",
     "configurations": [
-        {
-            "type": "lldb",
-            "request": "launch",
-            "name": "Compile board",
-            "cargo": {
-                "args": [
-                    "build",
-                    "--manifest-path",
-                    "${workspaceFolder}/Cargo.toml",
-                    "-p=rriv-0-4"
-                ],
-                "filter": {
-                    "name": "RRIV board 0.4",
-                    "kind": "lib"
-                }
-            },
-            "args": [],
-            "cwd": "${workspaceFolder}/",
-            "sourceLanguages": [
-                "rust"
-            ]
-        },
+        // Build Rust Binary (app)
         {
             "type": "probe-rs-debug",
             "request": "launch",
-            "name": "app probe-rs-debug",
-            "cwd": "${workspaceFolder}/board",
+            "name": "Build, Run, Debug Rust Binary",
+            "cwd": "${workspaceFolder}",
             "runtimeExecutable": "probe-rs-debugger",
             "runtimeArgs": [
-                "debug"
+                "debug",
             ],
-            "chip": "stm32f103rb",
+            "chip": "STM32F103RB",
+            "wireProtocol": "Swd",
             "flashingConfig": {
                 "flashingEnabled": true,
                 "resetAfterFlashing": true,
@@ -40,16 +20,25 @@
             },
             "coreConfigs": [
                 {
-                    "coreIndex": 0,
-                    "programBinary": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/app", //!MODIFY
-                    "svdFile": "${workspaceFolder}/CMSIS.SVD" //!MODIFY
+                    "programBinary": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/app",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            "dataFormat": "String", // Format RTT data as String data
+                            "showTimestamps": true // Include host-side timestamps for every line of data transferred from the target RTT output
+                        },
+                        {
+                            "channelNumber": 1,
+                            "dataFormat": "BinaryLE" // Treat data as raw binary data, and do not format in any way
+                        }
+                    ]
                 }
             ],
             "env": {
-                //!MODIFY (or remove)
-                "RUST_LOG": "info" // If you set this variable, check the VSCode console log window for the location of the log file.
+                // "RUST_LOG": "trace" // If you set this variable, check the VSCode console log window for the location of the log file.
             },
-            "consoleLogLevel": "Console" //Info, Debug
+            "consoleLogLevel": "Console", //Info, Debug
         }
     ],
 }

@@ -1,5 +1,5 @@
 [package]
-name = "rriv-0-4"
+name = "rrivrustlib"
 version = "0.1.0"
 edition = "2021"
 

@@ -18,6 +18,3 @@ pub type int_fast8_t = i8;
 pub type uint_fast8_t = u8;
 pub type intmax_t = ::core::ffi::c_longlong;
 pub type uintmax_t = ::core::ffi::c_ulonglong;
-extern "C" {
-    pub fn rust_serial_interface_new() -> *mut ::core::ffi::c_void;
-}

@@ -2,14 +2,40 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "RRIV: X-Compile Board",
+            "label": "RRIV: Build Static C FFI Lib",
             "type": "cargo",
             "command": "build",
             "args": [
-                "--target",
-                "thumbv7m-none-eabi",
-                "--manifest-path",
-                "${workspaceFolder}/Cargo.toml",
+                "-p=rrivrustlib"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+        },
+        {
+            "label": "RRIV: Build App Binary Crate",
+            "type": "cargo",
+            "command": "build",
+            "args": [
+                "-p=app"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+        },
+        {
+            "label": "RRIV: Build Board Crate",
+            "type": "cargo",
+            "command": "build",
+            "args": [
                 "-p=rriv-0-4"
             ],
             "problemMatcher": [
@@ -17,8 +43,8 @@
             ],
             "group": {
                 "kind": "build",
-                "isDefault": true
+                "isDefault": false
             },
-        }
+        },
     ]
 }
