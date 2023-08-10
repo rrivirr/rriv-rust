@@ -3,6 +3,7 @@
 #![feature(prelude_2024)]
 #![no_main]
 
+extern crate panic_halt;
 
 pub mod prelude;
 

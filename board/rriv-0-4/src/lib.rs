@@ -1,6 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
+extern crate panic_halt;
 
 use core::marker::{Send, Sync};
 use core::{
@@ -17,7 +18,7 @@ use cortex_m::{
     interrupt::Mutex,
     peripheral::NVIC,
 };
-use panic_halt as _;
+
 use rtt_target::rprintln;
 use stm32f1xx_hal::{
     // gpio::{self, OpenDrain, Output, PinState},

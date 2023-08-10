@@ -4,9 +4,9 @@
 #![feature(prelude_2024)]
 #![no_main]
 
+extern crate panic_halt;
 use core::{prelude::rust_2024::*, u8};
 use cortex_m_rt::entry;
-use panic_halt as _;
 use rtt_target::rtt_init_print;
 
 pub mod prelude;
@@ -17,10 +17,6 @@ use rriv_0_4::Board;
 extern crate rriv_datalogger;
 use rriv_datalogger::DataLogger;
 
-// #[panic_handler]
-// fn panic(_: &PanicInfo) -> ! {
-//     loop {}
-// }
 
 // #[link(name = "rriv_0_4", kind = "static")]
 // extern "C" {
