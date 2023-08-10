@@ -113,7 +113,6 @@ impl Board {
     }
 }
 
-
 #[interrupt]
 unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {

@@ -22,6 +22,8 @@ stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103"] }
 embedded-alloc = "0.5.0"
 rtt-target = "0.4.0"
 
+rriv-0-4 = { path = "../rriv-0-4" }
+datalogger = { path = "../datalogger" }
 
 [build-dependencies]
 cbindgen = "0.24.3"

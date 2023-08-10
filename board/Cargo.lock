@@ -34,12 +34,12 @@ version = "0.1.0"
 dependencies = [
  "cortex-m",
  "cortex-m-rt",
+ "datalogger",
  "embedded-alloc",
  "embedded-hal",
  "nb 1.1.0",
  "panic-halt",
  "rriv-0-4",
- "rriv-datalogger",
  "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",
@@ -208,6 +208,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "command_service"
+version = "0.1.0"
+dependencies = [
+ "control_interface",
+ "cortex-m",
+ "hashbrown 0.14.0",
+ "rriv-0-4",
+]
+
+[[package]]
 name = "control_interface"
 version = "0.1.0"
 dependencies = [
@@ -252,6 +262,15 @@ name = "critical-section"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7059fff8937831a9ae6f0fe4d658ffabf58f2ca96aa9dec1c889f936f705f216"
+
+[[package]]
+name = "datalogger"
+version = "0.1.0"
+dependencies = [
+ "command_service",
+ "cortex-m",
+ "rriv-0-4",
+]
 
 [[package]]
 name = "either"
@@ -571,16 +590,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rriv-datalogger"
-version = "0.1.0"
-dependencies = [
- "control_interface",
- "cortex-m",
- "hashbrown 0.14.0",
- "rriv-0-4",
-]
-
-[[package]]
 name = "rrivrustlib"
 version = "0.1.0"
 dependencies = [
@@ -588,10 +597,12 @@ dependencies = [
  "cbindgen",
  "cortex-m",
  "cortex-m-rt",
+ "datalogger",
  "embedded-alloc",
  "embedded-hal",
  "nb 1.1.0",
  "panic-halt",
+ "rriv-0-4",
  "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",

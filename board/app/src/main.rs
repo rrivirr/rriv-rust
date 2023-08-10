@@ -14,9 +14,8 @@ pub mod prelude;
 extern crate rriv_0_4;
 use rriv_0_4::Board;
 
-extern crate rriv_datalogger;
-use rriv_datalogger::DataLogger;
-
+extern crate datalogger;
+use datalogger::DataLogger;
 
 // #[link(name = "rriv_0_4", kind = "static")]
 // extern "C" {
