@@ -2,7 +2,7 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "RRIV: Host Build Crates",
+            "label": "RRIV: Build Host-Only Crates",
             "type": "cargo",
             "command": "build",
             "args": [],
@@ -11,7 +11,7 @@
             ],
             "group": {
                 "kind": "build",
-                "isDefault": true
+                "isDefault": false
             },
         }
     ]

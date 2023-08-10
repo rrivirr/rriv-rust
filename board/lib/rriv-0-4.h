@@ -9,14 +9,4 @@
 
 #include <stdint.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif // __cplusplus
-
-void *rust_serial_interface_new(void);
-
-#ifdef __cplusplus
-} // extern "C"
-#endif // __cplusplus
-
 #endif /* rust_serial_h */

@@ -16,5 +16,6 @@
 		},
 		"probe-rs-debugger.debuggerExecutable": "probe-rs-debugger",
 		"rust-analyzer.check.allTargets": false,
+		"task.quickOpen.showAll": false,
 	}
 }

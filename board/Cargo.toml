@@ -1,11 +1,7 @@
 [workspace]
-members = ["app", "rriv-0-4"]
+members = ["app", "lib", "rriv-0-4"]
 
 [workspace.package]
 authors = ["m. interrupt"]
 edition = "2021"
 description = "RRIV board packages"
-
-# this workspace for code that:
-# - compiled for a specific target board/platform
-# - depends on hardware peripherals
