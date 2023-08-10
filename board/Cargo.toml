@@ -1,5 +1,6 @@
 [workspace]
 members = ["app", "lib", "rriv-0-4"]
+resolver = "2"
 
 [workspace.package]
 authors = ["m. interrupt"]
