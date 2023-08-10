@@ -26,7 +26,7 @@ impl CommandData {
 }
 pub struct CommandRecognizer {}
 impl CommandRecognizer {
-    pub fn process_character(mut command_data: &mut CommandData, character: char) {
+    pub fn process_character(command_data: &mut CommandData, character: char) {
         let receiving = command_data.receiving;
         let starting = character == '{';
 
@@ -60,7 +60,7 @@ impl CommandRecognizer {
         return command_data.cur - (command_data.end + 1) % BUFFER_NUM;
     }
 
-    pub fn take_command(mut command_data: &mut CommandData) -> [char; 100] {
+    pub fn take_command(command_data: &mut CommandData) -> [char; 100] {
         let command = command_data.buffer[(command_data.end + 1) % BUFFER_NUM];
         command_data.end = (command_data.end + 1) % BUFFER_NUM; // review this in a sec
         return command;
