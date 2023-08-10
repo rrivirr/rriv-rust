@@ -4,13 +4,12 @@
 #![feature(prelude_2024)]
 #![no_main]
 
+use core::{prelude::rust_2024::*, u8};
 use cortex_m_rt::entry;
-use rtt_target::{rprintln, rtt_init_print};
-extern crate alloc;
-use alloc::alloc::Layout;
-use core::{mem::MaybeUninit, prelude::rust_2024::*, u8, *};
-use embedded_alloc::Heap;
 use panic_halt as _;
+use rtt_target::rtt_init_print;
+
+pub mod prelude;
 
 extern crate rriv_0_4;
 use rriv_0_4::Board;
@@ -28,27 +27,9 @@ use rriv_datalogger::DataLogger;
 //     pub fn rust_serial_interface_new() -> *mut c_void;
 // }
 
-#[global_allocator]
-static HEAP: Heap = Heap::empty();
-const HEAP_SIZE: usize = 128;
-static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
-
-// Initialize the allocator BEFORE you use it
-fn alloc_heap() {
-    {
-        unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
-    }
-}
-
-#[alloc_error_handler]
-fn oom(_: Layout) -> ! {
-    loop {}
-}
-
 #[entry]
 fn main() -> ! {
-    alloc_heap();
-    // Initialize the allocator
+    prelude::init();
     rtt_init_print!();
 
     let board = Board::new();
