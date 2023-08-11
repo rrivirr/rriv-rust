@@ -16,19 +16,16 @@ static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::n
 
 pub struct CommandService {
     registry: CommandRegistry,
-    // recognizer: CommandRecognizer,
 }
 
 impl CommandService {
     pub fn new() -> Self {
-        static NUM_COMMANDS: usize = 32;
-        let command_map = HashMap::with_capacity(NUM_COMMANDS);
         // set the static, shareable command data
         cortex_m::interrupt::free(|cs| {
             *COMMAND_DATA.borrow(cs).borrow_mut() = Some(CommandData::default());
         });
         CommandService {
-            registry: CommandRegistry::new(command_map),
+            registry: CommandRegistry::new(),
         }
     }
 

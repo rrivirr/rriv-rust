@@ -1,9 +1,9 @@
 extern crate alloc;
 use alloc::format;
-use core::ffi::{c_void, CStr};
+use core::ffi::c_void;
 use hashbrown::HashMap;
 
-#[repr(C)]
+#[repr(u8)]
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub enum Command {
     DataloggerSet = 0,
@@ -42,7 +42,7 @@ pub enum Command {
     BoardSignalExAdcLow = 33,
     BoardSignal3v3BoostHigh = 34,
     BoardSignal3v3BoostLow = 35,
-    Unknown = 36,
+    Unknown = 36, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
 }
 impl Command {
     pub fn from_str(cmd_str: &str) -> Self {
@@ -101,7 +101,10 @@ pub struct CommandRegistry {
 }
 
 impl CommandRegistry {
-    pub fn new(command_map: CommandMap) -> Self {
+    pub fn new() -> Self {
+        // NOTE: This is a hack to get the number of commands. There is no better way.
+        let num_commands = Command::Unknown as u8 as usize + 1;
+        let command_map = HashMap::with_capacity(num_commands);
         CommandRegistry { command_map }
     }
     pub fn register_command(&mut self, command: Command, action_fn: extern "C" fn(*mut c_void)) {
@@ -123,30 +126,12 @@ impl CommandRegistry {
     }
 }
 
-/// TODO: This does not belong here.
-/*
-Register the command with the CommandRegistry
-Return a raw pointer to the CommandRegistry
-*/
-#[no_mangle]
-pub unsafe extern "C" fn register_command(
-    command_registry: *mut CommandRegistry,
-    command: *const u8,
-    action_fn: extern "C" fn(*mut c_void),
-) -> *mut CommandRegistry {
-    let cmd_str = CStr::from_ptr(command as *const i8).to_str().unwrap();
-    (*command_registry).register_command_str(cmd_str, action_fn);
-    command_registry
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     #[test]
     fn test_command_registration() {
-        static NUM_COMMANDS: usize = 32;
-        let command_map = HashMap::with_capacity(NUM_COMMANDS);
-        let mut command_registry = CommandRegistry::new(command_map);
+        let mut command_registry = CommandRegistry::new();
         let command = Command::DataloggerSet;
         extern "C" fn action_fn_1(_: *mut c_void) {}
         command_registry.register_command(command, action_fn_1);
@@ -154,9 +139,7 @@ mod tests {
     }
     #[test]
     fn test_command_registration_str() {
-        static NUM_COMMANDS: usize = 32;
-        let command_map = HashMap::with_capacity(NUM_COMMANDS);
-        let mut command_registry = CommandRegistry::new(command_map);
+        let mut command_registry = CommandRegistry::new();
         let cmd_str = "datalogger_set";
         extern "C" fn action_fn_2(_: *mut c_void) {}
         command_registry.register_command_str(cmd_str, action_fn_2);
@@ -164,8 +147,7 @@ mod tests {
     }
     #[test]
     fn test_get_command_from_parts() {
-        let command_map = HashMap::with_capacity(32);
-        let command_registry = CommandRegistry::new(command_map);
+        let command_registry = CommandRegistry::new();
         let command = Command::DataloggerSet;
         let object = "datalogger";
         let action = "set";
