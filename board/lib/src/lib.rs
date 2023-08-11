@@ -18,6 +18,7 @@ use rriv_0_4::Board;
 extern crate command_service;
 use command_service::CommandService;
 
+/// Unsafe FFI method that initializes the `CommandService` and returns a raw pointer to it.
 #[no_mangle]
 pub unsafe extern "C" fn command_service_init() -> *mut c_void {
     prelude::init();
@@ -28,8 +29,7 @@ pub unsafe extern "C" fn command_service_init() -> *mut c_void {
     Box::into_raw(Box::new(command_service)) as *mut c_void
 }
 
-/// Unsafe FFI method that registers the command with the `CommandService`
-/// and returns a raw pointer to the `CommandService`.
+/// Unsafe FFI method that registers a command with the `CommandService` and returns a raw pointer to it.
 #[no_mangle]
 pub unsafe extern "C" fn command_service_register_command(
     command_service_ptr: *mut c_void,
@@ -49,7 +49,10 @@ pub unsafe extern "C" fn command_service_register_command(
 /// Unsafe FFI method that runs the `CommandService`'s run loop iteration.
 /// This should be called in the main loop of the application that is using the `CommandService`.
 #[no_mangle]
-pub unsafe extern "C" fn command_service_run_loop_iteration(command_service_ptr: *mut c_void) {
+pub unsafe extern "C" fn command_service_run_loop_iteration(
+    command_service_ptr: *mut c_void,
+) -> *mut c_void {
     let command_service = &mut *(command_service_ptr as *mut CommandService);
     command_service.run_loop_iteration();
+    command_service_ptr
 }
