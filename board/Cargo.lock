@@ -221,6 +221,7 @@ dependencies = [
 name = "control_interface"
 version = "0.1.0"
 dependencies = [
+ "embedded-alloc",
  "hashbrown 0.14.0",
 ]
 
@@ -595,6 +596,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cbindgen",
+ "command_service",
  "cortex-m",
  "cortex-m-rt",
  "datalogger",

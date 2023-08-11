@@ -2,13 +2,13 @@
 
 use control_interface::command_recognizer::{CommandData, CommandRecognizer};
 use control_interface::command_registry::CommandRegistry;
-use hashbrown::HashMap;
 use rriv_0_4::{Board, RXProcessor};
 
 extern crate alloc;
 use alloc::boxed::Box;
 
 use core::cell::RefCell;
+use core::ffi::c_void;
 use core::ops::{Deref, DerefMut};
 use cortex_m::interrupt::Mutex;
 
@@ -34,6 +34,18 @@ impl CommandService {
         // TODO: command data needs to be static??
         // Matty suggests leaking the object?
         // board.set_rx_processor(rx_processor)
+    }
+
+    /// register a command with two &strs, object and action, and a C function pointer that matches registry.register_command's second argument
+    /// this calls registry.get_command_from_parts to get a Command object, then calls registry.register_command
+    pub fn register_command(
+        &mut self,
+        object: &str,
+        action: &str,
+        ffi_cb: extern "C" fn(*mut c_void),
+    ) {
+        let command = self.registry.get_command_from_parts(object, action);
+        self.registry.register_command(command, ffi_cb);
     }
 
     /// get access to the static, shareable command data

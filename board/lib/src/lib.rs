@@ -3,9 +3,11 @@
 #![feature(prelude_2024)]
 #![no_main]
 
+extern crate alloc;
 extern crate panic_halt;
+use alloc::boxed::Box;
+use core::ffi::{c_char, c_void, CStr};
 use core::{prelude::rust_2024::*, u8};
-use cortex_m_rt::entry;
 use rtt_target::rtt_init_print;
 
 pub mod prelude;
@@ -13,46 +15,41 @@ pub mod prelude;
 extern crate rriv_0_4;
 use rriv_0_4::Board;
 
-extern crate datalogger;
-use datalogger::DataLogger;
+extern crate command_service;
+use command_service::CommandService;
 
-#[entry]
-fn main() -> ! {
+#[no_mangle]
+pub unsafe extern "C" fn command_service_init() -> *mut c_void {
     prelude::init();
     rtt_init_print!();
-
-    let board = Board::new();
-    let mut datalogger = DataLogger::new(board);
-    loop {
-        datalogger.run_loop_iteration();
-    }
+    let mut board = Board::new();
+    let mut command_service = CommandService::new();
+    command_service.setup(&mut board);
+    Box::into_raw(Box::new(command_service)) as *mut c_void
 }
-// // TODO:: import the libraries needed and update these FFI functions
-// #[no_mangle]
-// pub unsafe extern "C" fn rust_serial_interface_new() -> *mut c_void {
-//     let board = Board::init();
-//     Box::into_raw(Box::new(board)) as *mut c_void
-// }
 
-// something like this and make sure the command is the right arg for CString
-// #[no_mangle]
-// pub extern "C" fn rust_serial_register_command(serial_ptr: *mut c_void, command: *mut c_void, registration: *mut c_void) {
-//     let mut board = unsafe { &mut *(serial_ptr as *mut Board) };
-//     board.register_command(&mut command, &mut registration as *mut RegisteredCommand as *mut c_void);
-// }
+/// Unsafe FFI method that registers the command with the `CommandService`
+/// and returns a raw pointer to the `CommandService`.
+#[no_mangle]
+pub unsafe extern "C" fn command_service_register_command(
+    command_service_ptr: *mut c_void,
+    object: *const c_char,
+    action: *const c_char,
+    ffi_cb: extern "C" fn(*mut c_void),
+) -> *mut c_void {
+    let command_service = &mut *(command_service_ptr as *mut CommandService);
+    command_service.register_command(
+        &CStr::from_ptr(object).to_str().unwrap(),
+        &CStr::from_ptr(action).to_str().unwrap(),
+        ffi_cb,
+    );
+    command_service_ptr
+}
 
-// #[no_mangle]
-// pub unsafe extern "C" fn rust_serial_read(serial_ptr: *mut c_void) -> u8 {
-//     let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
-//     // Read the byte that was just sent. Blocks until the read is complete
-//     let charr = block!(serial_context.rx.read()).unwrap();
-//     Box::into_raw(serial_context);
-//     charr
-// }
-
-// #[no_mangle]
-// pub unsafe extern "C" fn rust_serial_write(serial_ptr: *mut c_void, value: u8) {
-//     let mut serial_context = Box::from_raw(serial_ptr as *mut SerialInterfaceContext);
-//     block!(serial_context.tx.write(value)).unwrap_infallible();
-//     Box::into_raw(serial_context);
-// }
+/// Unsafe FFI method that runs the `CommandService`'s run loop iteration.
+/// This should be called in the main loop of the application that is using the `CommandService`.
+#[no_mangle]
+pub unsafe extern "C" fn command_service_run_loop_iteration(command_service_ptr: *mut c_void) {
+    let command_service = &mut *(command_service_ptr as *mut CommandService);
+    command_service.run_loop_iteration();
+}

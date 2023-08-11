@@ -24,6 +24,7 @@ rtt-target = "0.4.0"
 
 rriv-0-4 = { path = "../rriv-0-4" }
 datalogger = { path = "../datalogger" }
+command_service = { path = "../command_service" }
 
 [build-dependencies]
 cbindgen = "0.24.3"
