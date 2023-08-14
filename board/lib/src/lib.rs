@@ -35,7 +35,7 @@ pub unsafe extern "C" fn command_service_register_command(
     command_service_ptr: *mut c_void,
     object: *const c_char,
     action: *const c_char,
-    ffi_cb: extern "C" fn(*mut c_void),
+    ffi_cb: extern "C" fn(*const c_char),
 ) -> *mut c_void {
     let command_service = &mut *(command_service_ptr as *mut CommandService);
     command_service.register_command(

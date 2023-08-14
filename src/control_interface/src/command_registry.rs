@@ -1,8 +1,10 @@
 extern crate alloc;
 use alloc::format;
-use core::ffi::c_void;
+use core::ffi::c_char;
 use hashbrown::HashMap;
 
+/// NOTE: Since this has a C compatible representation, it could be used in the FFI
+/// we use from_str when processing commands from the serial side anyway though..
 #[repr(u8)]
 #[derive(Debug, Eq, Hash, PartialEq)]
 pub enum Command {
@@ -88,13 +90,7 @@ impl Command {
     }
 }
 
-#[repr(C)]
-pub struct CommandRegistration {
-    action_fn: extern "C" fn(*mut c_void),
-    command: Command,
-}
-
-type CommandMap = HashMap<Command, extern "C" fn(*mut c_void)>;
+type CommandMap = HashMap<Command, extern "C" fn(*const c_char)>;
 
 pub struct CommandRegistry {
     command_map: CommandMap,
@@ -107,17 +103,18 @@ impl CommandRegistry {
         let command_map = HashMap::with_capacity(num_commands);
         CommandRegistry { command_map }
     }
-    pub fn register_command(&mut self, command: Command, action_fn: extern "C" fn(*mut c_void)) {
+    pub fn register_command(&mut self, command: Command, action_fn: extern "C" fn(*const c_char)) {
         self.command_map.insert(command, action_fn);
     }
-    pub fn register_command_str(&mut self, command: &str, action_fn: extern "C" fn(*mut c_void)) {
+    pub fn register_command_str(&mut self, command: &str, action_fn: extern "C" fn(*const c_char)) {
         let command = Command::from_str(command);
         self.register_command(command, action_fn);
     }
+    // NOTE: This is not needed since get_action_fn returns an Option, but may be useful for testing.
     pub fn is_registered(&self, command: Command) -> bool {
         self.command_map.contains_key(&command)
     }
-    pub fn get_action_fn(&self, command: Command) -> Option<extern "C" fn(*mut c_void)> {
+    pub fn get_action_fn(&self, command: Command) -> Option<extern "C" fn(*const c_char)> {
         self.command_map.get(&command).copied()
     }
     pub fn get_command_from_parts(&self, object: &str, action: &str) -> Command {

@@ -33,7 +33,7 @@ use stm32f1xx_hal::{
 // static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
 pub trait RXProcessor: Send + Sync {
-    fn process_character(&'static self, character: char);
+    fn process_character(&'static self, character: u8);
 }
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
@@ -123,11 +123,11 @@ unsafe fn USART2() {
                 // }
                 dsb();
                 if let Ok(c) = nb::block!(rx.read()) {
-                    rprintln!("serial rx char: {}", c);
+                    rprintln!("serial rx byte: {}", c);
                     let r = RX_PROCESSOR.borrow(cs);
 
                     if let Some(processor) = r.borrow_mut().deref_mut() {
-                        processor.process_character(c as char);
+                        processor.process_character(c);
                     }
                 }
                 dmb();
