@@ -16,7 +16,6 @@ use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
 
-
 #[allow(dead_code)]
 fn macos_copy_memory_x() {
     // Put `memory.x` in our output directory and ensure it's
@@ -55,12 +54,12 @@ fn main() {
     // for now, CARGO_MANIFEST_DIR (crate_dir) seems reasonable
 
     let headers_path_str = crate_dir
-        .join("rriv-0-4.h")
+        .join("rrivlib.h")
         .into_os_string()
         .into_string()
         .unwrap();
     let bindings_path_str = crate_dir
-        .join("bindings.rs")
+        .join("rrivlib.rs")
         .into_os_string()
         .into_string()
         .unwrap();
@@ -82,9 +81,9 @@ fn main() {
         // Finish the builder and generate the bindings.
         .generate()
         // Unwrap the Result and panic on failure.
-        .expect("Unable to generate bindings");
+        .expect("Unable to generate rrivlib bindings");
 
     bindings
         .write_to_file(bindings_path_str)
-        .expect("Couldn't write bindings!");
+        .expect("Couldn't write rrivlib bindings!");
 }

@@ -1,5 +1,5 @@
 [package]
-name = "rrivrustlib"
+name = "rrivlib"
 version = "0.1.0"
 edition = "2021"
 
@@ -28,4 +28,4 @@ command_service = { path = "../command_service" }
 
 [build-dependencies]
 cbindgen = "0.24.3"
-bindgen = "0.64.0"
+bindgen = "0.66.1"
