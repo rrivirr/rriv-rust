@@ -14,6 +14,7 @@ use cortex_m::interrupt::Mutex;
 use serde_json::Value;
 
 static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
+static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
 pub struct CommandService {
     registry: CommandRegistry,
@@ -30,11 +31,22 @@ impl CommandService {
         }
     }
 
+    /// set the global rx processor
     pub fn setup(&mut self, board: &mut Board) {
-        let rx_processor = Box::new(CharacterProcessor::new(self.get_command_data()));
-        // TODO: command data needs to be static??
-        // Matty suggests leaking the object?
-        // board.set_rx_processor(rx_processor)
+        // return if already setup
+        if self.check_setup() {
+            return;
+        }
+        // create a new CharacterProcessor on the heap and leak it to a static lifetime
+        let char_processor = Box::<CharacterProcessor<'static>>::leak(Box::new(
+            CharacterProcessor::new(self.get_command_data()),
+        ));
+        // pass a pointer to the leaked processor to Board::set_rx_processor
+        board.set_rx_processor(Box::new(char_processor));
+        // set the setup flag to true
+        cortex_m::interrupt::free(|cs| {
+            SETUP_DONE.borrow(cs).replace(true);
+        });
     }
 
     /// register a command with two &strs, object and action, and a C function pointer that matches registry.register_command's second argument
@@ -48,7 +60,15 @@ impl CommandService {
         let command = self.registry.get_command_from_parts(object, action);
         self.registry.register_command(command, ffi_cb);
     }
-
+    fn check_setup(&self) -> bool {
+        cortex_m::interrupt::free(|cs| {
+            if !*SETUP_DONE.borrow(cs).borrow() {
+                return false;
+            } else {
+                return true;
+            }
+        })
+    }
     /// get access to the static, shareable command data
     fn get_command_data(&self) -> &'static Mutex<RefCell<Option<CommandData>>> {
         &COMMAND_DATA

@@ -3,6 +3,7 @@
 extern crate alloc;
 extern crate panic_halt;
 
+use alloc::boxed::Box;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
@@ -37,7 +38,7 @@ pub trait RXProcessor: Send + Sync {
 }
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static RX_PROCESSOR: Mutex<RefCell<Option<&dyn RXProcessor>>> = Mutex::new(RefCell::new(None));
+static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Serial {
@@ -108,8 +109,11 @@ impl Board {
         }
     }
 
-    pub fn get_rx_processor(&self) -> &'static Mutex<RefCell<Option<&dyn RXProcessor>>> {
-        &RX_PROCESSOR
+    pub fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
+        cortex_m::interrupt::free(|cs| {
+            let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
+            *global_rx_binding = Some(processor);
+        });
     }
 }
 
