@@ -1,5 +1,5 @@
 [workspace]
-members = ["app", "lib", "rriv-0-4"]
+members = ["app", "lib", "rriv-0-4", "datalogger", "command_service"]
 resolver = "2"
 
 [workspace.package]

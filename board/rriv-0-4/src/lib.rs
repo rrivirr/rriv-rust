@@ -1,7 +1,9 @@
 #![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
+extern crate panic_halt;
 
+use alloc::boxed::Box;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
@@ -17,7 +19,7 @@ use cortex_m::{
     interrupt::Mutex,
     peripheral::NVIC,
 };
-use panic_halt as _;
+
 use rtt_target::rprintln;
 use stm32f1xx_hal::{
     // gpio::{self, OpenDrain, Output, PinState},
@@ -32,11 +34,11 @@ use stm32f1xx_hal::{
 // static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
 pub trait RXProcessor: Send + Sync {
-    fn process_character(&'static self, character: char);
+    fn process_character(&'static self, character: u8);
 }
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static RX_PROCESSOR: Mutex<RefCell<Option<&dyn RXProcessor>>> = Mutex::new(RefCell::new(None));
+static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Serial {
@@ -107,11 +109,13 @@ impl Board {
         }
     }
 
-    pub fn get_rx_processor(&self) -> &'static Mutex<RefCell<Option<&dyn RXProcessor>>> {
-        &RX_PROCESSOR
+    pub fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
+        cortex_m::interrupt::free(|cs| {
+            let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
+            *global_rx_binding = Some(processor);
+        });
     }
 }
-
 
 #[interrupt]
 unsafe fn USART2() {
@@ -123,11 +127,11 @@ unsafe fn USART2() {
                 // }
                 dsb();
                 if let Ok(c) = nb::block!(rx.read()) {
-                    rprintln!("serial rx char: {}", c);
+                    rprintln!("serial rx byte: {}", c);
                     let r = RX_PROCESSOR.borrow(cs);
 
                     if let Some(processor) = r.borrow_mut().deref_mut() {
-                        processor.process_character(c as char);
+                        processor.process_character(c);
                     }
                 }
                 dmb();

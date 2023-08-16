@@ -3,7 +3,7 @@ chip = "stm32f103rb"
 
 
 [default.rtt]
-enabled = true
+enabled = false
 
 [default.gdb]
-enabled = true
+enabled = false

@@ -1,40 +1,35 @@
 #include <Arduino.h>
-#include "rust_serial.h"
+#include "rrivrust.h"
 
+void * rriv_cmd;
 
-void * rustSerial;
+void datalogger_set(const char *json_strang)
+{
+  pinMode(PA5, OUTPUT);
+  digitalWrite(PA5, LOW);
+  delay(950);
+  digitalWrite(PA5, HIGH);
+  delay(950);
+  digitalWrite(PA5, LOW);
+  delay(950);
+  digitalWrite(PA5, HIGH);
+  delay(950);
+  return 0;
+}
 
 void setup(void) {
+  rriv_cmd = command_service_init();
   pinMode(PA5, OUTPUT);
   digitalWrite(PA5, HIGH);
-  delay(500);
+  delay(750);
   digitalWrite(PA5, LOW);
-  delay(500);
+  delay(750);
   digitalWrite(PA5, HIGH);
-  delay(500);
-  rustSerial = rust_serial_interface_new();
-  pinMode(PA5, OUTPUT);
-  digitalWrite(PA5, LOW);
-  delay(250);
-  digitalWrite(PA5, HIGH);
-  delay(250);
-  digitalWrite(PA5, LOW);
-  delay(250);
-  digitalWrite(PA5, HIGH);
-  delay(250);
+  delay(750);
+  command_service_register_command(rriv_cmd, "datalogger", "set", &datalogger_set);
 }
 
 void loop(void)
 {
-  rust_serial_write(rustSerial, 'a');
-  digitalWrite(PA5, LOW);
-  delay(500);
-  digitalWrite(PA5, HIGH);
-  delay(500);
-  uint8_t aChar = rust_serial_read(rustSerial);
-  rust_serial_write(rustSerial, aChar);  
-  digitalWrite(PA5, HIGH);
-  delay(500);
-  digitalWrite(PA5, LOW);
-  delay(500);
+  command_service_run_loop_iteration(rriv_cmd);
 }
