@@ -603,7 +603,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "rrivlib"
+name = "rrivrust"
 version = "0.1.0"
 dependencies = [
  "bindgen",

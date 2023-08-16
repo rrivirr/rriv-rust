@@ -6,7 +6,7 @@
             "type": "cargo",
             "command": "build",
             "args": [
-                "-p=rrivlib"
+                "-p=rrivrust"
             ],
             "problemMatcher": [
                 "$rustc"

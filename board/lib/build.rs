@@ -54,12 +54,12 @@ fn main() {
     // for now, CARGO_MANIFEST_DIR (crate_dir) seems reasonable
 
     let headers_path_str = crate_dir
-        .join("rrivlib.h")
+        .join("rrivrust.h")
         .into_os_string()
         .into_string()
         .unwrap();
     let bindings_path_str = crate_dir
-        .join("rrivlib.rs")
+        .join("rrivrust.rs")
         .into_os_string()
         .into_string()
         .unwrap();
@@ -81,9 +81,9 @@ fn main() {
         // Finish the builder and generate the bindings.
         .generate()
         // Unwrap the Result and panic on failure.
-        .expect("Unable to generate rrivlib bindings");
+        .expect("Unable to generate rrivrust bindings");
 
     bindings
         .write_to_file(bindings_path_str)
-        .expect("Couldn't write rrivlib bindings!");
+        .expect("Couldn't write rrivrust bindings!");
 }
