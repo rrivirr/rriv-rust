@@ -1,6 +1,6 @@
 extern crate alloc;
 use alloc::format;
-use core::ffi::c_char;
+use core::{ffi::c_char, num};
 use hashbrown::HashMap;
 
 /// NOTE: Since this has a C compatible representation, it could be used in the FFI

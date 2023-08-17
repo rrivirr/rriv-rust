@@ -614,6 +614,7 @@ dependencies = [
  "datalogger",
  "embedded-alloc",
  "embedded-hal",
+ "hashbrown 0.14.0",
  "nb 1.1.0",
  "panic-halt",
  "rriv-0-4",

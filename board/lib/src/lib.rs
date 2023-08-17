@@ -8,7 +8,9 @@ extern crate panic_halt;
 use alloc::boxed::Box;
 use core::ffi::{c_char, c_void, CStr};
 use core::{prelude::rust_2024::*, u8};
-use rtt_target::rtt_init_print;
+// use rtt_target::rtt_init_print;
+use hashbrown::HashMap;
+
 
 pub mod prelude;
 
@@ -22,7 +24,7 @@ use command_service::CommandService;
 #[no_mangle]
 pub unsafe extern "C" fn command_service_init() -> *mut c_void {
     prelude::init();
-    rtt_init_print!();
+    // rtt_init_print!();
     let mut board = Board::new();
     let mut command_service = CommandService::new();
     command_service.setup(&mut board);

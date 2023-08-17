@@ -20,7 +20,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 
-use rtt_target::rprintln;
+// use rtt_target::rprintln;
 use stm32f1xx_hal::{
     // gpio::{self, OpenDrain, Output, PinState},
     pac,
@@ -38,11 +38,12 @@ pub trait RXProcessor: Send + Sync {
 }
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
+static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Serial {
-    tx: Tx<pac::USART2>,
+    tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
 }
 
 /// <div rustbindgen nocopy></div>
@@ -63,7 +64,64 @@ impl Board {
 
         // Freeze the configuration of all the clocks in the system
         // and store the frozen frequencies in `clocks`
-        let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        // let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        let cfg = stm32f1xx_hal::rcc::Config::from_cfgr(rcc.cfgr);
+        // let clocks = cfg.get_clocks();
+
+        let sysclk = if let Some(pllmul_bits) = cfg.pllmul {
+            let pllsrcclk = if let Some(hse) = cfg.hse {
+                hse
+            } else {
+                8_000_000 / 2
+            };
+            pllsrcclk * (pllmul_bits as u32 + 2)
+        } else if let Some(hse) = cfg.hse {
+            hse
+        } else {
+            8_000_000
+        };
+
+        let hclk = if cfg.hpre as u8 >= 0b1100 {
+            sysclk / (1 << (cfg.hpre as u8 - 0b0110))
+        } else {
+            sysclk / (1 << (cfg.hpre as u8 - 0b0111))
+        };
+
+        let ppre1 = 1 << (cfg.ppre1 as u8 - 0b011);
+        let pclk1 = hclk / (ppre1 as u32);
+
+        let ppre2 = 1 << (cfg.ppre2 as u8 - 0b011);
+        let pclk2 = hclk / (ppre2 as u32);
+
+        let apre = (cfg.adcpre as u8 + 1) << 1;
+        let adcclk = pclk2 / (apre as u32);
+
+        // the USB clock is only valid if an external crystal is used, the PLL is enabled, and the
+        // PLL output frequency is a supported one.
+        #[cfg(any(feature = "stm32f103", feature = "connectivity"))]
+        let usbclk_valid = matches!(
+            (self.hse, self.pllmul, sysclk),
+            (Some(_), Some(_), 72_000_000) | (Some(_), Some(_), 48_000_000)
+        );
+
+        assert!(
+            sysclk <= 72_000_000
+                && hclk <= 72_000_000
+                && pclk1 <= 36_000_000
+                && pclk2 <= 72_000_000
+                && adcclk <= 14_000_000
+        );
+
+        let clocks = stm32f1xx_hal::rcc::Clocks {
+            hclk: hclk.Hz(),
+            pclk1: pclk1.Hz(),
+            pclk2: pclk2.Hz(),
+            ppre1,
+            ppre2,
+            sysclk: sysclk.Hz(),
+            adcclk: adcclk.Hz(),
+            usbclk_valid: false
+        };
 
         // Prepare the alternate function I/O registers
         let mut afio = p.AFIO.constrain();
@@ -77,7 +135,7 @@ impl Board {
         let rx_pin = gpioa.pa3;
 
         // Init Serial
-        rprintln!("initializing serial");
+        // rprintln!("initializing serial");
         let mut serial = Hal_Serial::new(
             p.USART2,
             (tx_pin, rx_pin),
@@ -86,26 +144,27 @@ impl Board {
             &clocks,
         );
 
-        rprintln!("serial rx.listen()");
+        // rprintln!("serial rx.listen()");
         serial.rx.listen();
         serial.rx.listen_idle();
 
-        // let led = gpioc
-        //     .pc7
-        //     .into_open_drain_output_with_state(&mut gpioc.crl, PinState::Low);
+    //    let led = gpioc
+    //         .pc7
+    //         .into_open_drain_output_with_state(&mut gpioc.crl, PinState::Low);
 
         cortex_m::interrupt::free(|cs| {
             RX.borrow(cs).replace(Some(serial.rx));
+            TX.borrow(cs).replace(Some(serial.tx));
             // WAKE_LED.borrow(cs).replace(Some(led));
         });
 
-        rprintln!("unmasking USART2 interrupt");
+        // rprintln!("unmasking USART2 interrupt");
         unsafe {
             NVIC::unmask(pac::Interrupt::USART2);
         }
 
         Board {
-            serial: Serial { tx: serial.tx },
+            serial: Serial { tx: &TX },
         }
     }
 
@@ -127,8 +186,13 @@ unsafe fn USART2() {
                 // }
                 dsb();
                 if let Ok(c) = nb::block!(rx.read()) {
-                    rprintln!("serial rx byte: {}", c);
+                    // rprintln!("serial rx byte: {}", c);
                     let r = RX_PROCESSOR.borrow(cs);
+                    let t = TX.borrow(cs);
+                    if let Some(tx) = t.borrow_mut().deref_mut() {
+                        tx.write(c.clone());
+                    }
+
 
                     if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c);
@@ -143,3 +207,4 @@ unsafe fn USART2() {
         }
     })
 }
+// 
