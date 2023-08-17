@@ -181,6 +181,7 @@ unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
+                // use PA9 to flash RGB led
                 // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
                 //     led.is_set_low();
                 // }
