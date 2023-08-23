@@ -64,64 +64,7 @@ impl Board {
 
         // Freeze the configuration of all the clocks in the system
         // and store the frozen frequencies in `clocks`
-        // let clocks = rcc.cfgr.freeze(&mut flash.acr);
-        let cfg = stm32f1xx_hal::rcc::Config::from_cfgr(rcc.cfgr);
-        // let clocks = cfg.get_clocks();
-
-        let sysclk = if let Some(pllmul_bits) = cfg.pllmul {
-            let pllsrcclk = if let Some(hse) = cfg.hse {
-                hse
-            } else {
-                8_000_000 / 2
-            };
-            pllsrcclk * (pllmul_bits as u32 + 2)
-        } else if let Some(hse) = cfg.hse {
-            hse
-        } else {
-            8_000_000
-        };
-
-        let hclk = if cfg.hpre as u8 >= 0b1100 {
-            sysclk / (1 << (cfg.hpre as u8 - 0b0110))
-        } else {
-            sysclk / (1 << (cfg.hpre as u8 - 0b0111))
-        };
-
-        let ppre1 = 1 << (cfg.ppre1 as u8 - 0b011);
-        let pclk1 = hclk / (ppre1 as u32);
-
-        let ppre2 = 1 << (cfg.ppre2 as u8 - 0b011);
-        let pclk2 = hclk / (ppre2 as u32);
-
-        let apre = (cfg.adcpre as u8 + 1) << 1;
-        let adcclk = pclk2 / (apre as u32);
-
-        // the USB clock is only valid if an external crystal is used, the PLL is enabled, and the
-        // PLL output frequency is a supported one.
-        #[cfg(any(feature = "stm32f103", feature = "connectivity"))]
-        let usbclk_valid = matches!(
-            (self.hse, self.pllmul, sysclk),
-            (Some(_), Some(_), 72_000_000) | (Some(_), Some(_), 48_000_000)
-        );
-
-        assert!(
-            sysclk <= 72_000_000
-                && hclk <= 72_000_000
-                && pclk1 <= 36_000_000
-                && pclk2 <= 72_000_000
-                && adcclk <= 14_000_000
-        );
-
-        let clocks = stm32f1xx_hal::rcc::Clocks {
-            hclk: hclk.Hz(),
-            pclk1: pclk1.Hz(),
-            pclk2: pclk2.Hz(),
-            ppre1,
-            ppre2,
-            sysclk: sysclk.Hz(),
-            adcclk: adcclk.Hz(),
-            usbclk_valid: false
-        };
+        let clocks = rcc.cfgr.freeze(&mut flash.acr);
 
         // Prepare the alternate function I/O registers
         let mut afio = p.AFIO.constrain();
@@ -148,9 +91,9 @@ impl Board {
         serial.rx.listen();
         serial.rx.listen_idle();
 
-    //    let led = gpioc
-    //         .pc7
-    //         .into_open_drain_output_with_state(&mut gpioc.crl, PinState::Low);
+        //    let led = gpioc
+        //         .pc7
+        //         .into_open_drain_output_with_state(&mut gpioc.crl, PinState::Low);
 
         cortex_m::interrupt::free(|cs| {
             RX.borrow(cs).replace(Some(serial.rx));
@@ -194,7 +137,6 @@ unsafe fn USART2() {
                         tx.write(c.clone());
                     }
 
-
                     if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c);
                     }
@@ -208,4 +150,4 @@ unsafe fn USART2() {
         }
     })
 }
-// 
+//
