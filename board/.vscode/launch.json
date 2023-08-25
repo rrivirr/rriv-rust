@@ -4,14 +4,11 @@
         // Build Rust Binary (app)
         {
             "type": "probe-rs-debug",
+            "preLaunchTask": "RRIV: Build App Binary Crate",
             "request": "launch",
             "name": "Build, Run, Debug Rust Binary",
             "cwd": "${workspaceFolder}",
-            "runtimeExecutable": "probe-rs-debugger",
-            "runtimeArgs": [
-                "debug",
-            ],
-            "chip": "STM32F103RB",
+            "chip": "STM32F103RE",
             "wireProtocol": "Swd",
             "flashingConfig": {
                 "flashingEnabled": true,

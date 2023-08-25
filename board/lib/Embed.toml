@@ -1,5 +1,5 @@
 [default.general]
-chip = "stm32f103rb"
+chip = "stm32f103re"
 
 
 [default.rtt]
