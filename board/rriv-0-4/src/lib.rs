@@ -4,6 +4,7 @@ extern crate alloc;
 extern crate panic_halt;
 
 use alloc::boxed::Box;
+use core::fmt::Write;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
@@ -14,11 +15,14 @@ use core::{
     option::{Option, Option::*},
     result::Result::*,
 };
+use cortex_m::delay;
 use cortex_m::{
     asm::{dmb, dsb},
     interrupt::Mutex,
     peripheral::NVIC,
 };
+use rtt_target::rprintln;
+use stm32f1xx_hal::timer::Timer;
 
 // use rtt_target::rprintln;
 use stm32f1xx_hal::{
@@ -29,7 +33,7 @@ use stm32f1xx_hal::{
     serial::{Config, Rx, Serial as Hal_Serial, Tx},
 };
 
-type RedLed = gpio::Pin<'C', 9, Output<OpenDrain>>;
+type RedLed = gpio::Pin<'C', 10, Output<OpenDrain>>;
 
 static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
@@ -52,6 +56,9 @@ pub struct Board {
 
 impl Board {
     pub fn new() -> Self {
+        rprintln!("board new");
+        // Get access to the core peripherals from the cortex-m crate
+        let core_pac = cortex_m::Peripherals::take().unwrap();
         // Get access to the device specific peripherals from the peripheral access crate
         let p = pac::Peripherals::take().unwrap();
 
@@ -76,7 +83,7 @@ impl Board {
         let rx_pin = gpioa.pa3;
 
         // Init Serial
-        // rprintln!("initializing serial");
+        rprintln!("initializing serial");
         let mut serial = Hal_Serial::new(
             p.USART2,
             (tx_pin, rx_pin),
@@ -84,14 +91,23 @@ impl Board {
             Config::default().baudrate(115200.bps()),
             &clocks,
         );
+        // Configure the syst timer to trigger an update every second
+        let mut timer = Timer::syst(core_pac.SYST, &clocks).counter_hz();
+        timer.start(1.Hz()).unwrap();
 
-        // rprintln!("serial rx.listen()");
         serial.rx.listen();
         serial.rx.listen_idle();
+        rprintln!("listening for serial rx interrupt");
 
         let led = gpioc
-            .pc9
+            .pc10
             .into_open_drain_output_with_state(&mut gpioc.crh, PinState::Low);
+
+        // Wait for the timer to trigger an update and change the state of the LED
+        // test sending serial data
+        nb::block!(timer.wait()).unwrap();
+        serial.tx.write_str("hello serial listeners").unwrap();
+        nb::block!(timer.wait()).unwrap();
 
         cortex_m::interrupt::free(|cs| {
             RX.borrow(cs).replace(Some(serial.rx));
@@ -99,7 +115,7 @@ impl Board {
             WAKE_LED.borrow(cs).replace(Some(led));
         });
 
-        // rprintln!("unmasking USART2 interrupt");
+        rprintln!("unmasking USART2 interrupt");
         unsafe {
             NVIC::unmask(pac::Interrupt::USART2);
         }
@@ -122,28 +138,33 @@ unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
-                // use PA9 to flash RGB led
+                // use PA10 to flash RGB led
                 if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    led.is_set_low();
+                    led.set_high();
+                    // wait 500ms to see the led
                 }
                 dsb();
                 if let Ok(c) = nb::block!(rx.read()) {
-                    // rprintln!("serial rx byte: {}", c);
+                    rprintln!("serial rx byte: {}", c);
                     let r = RX_PROCESSOR.borrow(cs);
-                    let t = TX.borrow(cs);
-                    if let Some(tx) = t.borrow_mut().deref_mut() {
-                        tx.write(c.clone());
-                    }
 
                     if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c);
                     }
+
+                    rx.listen_idle();
+
+                    // let t = TX.borrow(cs);
+                    // if let Some(tx) = t.borrow_mut().deref_mut() {
+                    //     _ = tx.write(c);
+                    // }
+
+                    rx.unlisten_idle();
                 }
                 dmb();
-                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                //     led.is_set_high();
-                // }
-                rx.listen_idle();
+                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                    led.set_low();
+                }
             }
         }
     })
