@@ -9,3 +9,4 @@ edition = "2021"
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 rriv-0-4 = { path = "../rriv-0-4" }
 command_service = { path = "../command_service" }
+rtt-target = "0.4.0"

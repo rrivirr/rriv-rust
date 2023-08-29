@@ -4,34 +4,30 @@ extern crate alloc;
 extern crate panic_halt;
 
 use alloc::boxed::Box;
-use core::fmt::Write;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
     concat,
-    default::Default,
-    format_args,
     ops::DerefMut,
     option::{Option, Option::*},
     result::Result::*,
 };
-use cortex_m::delay;
-use cortex_m::{
-    asm::{dmb, dsb},
-    interrupt::Mutex,
-    peripheral::NVIC,
-};
-use rtt_target::rprintln;
-use stm32f1xx_hal::timer::Timer;
 
-// use rtt_target::rprintln;
-use stm32f1xx_hal::{
-    gpio::{self, OpenDrain, Output, PinState},
-    pac,
-    pac::interrupt,
-    prelude::*,
-    serial::{Config, Rx, Serial as Hal_Serial, Tx},
-};
+use rtt_target::rprintln;
+
+use cortex_m::asm::{delay, dmb, dsb, wfi};
+use cortex_m::interrupt::{CriticalSection, Mutex};
+use stm32f1xx_hal::gpio::{self, OpenDrain, Output, PinState};
+use stm32f1xx_hal::pac::{self, interrupt, Interrupt, NVIC};
+use stm32f1xx_hal::prelude::*;
+// use stm32f1xx_hal::timer::Timer;
+use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
+use usb_device::{bus::UsbBusAllocator, prelude::*};
+use usbd_serial::{SerialPort, USB_CLASS_CDC};
+
+static mut USB_BUS: Option<UsbBusAllocator<UsbBusType>> = None;
+static mut USB_SERIAL: Option<usbd_serial::SerialPort<UsbBusType>> = None;
+static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
 
 type RedLed = gpio::Pin<'C', 10, Output<OpenDrain>>;
 
@@ -41,18 +37,9 @@ pub trait RXProcessor: Send + Sync {
     fn process_character(&'static self, character: u8);
 }
 
-static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
-#[repr(C)]
-pub struct Serial {
-    tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
-}
-
-pub struct Board {
-    pub serial: Serial,
-}
+pub struct Board {}
 
 impl Board {
     pub fn new() -> Self {
@@ -69,60 +56,75 @@ impl Board {
 
         // Freeze the configuration of all the clocks in the system
         // and store the frozen frequencies in `clocks`
-        let clocks = rcc.cfgr.freeze(&mut flash.acr);
+        let clocks = rcc
+            .cfgr
+            .use_hse(8.MHz())
+            .sysclk(48.MHz())
+            .pclk1(24.MHz())
+            .freeze(&mut flash.acr);
 
-        // Prepare the alternate function I/O registers
-        let mut afio = p.AFIO.constrain();
+        assert!(clocks.usbclk_valid());
 
         // Prepare the peripherals
         let mut gpioa = p.GPIOA.split();
         let mut gpioc = p.GPIOC.split();
 
-        // USART2
-        let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        let rx_pin = gpioa.pa3;
+        // USB Serial
+        let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
+        usb_dp.set_low();
+        delay(clocks.sysclk().raw() / 100);
 
-        // Init Serial
-        rprintln!("initializing serial");
-        let mut serial = Hal_Serial::new(
-            p.USART2,
-            (tx_pin, rx_pin),
-            &mut afio.mapr,
-            Config::default().baudrate(115200.bps()),
-            &clocks,
-        );
+        let usb_dm = gpioa.pa11;
+        let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
+
+        let usb = Peripheral {
+            usb: p.USB,
+            pin_dm: usb_dm,
+            pin_dp: usb_dp,
+        };
+
+        // Unsafe to allow access to static variables
+        unsafe {
+            let bus = UsbBus::new(usb);
+
+            USB_BUS = Some(bus);
+
+            USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
+
+            let usb_dev =
+                UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x16c0, 0x27dd))
+                    .manufacturer("RRIV")
+                    .product("RRIV Data Logger")
+                    .serial_number("_rriv")
+                    .device_class(USB_CLASS_CDC)
+                    .build();
+
+            USB_DEVICE = Some(usb_dev);
+        }
+
+        unsafe {
+            NVIC::unmask(Interrupt::USB_HP_CAN_TX);
+            NVIC::unmask(Interrupt::USB_LP_CAN_RX0);
+        }
+
+        wfi();
+
         // Configure the syst timer to trigger an update every second
-        let mut timer = Timer::syst(core_pac.SYST, &clocks).counter_hz();
-        timer.start(1.Hz()).unwrap();
-
-        serial.rx.listen();
-        serial.rx.listen_idle();
-        rprintln!("listening for serial rx interrupt");
+        // let mut timer = Timer::syst(core_pac.SYST, &clocks).counter_hz();
+        // timer.start(1.Hz()).unwrap();
 
         let led = gpioc
             .pc10
-            .into_open_drain_output_with_state(&mut gpioc.crh, PinState::Low);
+            .into_open_drain_output_with_state(&mut gpioc.crh, PinState::High);
 
         // Wait for the timer to trigger an update and change the state of the LED
-        // test sending serial data
-        nb::block!(timer.wait()).unwrap();
-        serial.tx.write_str("hello serial listeners").unwrap();
-        nb::block!(timer.wait()).unwrap();
+        // nb::block!(timer.wait()).unwrap();
 
         cortex_m::interrupt::free(|cs| {
-            RX.borrow(cs).replace(Some(serial.rx));
-            TX.borrow(cs).replace(Some(serial.tx));
             WAKE_LED.borrow(cs).replace(Some(led));
         });
 
-        rprintln!("unmasking USART2 interrupt");
-        unsafe {
-            NVIC::unmask(pac::Interrupt::USART2);
-        }
-
-        Board {
-            serial: Serial { tx: &TX },
-        }
+        Board {}
     }
 
     pub fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -134,39 +136,44 @@ impl Board {
 }
 
 #[interrupt]
-unsafe fn USART2() {
+fn USB_HP_CAN_TX() {
     cortex_m::interrupt::free(|cs| {
-        if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
-            if rx.is_rx_not_empty() {
-                // use PA10 to flash RGB led
-                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    led.set_high();
-                    // wait 500ms to see the led
-                }
-                dsb();
-                if let Ok(c) = nb::block!(rx.read()) {
-                    rprintln!("serial rx byte: {}", c);
-                    let r = RX_PROCESSOR.borrow(cs);
+        dsb();
+        usb_interrupt(cs);
+        dmb();
+    });
+}
 
-                    if let Some(processor) = r.borrow_mut().deref_mut() {
-                        processor.process_character(c);
-                    }
+#[interrupt]
+fn USB_LP_CAN_RX0() {
+    cortex_m::interrupt::free(|cs| {
+        dsb();
+        usb_interrupt(cs);
+        dmb();
+    });
+}
 
-                    rx.listen_idle();
+fn usb_interrupt(cs: &CriticalSection) {
+    let usb_dev = unsafe { USB_DEVICE.as_mut().unwrap() };
+    let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
 
-                    // let t = TX.borrow(cs);
-                    // if let Some(tx) = t.borrow_mut().deref_mut() {
-                    //     _ = tx.write(c);
-                    // }
+    if !usb_dev.poll(&mut [serial]) {
+        return;
+    }
 
-                    rx.unlisten_idle();
-                }
-                dmb();
-                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    led.set_low();
+    let mut buf = [0u8; 8];
+
+    match serial.read(&mut buf) {
+        Ok(count) if count > 0 => {
+            // Echo back in upper case
+            for c in buf[0..count].iter() {
+                let r = RX_PROCESSOR.borrow(cs);
+                if let Some(processor) = r.borrow_mut().deref_mut() {
+                    processor.process_character(c.clone());
                 }
             }
+            serial.write(&buf[0..count]).ok();
         }
-    })
+        _ => {}
+    }
 }
-//

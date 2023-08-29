@@ -109,7 +109,7 @@ impl CommandService {
         let data_json: Value = serde_json::from_str(command_data_str).unwrap();
         // Extract the command and object strings from the JSON
         let object_str = data_json["object"].as_str().unwrap();
-        let action_str = data_json["command"].as_str().unwrap();
+        let action_str = data_json["cmd"].as_str().unwrap();
         // join the command and object strings with and underscore
         let command = self.registry.get_command_from_parts(object_str, action_str);
         if let Ok(cmd_bytes_cstr) = CStr::from_bytes_with_nul(&serial_command_bytes) {
