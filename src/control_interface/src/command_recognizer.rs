@@ -35,7 +35,7 @@ impl CommandRecognizer {
             return;
         }
 
-        if receiving && (character == b'\r' || character == b'\n') {
+            if receiving && (character == b'\r' || character == b'\n') {
             command_data.receiving = false;
             command_data.cur = (command_data.cur + 1) % BUFFER_NUM;
             command_data.message_ready = true;

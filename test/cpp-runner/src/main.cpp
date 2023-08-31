@@ -19,6 +19,8 @@ void datalogger_set(const char *json_strang)
 
 void setup(void)
 {
+
+
   // commented out the maple core's hidden, forced init() call
   // so the rust hal can set clocks before the maple core does it for real
   rriv_cmd = command_service_init();
