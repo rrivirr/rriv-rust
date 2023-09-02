@@ -22,11 +22,18 @@ impl DataLogger {
         rtt_target::rprintln!("command executed! {}", cmd_str);
     }
 
+    extern "C" fn unknown_command(buf: *const i8) {
+        let cmd_str = unsafe { from_c_str(buf) };
+        rtt_target::rprintln!("unknown command or invalid json. {}", cmd_str);
+    }
+
     pub fn setup(&mut self) {
         // setup each service
         self.command_service.setup(&mut self.board);
         self.command_service
             .register_command("datalogger", "set", Self::test_exec);
+        self.command_service
+            .register_command("unknown", "unknown", Self::unknown_command);
     }
 
     pub fn run_loop_iteration(&mut self) {

@@ -104,16 +104,18 @@ impl CommandService {
     }
 
     fn handle_serial_command(&self, serial_command_bytes: [u8; 100]) {
-        let command_data_str = core::str::from_utf8(&serial_command_bytes).unwrap();
+        let command_data_cstr = CStr::from_bytes_until_nul(&serial_command_bytes).unwrap();
+        let command_data_str = command_data_cstr.to_str().unwrap();
         // Parse the JSON string into a serde_json::Value
-        let data_json: Value = serde_json::from_str(command_data_str).unwrap();
-        // Extract the command and object strings from the JSON
-        let object_str = data_json["object"].as_str().unwrap();
-        let action_str = data_json["cmd"].as_str().unwrap();
-        // join the command and object strings with and underscore
-        let command = self.registry.get_command_from_parts(object_str, action_str);
-        if let Ok(cmd_bytes_cstr) = CStr::from_bytes_with_nul(&serial_command_bytes) {
-            self.execute_command(command, cmd_bytes_cstr);
+        if let Ok(data_json) = serde_json::from_str::<Value>(command_data_str) {
+            // Extract the command and object strings from the JSON
+            let object_str = data_json["object"].as_str().unwrap();
+            let action_str = data_json["cmd"].as_str().unwrap();
+            // join the command and object strings with an underscore
+            let command = self.registry.get_command_from_parts(object_str, action_str);
+            self.execute_command(command, command_data_cstr);
+        } else {
+            self.execute_command(Command::Unknown, command_data_cstr)
         }
     }
 
@@ -122,8 +124,9 @@ impl CommandService {
         if let Some(ffi_cb) = self.registry.get_action_fn(command) {
             // call the registered function pointer and pass ownership of the command bytes to C
             ffi_cb(command_cstr.as_ptr() as *mut c_char);
-        } else {
-            // TODO: send a message back to the host that the command was not recognized
+        } else if let Some(unknown_cb) = self.registry.get_action_fn(Command::Unknown) {
+            // send a message back to the host that the command was not recognized
+            unknown_cb(command_cstr.as_ptr() as *mut c_char);
         }
     }
 }

@@ -34,3 +34,7 @@ fn main() -> ! {
         datalogger.run_loop_iteration();
     }
 }
+
+// some serial commands to test for success and failure
+// {"cmd":"set","object":"datalogger"}
+// {"cmd":"foo","object":"bar"}
