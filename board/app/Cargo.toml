@@ -4,16 +4,16 @@ version = "0.1.0"
 edition = "2021"
 
 [profile.release]
-opt-level = 'z'
-codegen-units = 1 # better optimizations
-debug = false     # symbols are nice and they don't increase the size on Flash
-lto = true        # better optimizations
+opt-level = 'z'     # optimize for size and don't unroll loops
+codegen-units = 256 # setting this to 1 causes better optimizations, but slower code. setting it higher makes compiling parallelizable
+debug = false       # symbols are nice and they don't increase the size on Flash
+lto = true          # link-time optimizations
 
 [profile.dev]
-opt-level = 'z'
-codegen-units = 1 # better optimizations
-debug = true      # symbols are nice and they don't increase the size on Flash
-lto = true        # better optimizations
+opt-level = 'z'     # optimize for size and don't unroll loops
+codegen-units = 256 # setting this to 1 causes better optimizations, but slower code. setting it higher makes compiling parallelizable
+debug = true        # symbols are nice and they don't increase the size on Flash
+lto = true          # link-time optimizations
 
 
 # Optimize all dependencies
@@ -31,9 +31,12 @@ cortex-m-rt = "0.7.3"
 # Panic behaviour, see https://crates.io/keywords/panic-impl for alternatives
 panic-halt = "0.2.0"
 unwrap-infallible = "0.1.5"
-stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103"] }
 rtt-target = "0.4.0"
 embedded-alloc = "0.5.0"
 
 rriv-0-4 = { path = "../rriv-0-4" }
 datalogger = { path = "../datalogger" }
+
+[dependencies.stm32f1xx-hal]
+version = "0.10.0"
+features = ["rt", "stm32f103", "high"]

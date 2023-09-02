@@ -45,7 +45,7 @@ impl Board {
     pub fn new() -> Self {
         rprintln!("board new");
         // Get access to the core peripherals from the cortex-m crate
-        let core_pac = cortex_m::Peripherals::take().unwrap();
+        // let core_pac = cortex_m::Peripherals::take().unwrap();
         // Get access to the device specific peripherals from the peripheral access crate
         let p = pac::Peripherals::take().unwrap();
 

@@ -24,8 +24,8 @@ use datalogger::DataLogger;
 
 #[entry]
 fn main() -> ! {
-    prelude::init();
     rtt_init_print!();
+    prelude::init();
 
     let board = Board::new();
     let mut datalogger = DataLogger::new(board);
