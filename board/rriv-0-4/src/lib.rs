@@ -4,6 +4,8 @@ extern crate alloc;
 extern crate panic_halt;
 
 use alloc::boxed::Box;
+use core::borrow::BorrowMut;
+use core::fmt::Write;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
@@ -73,7 +75,7 @@ impl Board {
 
         // USART2
         let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        let rx_pin = gpioa.pa3;
+        let rx_pin = gpioa.pa3.into_floating_input(&mut gpioa.crl);
 
         // Init Serial
         // rprintln!("initializing serial");
@@ -86,6 +88,7 @@ impl Board {
         );
 
         // rprintln!("serial rx.listen()");
+        // let _ = serial.tx.bflush();
         serial.tx.listen();
         serial.rx.listen();
         serial.rx.listen_idle();
@@ -104,7 +107,11 @@ impl Board {
         unsafe {
             NVIC::unmask(pac::Interrupt::USART2);
         }
-
+        cortex_m::interrupt::free(|cs| {
+            if let Some(tx) = TX.borrow(cs).borrow_mut().deref_mut() {
+                tx.write_str("hello serial listeners").unwrap();
+            }
+        });
         Board {
             serial: Serial { tx: &TX },
         }
@@ -119,7 +126,7 @@ impl Board {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn usart2_handler(){
+pub unsafe extern "C" fn usart2_handler() {
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
@@ -131,20 +138,20 @@ pub unsafe extern "C" fn usart2_handler(){
                 if let Ok(c) = nb::block!(rx.read()) {
                     // rprintln!("serial rx byte: {}", c);
                     let r = RX_PROCESSOR.borrow(cs);
-                    let t = TX.borrow(cs);
-                    if let Some(tx) = t.borrow_mut().deref_mut() {
-                        nb::block!(tx.write(c.clone())); // nedd to make a blocking call to TX
-                    }
 
                     if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c);
+                    }
+                    rx.listen_idle();
+                    let t = TX.borrow(cs);
+                    if let Some(tx) = t.borrow_mut().deref_mut() {
+                        _ = nb::block!(tx.write(c.clone())); // nedd to make a blocking call to TX
                     }
                 }
                 dmb();
                 // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
                 //     led.is_set_high();
                 // }
-                rx.listen_idle();
             }
         }
     })
