@@ -22,7 +22,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 
-// use rtt_target::rprintln;
+use rtt_target::rprintln;
 use stm32f1xx_hal::{
     gpio::{self, OpenDrain, Output, PinState},
     pac,
@@ -75,7 +75,7 @@ impl Board {
 
         // USART2
         let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        let rx_pin = gpioa.pa3.into_floating_input(&mut gpioa.crl);
+        let rx_pin = gpioa.pa3;
 
         // Init Serial
         // rprintln!("initializing serial");
@@ -87,31 +87,26 @@ impl Board {
             &clocks,
         );
 
-        // rprintln!("serial rx.listen()");
-        // let _ = serial.tx.bflush();
-        serial.tx.listen();
+        rprintln!("serial rx.listen()");
+
         serial.rx.listen();
-        serial.rx.listen_idle();
 
         let led = gpioa
             .pa9
             .into_open_drain_output_with_state(&mut gpioa.crh, PinState::Low);
-
         cortex_m::interrupt::free(|cs| {
             RX.borrow(cs).replace(Some(serial.rx));
             TX.borrow(cs).replace(Some(serial.tx));
             WAKE_LED.borrow(cs).replace(Some(led));
         });
-
         // rprintln!("unmasking USART2 interrupt");
         unsafe {
             NVIC::unmask(pac::Interrupt::USART2);
         }
-        cortex_m::interrupt::free(|cs| {
-            if let Some(tx) = TX.borrow(cs).borrow_mut().deref_mut() {
-                tx.write_str("hello serial listeners").unwrap();
-            }
-        });
+
+        // let _ = nb::block!(serial.tx.write(b'R'));
+        // serial.tx.write_str("hello serial listeners").unwrap();
+
         Board {
             serial: Serial { tx: &TX },
         }
@@ -125,40 +120,32 @@ impl Board {
     }
 }
 
-#[no_mangle]
-pub unsafe extern "C" fn usart2_handler() {
+#[interrupt]
+unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
-                // use PA9 to flash RGB led
-                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    led.set_low();
-                }
-                dsb();
                 if let Ok(c) = nb::block!(rx.read()) {
-                    // rprintln!("serial rx byte: {}", c);
+                    rprintln!("serial rx byte: {}", c);
                     let r = RX_PROCESSOR.borrow(cs);
 
                     if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c);
                     }
-                    rx.listen_idle();
                     let t = TX.borrow(cs);
                     if let Some(tx) = t.borrow_mut().deref_mut() {
                         _ = nb::block!(tx.write(c.clone())); // nedd to make a blocking call to TX
                     }
                 }
-                dmb();
-                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                //     led.is_set_high();
-                // }
+                // use PA9 to flash RGB led
+                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                    if led.is_low() {
+                        led.set_high();
+                    } else {
+                        led.set_low();
+                    }
+                }
             }
         }
     })
 }
-
-#[interrupt]
-unsafe fn USART2() {
-    usart2_handler()
-}
-//
