@@ -104,9 +104,6 @@ impl Board {
             NVIC::unmask(pac::Interrupt::USART2);
         }
 
-        // let _ = nb::block!(serial.tx.write(b'R'));
-        // serial.tx.write_str("hello serial listeners").unwrap();
-
         Board {
             serial: Serial { tx: &TX },
         }
