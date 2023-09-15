@@ -107,7 +107,7 @@ impl Board {
             NVIC::unmask(Interrupt::USB_LP_CAN_RX0);
         }
 
-        wfi();
+        // wfi();
 
         // Configure the syst timer to trigger an update every second
         // let mut timer = Timer::syst(core_pac.SYST, &clocks).counter_hz();
@@ -172,7 +172,7 @@ fn usb_interrupt(cs: &CriticalSection) {
                     processor.process_character(c.clone());
                 }
             }
-            serial.write(&buf[0..count]).ok();
+            serial.write(&buf[0..count]).ok();  
         }
         _ => {}
     }
