@@ -1,5 +1,5 @@
 [default.general]
-chip = "STM32F103RB"
+chip = "STM32F103RE"
 
 [default.rtt]
 enabled = false
@@ -9,7 +9,7 @@ enabled = false
 
 
 [debug.general]
-chip = "STM32F103RB"
+chip = "STM32F103RE"
 
 [debug.rtt]
 enabled = true

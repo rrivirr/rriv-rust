@@ -4,6 +4,8 @@ extern crate alloc;
 extern crate panic_halt;
 
 use alloc::boxed::Box;
+use core::borrow::BorrowMut;
+use core::fmt::Write;
 use core::marker::{Send, Sync};
 use core::{
     cell::RefCell,
@@ -22,31 +24,30 @@ use cortex_m::{
 
 use rtt_target::rprintln;
 use stm32f1xx_hal::{
-    // gpio::{self, OpenDrain, Output, PinState},
+    gpio::{self, OpenDrain, Output, PinState},
     pac,
     pac::interrupt,
     prelude::*,
     serial::{Config, Rx, Serial as Hal_Serial, Tx},
 };
 
-// type RedLed = gpio::Pin<'C', 7, Output<OpenDrain>>;
+type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
-// static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
+static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
 
 pub trait RXProcessor: Send + Sync {
     fn process_character(&'static self, character: u8);
 }
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
+static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Serial {
-    tx: Tx<pac::USART2>,
+    tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
 }
 
-/// <div rustbindgen nocopy></div>
-/// <div rustbindgen opaque></div>
 pub struct Board {
     pub serial: Serial,
 }
@@ -77,7 +78,7 @@ impl Board {
         let rx_pin = gpioa.pa3;
 
         // Init Serial
-        rprintln!("initializing serial");
+        // rprintln!("initializing serial");
         let mut serial = Hal_Serial::new(
             p.USART2,
             (tx_pin, rx_pin),
@@ -87,25 +88,25 @@ impl Board {
         );
 
         rprintln!("serial rx.listen()");
+
         serial.rx.listen();
-        serial.rx.listen_idle();
+        // serial.rx.listen_idle();
 
-        // let led = gpioc
-        //     .pc7
-        //     .into_open_drain_output_with_state(&mut gpioc.crl, PinState::Low);
-
+        let led = gpioa
+            .pa9
+            .into_open_drain_output_with_state(&mut gpioa.crh, PinState::Low);
         cortex_m::interrupt::free(|cs| {
             RX.borrow(cs).replace(Some(serial.rx));
-            // WAKE_LED.borrow(cs).replace(Some(led));
+            TX.borrow(cs).replace(Some(serial.tx));
+            WAKE_LED.borrow(cs).replace(Some(led));
         });
-
-        rprintln!("unmasking USART2 interrupt");
+        // rprintln!("unmasking USART2 interrupt");
         unsafe {
             NVIC::unmask(pac::Interrupt::USART2);
         }
 
         Board {
-            serial: Serial { tx: serial.tx },
+            serial: Serial { tx: &TX },
         }
     }
 
@@ -122,10 +123,6 @@ unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
         if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
-                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                //     led.is_set_low();
-                // }
-                dsb();
                 if let Ok(c) = nb::block!(rx.read()) {
                     rprintln!("serial rx byte: {}", c);
                     let r = RX_PROCESSOR.borrow(cs);
@@ -133,12 +130,19 @@ unsafe fn USART2() {
                     if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c);
                     }
+                    let t = TX.borrow(cs);
+                    if let Some(tx) = t.borrow_mut().deref_mut() {
+                        _ = nb::block!(tx.write(c.clone())); // need to make a blocking call to TX
+                    }
                 }
-                dmb();
-                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                //     led.is_set_high();
-                // }
-                rx.listen_idle();
+                // use PA9 to flash RGB led
+                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                    if led.is_low() {
+                        led.set_high();
+                    } else {
+                        led.set_low();
+                    }
+                }
             }
         }
     })

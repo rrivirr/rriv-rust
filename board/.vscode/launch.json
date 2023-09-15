@@ -4,15 +4,13 @@
         // Build Rust Binary (app)
         {
             "type": "probe-rs-debug",
+            "preLaunchTask": "RRIV: Build App Binary Crate",
             "request": "launch",
             "name": "Build, Run, Debug Rust Binary",
             "cwd": "${workspaceFolder}",
-            "runtimeExecutable": "probe-rs-debugger",
-            "runtimeArgs": [
-                "debug",
-            ],
-            "chip": "STM32F103RB",
+            "chip": "STM32F103RE",
             "wireProtocol": "Swd",
+            "probe": "1366:0101:000801023227", // Modify to match yours if needed, or keep commented
             "flashingConfig": {
                 "flashingEnabled": true,
                 "resetAfterFlashing": true,
@@ -21,6 +19,7 @@
             "coreConfigs": [
                 {
                     "programBinary": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/app",
+                    "svdFile": "${workspaceFolder}/STM32F103xx.svd",
                     "rttEnabled": true,
                     "rttChannelFormats": [
                         {
@@ -36,7 +35,7 @@
                 }
             ],
             "env": {
-                // "RUST_LOG": "trace" // If you set this variable, check the VSCode console log window for the location of the log file.
+                "RUST_LOG": "trace" // If you set this variable, check the VSCode console log window for the location of the log file.
             },
             "consoleLogLevel": "Console", //Info, Debug
         }
