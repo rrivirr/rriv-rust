@@ -106,14 +106,20 @@ impl CommandService {
     fn handle_serial_command(&self, serial_command_bytes: [u8; 100]) {
         let command_data_str = core::str::from_utf8(&serial_command_bytes).unwrap();
         // Parse the JSON string into a serde_json::Value
-        let data_json: Value = serde_json::from_str(command_data_str).unwrap();
-        // Extract the command and object strings from the JSON
-        let object_str = data_json["object"].as_str().unwrap();
-        let action_str = data_json["command"].as_str().unwrap();
-        // join the command and object strings with and underscore
-        let command = self.registry.get_command_from_parts(object_str, action_str);
-        if let Ok(cmd_bytes_cstr) = CStr::from_bytes_with_nul(&serial_command_bytes) {
-            self.execute_command(command, cmd_bytes_cstr);
+        // if let Ok(data_json) = serde_json::from_str(command_data_str) {
+        //     // let data_json: Value = serde_json::from_str(command_data_str);
+        match serde_json::from_str::<Value>(command_data_str) {
+            Ok(data_json) => {
+                // Extract the command and object strings from the JSON
+                let object_str = data_json["object"].as_str().unwrap();
+                let action_str = data_json["command"].as_str().unwrap();
+                // join the command and object strings with and underscore
+                let command = self.registry.get_command_from_parts(object_str, action_str);
+                if let Ok(cmd_bytes_cstr) = CStr::from_bytes_with_nul(&serial_command_bytes) {
+                    self.execute_command(command, cmd_bytes_cstr);
+                }
+            }
+            Err(_) => {}
         }
     }
 

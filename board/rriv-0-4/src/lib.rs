@@ -90,6 +90,7 @@ impl Board {
         rprintln!("serial rx.listen()");
 
         serial.rx.listen();
+        // serial.rx.listen_idle();
 
         let led = gpioa
             .pa9
@@ -131,7 +132,7 @@ unsafe fn USART2() {
                     }
                     let t = TX.borrow(cs);
                     if let Some(tx) = t.borrow_mut().deref_mut() {
-                        _ = nb::block!(tx.write(c.clone())); // nedd to make a blocking call to TX
+                        _ = nb::block!(tx.write(c.clone())); // need to make a blocking call to TX
                     }
                 }
                 // use PA9 to flash RGB led

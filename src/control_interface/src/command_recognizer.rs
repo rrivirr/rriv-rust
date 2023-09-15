@@ -5,7 +5,6 @@ pub const BUFFER_SIZE: usize = 100;
 
 pub struct CommandData {
     receiving: bool,
-    message_ready: bool,
     buffer: [[u8; BUFFER_SIZE]; BUFFER_NUM],
     cur: usize,
     end: usize,
@@ -18,7 +17,6 @@ impl CommandData {
             receiving: false,
             cur: 0,
             end: BUFFER_NUM - 1,
-            message_ready: false,
             command_pos: 0,
             buffer: [[b'\0'; BUFFER_SIZE]; BUFFER_NUM],
         }
@@ -35,10 +33,10 @@ impl CommandRecognizer {
             return;
         }
 
-            if receiving && (character == b'\r' || character == b'\n') {
+        if receiving && (character == b'\r' || character == b'\n') {
             command_data.receiving = false;
             command_data.cur = (command_data.cur + 1) % BUFFER_NUM;
-            command_data.message_ready = true;
+            return;
         }
 
         if starting {
@@ -62,9 +60,12 @@ impl CommandRecognizer {
 
     pub fn take_command(command_data: &mut CommandData) -> [u8; 100] {
         // clone the command bytes buffer so the caller isn't borrowing the command_data buffer
-        let command = command_data.buffer[(command_data.end + 1) % BUFFER_NUM].clone();
+        let buffer_index = (command_data.end + 1) % BUFFER_NUM;
+        let command = command_data.buffer[buffer_index].clone();
+        // null the buffer
+        command_data.buffer[buffer_index] = [b'\0'; BUFFER_SIZE];
         // move the end marker, effectively marking the buffer as ready for use again
-        command_data.end = (command_data.end + 1) % BUFFER_NUM;
+        command_data.end = buffer_index;
         return command;
     }
 }
