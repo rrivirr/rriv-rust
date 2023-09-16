@@ -13,6 +13,8 @@ use core::ops::{Deref, DerefMut};
 use cortex_m::interrupt::Mutex;
 use serde_json::Value;
 
+use rtt_target::rprintln;
+
 static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
 static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
@@ -107,10 +109,27 @@ impl CommandService {
         let command_data_cstr = CStr::from_bytes_until_nul(&serial_command_bytes).unwrap();
         let command_data_str = command_data_cstr.to_str().unwrap();
         // Parse the JSON string into a serde_json::Value
+        rprintln!("{}",command_data_str);
+        
         if let Ok(data_json) = serde_json::from_str::<Value>(command_data_str) {
             // Extract the command and object strings from the JSON
+            if !data_json.is_object() {
+                // handle this error
+                self.execute_command(Command::Unknown, command_data_cstr);
+                return;
+            }
+            if !data_json["object"].is_string() {
+                // handle this error
+                self.execute_command(Command::Unknown, command_data_cstr);
+                return;
+            }
+            if !data_json["action"].is_string() {
+                // handle this error
+                self.execute_command(Command::Unknown, command_data_cstr);
+                return;
+            }
             let object_str = data_json["object"].as_str().unwrap();
-            let action_str = data_json["cmd"].as_str().unwrap();
+            let action_str = data_json["action"].as_str().unwrap();
             // join the command and object strings with an underscore
             let command = self.registry.get_command_from_parts(object_str, action_str);
             self.execute_command(command, command_data_cstr);

@@ -1,5 +1,8 @@
 // https://ferrous-systems.com/blog/test-embedded-app/
 
+use rtt_target::rprintln;
+
+
 pub const BUFFER_NUM: usize = 11; // Includes an extra empty cell for end marker
 pub const BUFFER_SIZE: usize = 100;
 
@@ -50,10 +53,17 @@ impl CommandRecognizer {
             command_data.command_pos = 0;
         }
 
+        if !receiving && !starting {
+            return;
+        }
+
         let cur = command_data.cur;
         let pos: usize = command_data.command_pos;
+        rprintln!("{}", pos);
         command_data.buffer[cur][pos] = character;
-        command_data.command_pos = command_data.command_pos + 1;
+        if pos < BUFFER_SIZE {
+            command_data.command_pos = command_data.command_pos + 1;
+        }
     }
 
     pub fn pending_message_count(command_data: &CommandData) -> usize {

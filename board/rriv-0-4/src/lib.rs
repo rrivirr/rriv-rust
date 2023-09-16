@@ -92,7 +92,7 @@ impl Board {
             USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
 
             let usb_dev =
-                UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x16c0, 0x27dd))
+                UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
                     .manufacturer("RRIV")
                     .product("RRIV Data Logger")
                     .serial_number("_rriv")
