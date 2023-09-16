@@ -28,5 +28,5 @@ command_service = { path = "../command_service" }
 hashbrown = "0.14.0"
 
 [build-dependencies]
-cbindgen = "0.24.3"
-bindgen = "0.66.1"
+cbindgen = "0.25.0"
+bindgen = "0.68.1"

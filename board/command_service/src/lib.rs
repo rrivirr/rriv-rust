@@ -62,6 +62,7 @@ impl CommandService {
         let command = self.registry.get_command_from_parts(object, action);
         self.registry.register_command(command, ffi_cb);
     }
+
     fn check_setup(&self) -> bool {
         cortex_m::interrupt::free(|cs| {
             if !*SETUP_DONE.borrow(cs).borrow() {
@@ -109,32 +110,33 @@ impl CommandService {
         let command_data_cstr = CStr::from_bytes_until_nul(&serial_command_bytes).unwrap();
         let command_data_str = command_data_cstr.to_str().unwrap();
         // Parse the JSON string into a serde_json::Value
-        rprintln!("{}",command_data_str);
-        
-        if let Ok(data_json) = serde_json::from_str::<Value>(command_data_str) {
-            // Extract the command and object strings from the JSON
-            if !data_json.is_object() {
-                // handle this error
-                self.execute_command(Command::Unknown, command_data_cstr);
-                return;
+        rprintln!("{}", command_data_str);
+
+        match serde_json::from_str::<Value>(command_data_str) {
+            Ok(data_json) => {
+                // Extract the command and object strings from the JSON
+                if !data_json.is_object() {
+                    // handle this error
+                    self.execute_command(Command::Unknown, command_data_cstr);
+                    return;
+                }
+                if !data_json["object"].is_string() {
+                    // handle this error
+                    self.execute_command(Command::Unknown, command_data_cstr);
+                    return;
+                }
+                if !data_json["action"].is_string() {
+                    // handle this error
+                    self.execute_command(Command::Unknown, command_data_cstr);
+                    return;
+                }
+                let object_str = data_json["object"].as_str().unwrap();
+                let action_str = data_json["action"].as_str().unwrap();
+                // join the command and object strings with an underscore
+                let command = self.registry.get_command_from_parts(object_str, action_str);
+                self.execute_command(command, command_data_cstr);
             }
-            if !data_json["object"].is_string() {
-                // handle this error
-                self.execute_command(Command::Unknown, command_data_cstr);
-                return;
-            }
-            if !data_json["action"].is_string() {
-                // handle this error
-                self.execute_command(Command::Unknown, command_data_cstr);
-                return;
-            }
-            let object_str = data_json["object"].as_str().unwrap();
-            let action_str = data_json["action"].as_str().unwrap();
-            // join the command and object strings with an underscore
-            let command = self.registry.get_command_from_parts(object_str, action_str);
-            self.execute_command(command, command_data_cstr);
-        } else {
-            self.execute_command(Command::Unknown, command_data_cstr)
+            Err(_) => self.execute_command(Command::Unknown, command_data_cstr),
         }
     }
 
