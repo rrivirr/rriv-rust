@@ -24,8 +24,8 @@ use datalogger::DataLogger;
 
 #[entry]
 fn main() -> ! {
-    prelude::init();
     rtt_init_print!();
+    prelude::init();
 
     let board = Board::new();
     let mut datalogger = DataLogger::new(board);
@@ -34,3 +34,7 @@ fn main() -> ! {
         datalogger.run_loop_iteration();
     }
 }
+
+// some serial commands to test for success and failure
+// {"cmd":"set","object":"datalogger"}
+// {"cmd":"foo","object":"bar"}

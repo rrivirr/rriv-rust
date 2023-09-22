@@ -13,6 +13,8 @@ use core::ops::{Deref, DerefMut};
 use cortex_m::interrupt::Mutex;
 use serde_json::Value;
 
+use rtt_target::rprintln;
+
 static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
 static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
@@ -60,6 +62,7 @@ impl CommandService {
         let command = self.registry.get_command_from_parts(object, action);
         self.registry.register_command(command, ffi_cb);
     }
+
     fn check_setup(&self) -> bool {
         cortex_m::interrupt::free(|cs| {
             if !*SETUP_DONE.borrow(cs).borrow() {
@@ -104,22 +107,36 @@ impl CommandService {
     }
 
     fn handle_serial_command(&self, serial_command_bytes: [u8; 100]) {
-        let command_data_str = core::str::from_utf8(&serial_command_bytes).unwrap();
+        let command_data_cstr = CStr::from_bytes_until_nul(&serial_command_bytes).unwrap();
+        let command_data_str = command_data_cstr.to_str().unwrap();
         // Parse the JSON string into a serde_json::Value
-        // if let Ok(data_json) = serde_json::from_str(command_data_str) {
-        //     // let data_json: Value = serde_json::from_str(command_data_str);
+        rprintln!("{}", command_data_str);
+
         match serde_json::from_str::<Value>(command_data_str) {
             Ok(data_json) => {
                 // Extract the command and object strings from the JSON
-                let object_str = data_json["object"].as_str().unwrap();
-                let action_str = data_json["command"].as_str().unwrap();
-                // join the command and object strings with and underscore
-                let command = self.registry.get_command_from_parts(object_str, action_str);
-                if let Ok(cmd_bytes_cstr) = CStr::from_bytes_with_nul(&serial_command_bytes) {
-                    self.execute_command(command, cmd_bytes_cstr);
+                if !data_json.is_object() {
+                    // handle this error
+                    self.execute_command(Command::Unknown, command_data_cstr);
+                    return;
                 }
+                if !data_json["object"].is_string() {
+                    // handle this error
+                    self.execute_command(Command::Unknown, command_data_cstr);
+                    return;
+                }
+                if !data_json["action"].is_string() {
+                    // handle this error
+                    self.execute_command(Command::Unknown, command_data_cstr);
+                    return;
+                }
+                let object_str = data_json["object"].as_str().unwrap();
+                let action_str = data_json["action"].as_str().unwrap();
+                // join the command and object strings with an underscore
+                let command = self.registry.get_command_from_parts(object_str, action_str);
+                self.execute_command(command, command_data_cstr);
             }
-            Err(_) => {}
+            Err(_) => self.execute_command(Command::Unknown, command_data_cstr),
         }
     }
 
@@ -128,8 +145,9 @@ impl CommandService {
         if let Some(ffi_cb) = self.registry.get_action_fn(command) {
             // call the registered function pointer and pass ownership of the command bytes to C
             ffi_cb(command_cstr.as_ptr() as *mut c_char);
-        } else {
-            // TODO: send a message back to the host that the command was not recognized
+        } else if let Some(unknown_cb) = self.registry.get_action_fn(Command::Unknown) {
+            // send a message back to the host that the command was not recognized
+            unknown_cb(command_cstr.as_ptr() as *mut c_char);
         }
     }
 }

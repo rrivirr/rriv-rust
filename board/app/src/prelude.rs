@@ -3,18 +3,22 @@
 extern crate alloc;
 
 use alloc::alloc::Layout;
-use core::{mem::MaybeUninit, prelude::rust_2024::*, u8, *};
+use core::{prelude::rust_2024::*, *};
 use embedded_alloc::Heap;
 
 #[global_allocator]
 static HEAP: Heap = Heap::empty();
-const HEAP_SIZE: usize = 1000;
-static mut HEAP_MEM: [MaybeUninit<u8>; HEAP_SIZE] = [MaybeUninit::uninit(); HEAP_SIZE];
+/* "Top" or start of 64k Stack space is address 0x20010000 */
+const RAM_END: usize = 0x20010000;
 
 // Initialize the allocator BEFORE you use it
 fn alloc_heap() {
     {
-        unsafe { HEAP.init(HEAP_MEM.as_ptr() as usize, HEAP_SIZE) }
+        let heap_size: usize = RAM_END - cortex_m_rt::heap_start() as usize;
+        // rtt_target::rprintln!("heap start: {}", cortex_m_rt::heap_start() as usize);
+        // rtt_target::rprintln!("ram end: {}", RAM_END);
+        // rtt_target::rprintln!("heap size: {}", heap_size);
+        unsafe { HEAP.init(cortex_m_rt::heap_start() as usize, heap_size) }
     }
 }
 
