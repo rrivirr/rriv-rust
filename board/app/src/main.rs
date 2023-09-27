@@ -27,11 +27,11 @@ fn main() -> ! {
     rtt_init_print!();
     prelude::init();
 
-    let board = Board::new();
-    let mut datalogger = DataLogger::new(board);
-    datalogger.setup();
+    let mut board = Board::new();
+    let mut datalogger = DataLogger::new();
+    datalogger.setup(&mut board);
     loop {
-        datalogger.run_loop_iteration();
+        datalogger.run_loop_iteration(& board);
     }
 }
 

@@ -215,7 +215,7 @@ dependencies = [
  "control_interface",
  "cortex-m",
  "hashbrown 0.14.0",
- "rriv-0-4",
+ "rriv_board",
  "rtt-target",
  "serde",
  "serde_json",
@@ -275,7 +275,7 @@ version = "0.1.0"
 dependencies = [
  "command_service",
  "cortex-m",
- "rriv-0-4",
+ "rriv_board",
  "rtt-target",
 ]
 
@@ -601,12 +601,17 @@ dependencies = [
  "embedded-hal",
  "nb 1.1.0",
  "panic-halt",
+ "rriv_board",
  "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",
  "usb-device",
  "usbd-serial",
 ]
+
+[[package]]
+name = "rriv_board"
+version = "0.1.0"
 
 [[package]]
 name = "rrivrust"

@@ -35,7 +35,7 @@ use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
-
+use rriv_board::{RRIVBoard, RXProcessor};
 
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
@@ -43,10 +43,6 @@ static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None))
 static mut USB_BUS: Option<UsbBusAllocator<UsbBusType>> = None;
 static mut USB_SERIAL: Option<usbd_serial::SerialPort<UsbBusType>> = None;
 static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
-
-pub trait RXProcessor: Send + Sync {
-    fn process_character(&'static self, character: u8);
-}
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
@@ -58,11 +54,19 @@ pub struct Serial {
 }
 
 pub struct Board {
-    pub serial: Serial,
+    pub serial: Option<Serial>,
 }
 
 impl Board {
     pub fn new() -> Self {
+        Board {
+            serial: None,
+        }
+    }
+}
+
+impl RRIVBoard for Board {
+    fn setup(&mut self) {
         rprintln!("board new");
 
         // Get access to the device specific peripherals from the peripheral access crate
@@ -162,12 +166,14 @@ impl Board {
              NVIC::unmask(pac::Interrupt::USB_LP_CAN_RX0);
          }
 
-        Board {
-            serial: Serial { tx: &TX },
-        }
+        //  serial = Serial { tx: &TX }; // maybe we dont need this
+
+        // Board {
+        //     serial: Serial { tx: &TX },
+        // }
     }
 
-    pub fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
+    fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
         cortex_m::interrupt::free(|cs| {
             let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
             *global_rx_binding = Some(processor);

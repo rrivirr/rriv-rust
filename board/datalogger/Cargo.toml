@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
-rriv-0-4 = { path = "../rriv-0-4" }
+rriv_board = { path = "../rriv_board" }
 command_service = { path = "../command_service" }
 rtt-target = "0.4.0"

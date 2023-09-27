@@ -2,7 +2,7 @@
 
 use control_interface::command_recognizer::{CommandData, CommandRecognizer};
 use control_interface::command_registry::{Command, CommandRegistry};
-use rriv_0_4::{Board, RXProcessor};
+use rriv_board::{RRIVBoard, RXProcessor};
 
 extern crate alloc;
 use alloc::boxed::Box;
@@ -41,7 +41,7 @@ impl CommandService {
     }
 
     /// set the global rx processor
-    pub fn setup(&mut self, board: &mut Board) {
+    pub fn setup(&mut self, board: &mut impl RRIVBoard) {
         // return if already setup
         if self.check_setup() {
             return;
@@ -50,7 +50,7 @@ impl CommandService {
         let char_processor = Box::<CharacterProcessor<'static>>::leak(Box::new(
             CharacterProcessor::new(self.get_command_data()),
         ));
-        // pass a pointer to the leaked processor to Board::set_rx_processor
+        // pass a pointer to the processor to Board::set_rx_processor
         board.set_rx_processor(Box::new(char_processor));
         // set the setup flag to true
         cortex_m::interrupt::free(|cs| {
@@ -132,32 +132,32 @@ impl CommandService {
             }
             Err(_) => self.execute_command(Command::Unknown, command_data_cstr),
         }
-        match serde_json::from_str::<Value>(command_data_str) {
-            Ok(data_json) => {
-                // Extract the command and object strings from the JSON
-                if !data_json.is_object() {
-                    // handle this error
-                    self.execute_command(Command::Unknown, command_data_cstr);
-                    return;
-                }
-                if !data_json["object"].is_string() {
-                    // handle this error
-                    self.execute_command(Command::Unknown, command_data_cstr);
-                    return;
-                }
-                if !data_json["action"].is_string() {
-                    // handle this error
-                    self.execute_command(Command::Unknown, command_data_cstr);
-                    return;
-                }
-                let object_str = data_json["object"].as_str().unwrap();
-                let action_str = data_json["action"].as_str().unwrap();
-                // join the command and object strings with an underscore
-                let command = self.registry.get_command_from_parts(object_str, action_str);
-                self.execute_command(command, command_data_cstr);
-            }
-            Err(_) => self.execute_command(Command::Unknown, command_data_cstr),
-        }
+        // match serde_json::from_str::<Value>(command_data_str) {
+        //     Ok(data_json) => {
+        //         // Extract the command and object strings from the JSON
+        //         if !data_json.is_object() {
+        //             // handle this error
+        //             self.execute_command(Command::Unknown, command_data_cstr);
+        //             return;
+        //         }
+        //         if !data_json["object"].is_string() {
+        //             // handle this error
+        //             self.execute_command(Command::Unknown, command_data_cstr);
+        //             return;
+        //         }
+        //         if !data_json["action"].is_string() {
+        //             // handle this error
+        //             self.execute_command(Command::Unknown, command_data_cstr);
+        //             return;
+        //         }
+        //         let object_str = data_json["object"].as_str().unwrap();
+        //         let action_str = data_json["action"].as_str().unwrap();
+        //         // join the command and object strings with an underscore
+        //         let command = self.registry.get_command_from_parts(object_str, action_str);
+        //         self.execute_command(command, command_data_cstr);
+        //     }
+        //     Err(_) => self.execute_command(Command::Unknown, command_data_cstr),
+        // }
     }
 
     fn execute_command(&self, command: Command, command_cstr: &CStr) {
