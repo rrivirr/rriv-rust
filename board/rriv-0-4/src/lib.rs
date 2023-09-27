@@ -179,6 +179,13 @@ impl RRIVBoard for Board {
             *global_rx_binding = Some(processor);
         });
     }
+
+    fn critical_section<T,F>(&self, f: F) -> T
+        where F: Fn() -> T {
+        cortex_m::interrupt::free(|cs| {
+            f()
+        })
+    }
 }
 
 #[interrupt]

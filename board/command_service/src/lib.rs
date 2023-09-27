@@ -8,20 +8,12 @@ extern crate alloc;
 use alloc::boxed::Box;
 
 use core::borrow::BorrowMut;
-use core::cell::RefCell;
 use core::ffi::{c_char, CStr};
-use core::iter::Empty;
-use core::ops::{Deref, DerefMut};
-use core::ptr::null;
-use cortex_m::interrupt::Mutex;
 use serde::{Deserialize, Serialize};
 
 use rtt_target::rprintln;
 
-// static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
 static mut COMMAND_DATA: CommandData = CommandData::default();
-// static COMMAND_DATA: Option<CommandData> = None;
-// static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false)); // unused and unnecessary
 
 pub struct CommandService {
     registry: CommandRegistry,
@@ -43,9 +35,7 @@ impl CommandService {
 
     /// set the global rx processor
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
-        let char_processor = Box::<CharacterProcessor>::leak(Box::new(
-            CharacterProcessor::new(),
-        ));
+        let char_processor = Box::<CharacterProcessor>::leak(Box::new(CharacterProcessor::new()));
 
         // pass a pointer to the lleaked processor to Board::set_rx_processor
         board.set_rx_processor(Box::new(char_processor));
@@ -63,26 +53,27 @@ impl CommandService {
         self.registry.register_command(command, ffi_cb);
     }
 
-    fn pending_message_count(&self) -> usize {
-        // use critical section, don't need the Mutex and instead use unsafe{}
-        cortex_m::interrupt::free(|cs| unsafe {
+    fn pending_message_count(&self, board: &impl RRIVBoard) -> usize {
+        let get_pending_message_count = || unsafe {
             let command_data = COMMAND_DATA.borrow_mut();
             CommandRecognizer::pending_message_count(&command_data)
-        })
+        };
+
+        board.critical_section(get_pending_message_count)
     }
 
-    fn take_command(&mut self) -> Result<[u8; 100], ()> {
-        cortex_m::interrupt::free(|cs| {
-            unsafe {
-                let command_data = COMMAND_DATA.borrow_mut();
-                Ok(CommandRecognizer::take_command(command_data))
-            }
-        })
+    fn take_command(&mut self, board: &impl RRIVBoard) -> Result<[u8; 100], ()> {
+        let do_take_command = || unsafe {
+            let command_data = COMMAND_DATA.borrow_mut();
+            Ok(CommandRecognizer::take_command(command_data))
+        };
+
+        board.critical_section(do_take_command)
     }
 
-    pub fn run_loop_iteration(&mut self) {
-        if self.pending_message_count() > 0 {
-            if let Ok(command) = self.take_command() {
+    pub fn run_loop_iteration(&mut self, board: &impl RRIVBoard) {
+        if self.pending_message_count(board) > 0 {
+            if let Ok(command) = self.take_command(board) {
                 self.handle_serial_command(command);
             }
         }
@@ -122,21 +113,19 @@ impl CommandService {
 }
 
 /// I believe the lifetimes here are generic over the lifetime of the CommandData
-pub struct CharacterProcessor { }
+pub struct CharacterProcessor {}
 
 impl<'a> CharacterProcessor {
     pub fn new() -> CharacterProcessor {
-        CharacterProcessor {  }
+        CharacterProcessor {}
     }
 }
 
 impl<'a, 'b> RXProcessor for CharacterProcessor {
     fn process_character(&self, character: u8) {
-        cortex_m::interrupt::free(|cs| {
-            unsafe {
-                let command_data = COMMAND_DATA.borrow_mut();
-                CommandRecognizer::process_character(command_data, character);
-            }
-        })
+        unsafe {
+            let command_data = COMMAND_DATA.borrow_mut();
+            CommandRecognizer::process_character(command_data, character);
+        }
     }
 }

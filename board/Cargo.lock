@@ -213,7 +213,6 @@ name = "command_service"
 version = "0.1.0"
 dependencies = [
  "control_interface",
- "cortex-m",
  "hashbrown 0.14.0",
  "rriv_board",
  "rtt-target",

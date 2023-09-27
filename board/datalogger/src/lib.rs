@@ -34,7 +34,7 @@ impl DataLogger {
     }
 
     pub fn run_loop_iteration(&mut self, board: & impl RRIVBoard) {
-        self.command_service.run_loop_iteration();
+        self.command_service.run_loop_iteration(board);
     }
 }
 
