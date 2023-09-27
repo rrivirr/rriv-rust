@@ -11,8 +11,8 @@ use rtt_target::rtt_init_print;
 
 pub mod prelude;
 
-extern crate rriv_0_4;
-use rriv_0_4::Board;
+extern crate rriv_board_0_4_2;
+use rriv_board_0_4_2::Board;
 
 extern crate datalogger;
 use datalogger::DataLogger;

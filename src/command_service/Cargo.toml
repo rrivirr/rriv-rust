@@ -7,7 +7,7 @@ edition = "2021"
 
 [dependencies]
 control_interface = { path = "../../src/control_interface" }
-rriv_board = { path = "../rriv_board" } 
+rriv_board = { path = "../../board/rriv_board" } 
 hashbrown = "0.14"
 serde_json = { version = "1.0.104", default-features = false, features = ["alloc"] }
 serde = { version = "1.0", default-features = false, features = ["derive"] }

@@ -36,7 +36,7 @@
             "type": "cargo",
             "command": "build",
             "args": [
-                "-p=rriv-0-4"
+                "-p=rriv_board_0_4_2"
             ],
             "problemMatcher": [
                 "$rustc"
