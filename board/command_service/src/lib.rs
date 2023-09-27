@@ -11,13 +11,12 @@ use core::cell::RefCell;
 use core::ffi::{c_char, CStr};
 use core::ops::{Deref, DerefMut};
 use cortex_m::interrupt::Mutex;
-use serde_json::Value;
 use serde::{Serialize, Deserialize};
 
 use rtt_target::rprintln;
 
 static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
-static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
+// static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false)); // unused and unnecessary
 
 pub struct CommandService {
     registry: CommandRegistry,
@@ -43,19 +42,26 @@ impl CommandService {
     /// set the global rx processor
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
         // return if already setup
-        if self.check_setup() {
-            return;
-        }
+        // this is not used, and unnecessary
+        // double calls to setup should be made to fail due to moves
+        // if self.check_setup() {
+        //     return;
+        // }
         // create a new CharacterProcessor on the heap and leak it to a static lifetime
         let char_processor = Box::<CharacterProcessor<'static>>::leak(Box::new(
             CharacterProcessor::new(self.get_command_data()),
         ));
-        // pass a pointer to the processor to Board::set_rx_processor
+
+        // pass a pointer to the lleaked processor to Board::set_rx_processor
         board.set_rx_processor(Box::new(char_processor));
+
+
         // set the setup flag to true
-        cortex_m::interrupt::free(|cs| {
-            SETUP_DONE.borrow(cs).replace(true);
-        });
+        // I don't think this is the right idea.
+        // Also, why would we have multiple calls to setup that could race?  Do we need a setup flag?
+        // cortex_m::interrupt::free(|cs| {
+        //     SETUP_DONE.borrow(cs).replace(true);
+        // });
     }
 
     /// register a command with two &strs, object and action, and a C function pointer that matches registry.register_command's second argument
@@ -70,20 +76,25 @@ impl CommandService {
         self.registry.register_command(command, ffi_cb);
     }
 
-    fn check_setup(&self) -> bool {
-        cortex_m::interrupt::free(|cs| {
-            if !*SETUP_DONE.borrow(cs).borrow() {
-                return false;
-            } else {
-                return true;
-            }
-        })
-    }
+    // this is not used, and unnecessary.
+    // fn check_setup(&self) -> bool {
+    //     cortex_m::interrupt::free(|cs| {
+    //         if !*SETUP_DONE.borrow(cs).borrow() {
+    //             return false;
+    //         } else {
+    //             return true;
+    //         }
+    //     })
+    // }
+
     /// get access to the static, shareable command data
     fn get_command_data(&self) -> &'static Mutex<RefCell<Option<CommandData>>> {
         &COMMAND_DATA
     }
+
     fn pending_message_count(&self) -> usize {
+        // move critical section to board as a call with a closure
+        // use critical section, don't need the Mutex and instead use unsafe{}
         cortex_m::interrupt::free(|cs| {
             let command_data = self.get_command_data().borrow(cs).borrow();
             if let Some(command_data) = command_data.deref() {

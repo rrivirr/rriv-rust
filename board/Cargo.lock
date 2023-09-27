@@ -274,7 +274,6 @@ name = "datalogger"
 version = "0.1.0"
 dependencies = [
  "command_service",
- "cortex-m",
  "rriv_board",
  "rtt-target",
 ]
