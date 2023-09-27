@@ -11,4 +11,6 @@ control_interface = { path = "../../src/control_interface" }
 hashbrown = "0.14"
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 serde_json = { version = "1.0.104", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 rtt-target = "0.4.0"
+

@@ -12,6 +12,7 @@ use core::ffi::{c_char, CStr};
 use core::ops::{Deref, DerefMut};
 use cortex_m::interrupt::Mutex;
 use serde_json::Value;
+use serde::{Serialize, Deserialize};
 
 use rtt_target::rprintln;
 
@@ -20,6 +21,12 @@ static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false));
 
 pub struct CommandService {
     registry: CommandRegistry,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+struct CLICommand<'a> {
+    object: &'a str,
+    action: &'a str,
 }
 
 impl CommandService {
@@ -112,6 +119,19 @@ impl CommandService {
         // Parse the JSON string into a serde_json::Value
         rprintln!("{}", command_data_str);
 
+        // Next
+        // 1. parse all the commands and validate them
+        //   a. investigate if we can use serde POJO style in no_std somehow
+        // 2. port the EEPROM
+        // 3. add and remove configurations from EEPROM
+
+        match serde_json::from_str::<CLICommand>(command_data_str) {
+            Ok(cli_command) => {
+                let command = self.registry.get_command_from_parts(cli_command.object, cli_command.action);
+                self.execute_command(command, command_data_cstr);
+            }
+            Err(_) => self.execute_command(Command::Unknown, command_data_cstr),
+        }
         match serde_json::from_str::<Value>(command_data_str) {
             Ok(data_json) => {
                 // Extract the command and object strings from the JSON

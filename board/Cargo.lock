@@ -217,6 +217,7 @@ dependencies = [
  "hashbrown 0.14.0",
  "rriv-0-4",
  "rtt-target",
+ "serde",
  "serde_json",
 ]
 
