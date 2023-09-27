@@ -7,15 +7,20 @@ use rriv_board::{RRIVBoard, RXProcessor};
 extern crate alloc;
 use alloc::boxed::Box;
 
+use core::borrow::BorrowMut;
 use core::cell::RefCell;
 use core::ffi::{c_char, CStr};
+use core::iter::Empty;
 use core::ops::{Deref, DerefMut};
+use core::ptr::null;
 use cortex_m::interrupt::Mutex;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use rtt_target::rprintln;
 
-static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
+// static COMMAND_DATA: Mutex<RefCell<Option<CommandData>>> = Mutex::new(RefCell::new(None));
+static mut COMMAND_DATA: CommandData = CommandData::default();
+// static COMMAND_DATA: Option<CommandData> = None;
 // static SETUP_DONE: Mutex<RefCell<bool>> = Mutex::new(RefCell::new(false)); // unused and unnecessary
 
 pub struct CommandService {
@@ -31,9 +36,11 @@ struct CLICommand<'a> {
 impl CommandService {
     pub fn new() -> Self {
         // set the static, shareable command data
-        cortex_m::interrupt::free(|cs| {
-            *COMMAND_DATA.borrow(cs).borrow_mut() = Some(CommandData::default());
-        });
+        // cortex_m::interrupt::free(|cs| {
+        //     unsafe {
+        //     *COMMAND_DATA.borrow(cs).borrow_mut() = Some(CommandData::default());
+        //     }
+        // });
         CommandService {
             registry: CommandRegistry::new(),
         }
@@ -48,13 +55,17 @@ impl CommandService {
         //     return;
         // }
         // create a new CharacterProcessor on the heap and leak it to a static lifetime
-        let char_processor = Box::<CharacterProcessor<'static>>::leak(Box::new(
-            CharacterProcessor::new(self.get_command_data()),
+        
+        // let char_processor = Box::<CharacterProcessor>::leak(Box::new(
+        //     CharacterProcessor::new(),
+        // ));
+
+        let char_processor = Box::<CharacterProcessor>::leak(Box::new(
+            CharacterProcessor::new(),
         ));
 
         // pass a pointer to the lleaked processor to Board::set_rx_processor
         board.set_rx_processor(Box::new(char_processor));
-
 
         // set the setup flag to true
         // I don't think this is the right idea.
@@ -88,30 +99,38 @@ impl CommandService {
     // }
 
     /// get access to the static, shareable command data
-    fn get_command_data(&self) -> &'static Mutex<RefCell<Option<CommandData>>> {
-        &COMMAND_DATA
-    }
+    // fn get_command_data(&self) -> &'static Mutex<RefCell<Option<CommandData>>> {
+    //     &COMMAND_DATA
+    // }
 
     fn pending_message_count(&self) -> usize {
         // move critical section to board as a call with a closure
         // use critical section, don't need the Mutex and instead use unsafe{}
-        cortex_m::interrupt::free(|cs| {
-            let command_data = self.get_command_data().borrow(cs).borrow();
-            if let Some(command_data) = command_data.deref() {
-                CommandRecognizer::pending_message_count(&command_data)
-            } else {
-                0
-            }
+        cortex_m::interrupt::free(|cs| unsafe {
+            let command_data = COMMAND_DATA.borrow_mut();
+            CommandRecognizer::pending_message_count(&command_data)
+
+            // // let command_data = self.get_command_data().borrow(cs).borrow();
+            // if let Some(command_data) = command_data.deref() {
+            //     CommandRecognizer::pending_message_count(&command_data)
+            // } else {
+            //     0
+            // }
         })
     }
 
     fn take_command(&mut self) -> Result<[u8; 100], ()> {
         cortex_m::interrupt::free(|cs| {
-            let mut command_data = self.get_command_data().borrow(cs).borrow_mut();
-            if let Some(command_data) = command_data.deref_mut() {
+            unsafe {
+                let command_data = COMMAND_DATA.borrow_mut();
                 Ok(CommandRecognizer::take_command(command_data))
-            } else {
-                Err(())
+
+                // let mut command_data = self.get_command_data().borrow(cs).borrow_mut();
+                // if let Some(command_data) = command_data.deref_mut() {
+                //     Ok(CommandRecognizer::take_command(command_data))
+                // } else {
+                //     Err(())
+                // }
             }
         })
     }
@@ -138,7 +157,9 @@ impl CommandService {
 
         match serde_json::from_str::<CLICommand>(command_data_str) {
             Ok(cli_command) => {
-                let command = self.registry.get_command_from_parts(cli_command.object, cli_command.action);
+                let command = self
+                    .registry
+                    .get_command_from_parts(cli_command.object, cli_command.action);
                 self.execute_command(command, command_data_cstr);
             }
             Err(_) => self.execute_command(Command::Unknown, command_data_cstr),
@@ -184,22 +205,28 @@ impl CommandService {
 }
 
 /// I believe the lifetimes here are generic over the lifetime of the CommandData
-pub struct CharacterProcessor<'a> {
-    command_data: &'a Mutex<RefCell<Option<CommandData>>>,
+pub struct CharacterProcessor {
+    // command_data: &'a CommandData,
 }
 
-impl<'a> CharacterProcessor<'a> {
-    pub fn new(command_data: &Mutex<RefCell<Option<CommandData>>>) -> CharacterProcessor {
-        CharacterProcessor { command_data }
+impl<'a> CharacterProcessor {
+    pub fn new() -> CharacterProcessor {
+        // CharacterProcessor { command_data }
+        CharacterProcessor {  }
     }
 }
 
-impl<'a, 'b> RXProcessor for CharacterProcessor<'a> {
+impl<'a, 'b> RXProcessor for CharacterProcessor {
     fn process_character(&self, character: u8) {
         cortex_m::interrupt::free(|cs| {
-            let mut command_data = self.command_data.borrow(cs).borrow_mut();
-            if let Some(command_data) = command_data.deref_mut() {
+            unsafe {
+                let command_data = COMMAND_DATA.borrow_mut();
                 CommandRecognizer::process_character(command_data, character);
+
+                // let mut command_data = self.command_data.borrow(cs).borrow_mut();
+                // if let Some(command_data) = command_data.deref_mut() {
+                //     CommandRecognizer::process_character(command_data, character);
+                // }
             }
         })
     }
