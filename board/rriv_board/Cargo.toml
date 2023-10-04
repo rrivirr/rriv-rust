@@ -1,11 +1,8 @@
 [package]
-name = "datalogger"
+name = "rriv_board"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rriv_board = { path = "../rriv_board" }
-command_service = { path = "../command_service" }
-rtt-target = "0.4.0"

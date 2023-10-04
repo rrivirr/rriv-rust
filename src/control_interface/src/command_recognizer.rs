@@ -15,7 +15,7 @@ pub struct CommandData {
 }
 
 impl CommandData {
-    pub fn default() -> Self {
+    pub const fn default() -> Self {
         Self {
             receiving: false,
             cur: 0,

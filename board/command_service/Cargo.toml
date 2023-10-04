@@ -6,9 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rriv-0-4 = { path = "../rriv-0-4" }
 control_interface = { path = "../../src/control_interface" }
+rriv_board = { path = "../rriv_board" } 
 hashbrown = "0.14"
-cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 serde_json = { version = "1.0.104", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 rtt-target = "0.4.0"
+
