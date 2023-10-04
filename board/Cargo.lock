@@ -39,7 +39,7 @@ dependencies = [
  "embedded-hal",
  "nb 1.1.0",
  "panic-halt",
- "rriv-0-4",
+ "rriv_board_0_4_2",
  "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",
@@ -591,7 +591,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5ea92a5b6195c6ef2a0295ea818b312502c6fc94dde986c5553242e18fd4ce2"
 
 [[package]]
-name = "rriv-0-4"
+name = "rriv_board"
+version = "0.1.0"
+
+[[package]]
+name = "rriv_board_0_4_2"
 version = "0.1.0"
 dependencies = [
  "cortex-m",
@@ -608,10 +612,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rriv_board"
-version = "0.1.0"
-
-[[package]]
 name = "rrivrust"
 version = "0.1.0"
 dependencies = [
@@ -626,7 +626,7 @@ dependencies = [
  "hashbrown 0.14.0",
  "nb 1.1.0",
  "panic-halt",
- "rriv-0-4",
+ "rriv_board_0_4_2",
  "rtt-target",
  "stm32f1xx-hal",
  "unwrap-infallible",
