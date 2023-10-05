@@ -24,7 +24,6 @@ rtt-target = "0.4.0"
 
 rriv_board_0_4_2 = { path = "../rriv_board_0_4_2" }
 datalogger = { path = "../../src/datalogger" }
-command_service = { path = "../../src/command_service" }
 hashbrown = "0.14.0"
 
 [build-dependencies]

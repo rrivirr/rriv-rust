@@ -1,16 +1,18 @@
 #![cfg_attr(not(test), no_std)]
 
-extern crate command_service;
+mod command_service;
+mod datalogger_commands;
+use datalogger_commands::*;
 use rriv_board::RRIVBoard;
 
 pub struct DataLogger {
-    pub command_service: command_service::CommandService
+    // pub command_service: command_service::CommandService
 }
 
 impl DataLogger {
     pub fn new() -> Self {
         DataLogger {
-            command_service: command_service::CommandService::new(),
+            // command_service: command_service::CommandService::new()
         }
     }
 
@@ -26,19 +28,45 @@ impl DataLogger {
 
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
         // setup each service
-        self.command_service.setup(board);
-        self.command_service
-            .register_command("datalogger", "set", Self::test_exec);
-        self.command_service
-            .register_command("unknown", "unknown", Self::unknown_command);
+        command_service::setup(board);
+        // self.command_service
+        //     .register_command("datalogger", "set", Self::test_exec);
+        // self.command_service
+        //     .register_command("unknown", "unknown", Self::unknown_command);
     }
 
     pub fn run_loop_iteration(&mut self, board: & impl RRIVBoard) {
-        self.command_service.run_loop_iteration(board);
+        // todo: refactor to use Result<T,E>
+        let pending_command_payload = command_service::get_pending_command(board);
+        if let Some(command_payload) = pending_command_payload {
+            self.executeCommand(board, command_payload);
+        }
     }
+    
+    
+    pub fn executeCommand(&mut self, board: & impl RRIVBoard, command_payload: CommandPayload) {
+        match command_payload {
+            CommandPayload::SetCommandPayload(payload) => {
+                self.update_datalogger_settings(payload);
+                board.serial_send("updated datalogger settings\n");
+            },
+            CommandPayload::GetCommandPayload(_) => todo!(),
+            CommandPayload::InvalidPayload() => {
+                board.serial_send("invalid payload\n");
+            }
+            CommandPayload::UnrecognizedCommand() => {
+                board.serial_send("unrecognized command\n");
+            }
+        }
+    }
+
+    pub fn update_datalogger_settings(&mut self, set_command_payload: DataloggerSetCommandPayload) {
+
+    }
+
 }
 
-use core::str;
+use core::{str, future::pending};
 
 unsafe fn from_c_str<'a>(ptr: *const i8) -> &'a str {
     let mut len = 0;

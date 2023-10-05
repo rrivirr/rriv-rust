@@ -17,8 +17,8 @@ use core::{
     result::Result::*,
 };
 use cortex_m::{
-    asm::{delay,dmb,dsb},
-    interrupt::{Mutex,CriticalSection},
+    asm::{delay, dmb, dsb},
+    interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
 
@@ -59,9 +59,7 @@ pub struct Board {
 
 impl Board {
     pub fn new() -> Self {
-        Board {
-            serial: None,
-        }
+        Board { serial: None }
     }
 }
 
@@ -80,14 +78,13 @@ impl RRIVBoard for Board {
         // Freeze the configuration of all the clocks in the system
         // and store the frozen frequencies in `clocks`
         let clocks = rcc
-        .cfgr
-        .use_hse(8.MHz())
-        .sysclk(48.MHz())
-        .pclk1(24.MHz())
-        .freeze(&mut flash.acr);
+            .cfgr
+            .use_hse(8.MHz())
+            .sysclk(48.MHz())
+            .pclk1(24.MHz())
+            .freeze(&mut flash.acr);
 
         assert!(clocks.usbclk_valid());
-
 
         // Prepare the alternate function I/O registers
         let mut afio = p.AFIO.constrain();
@@ -128,49 +125,42 @@ impl RRIVBoard for Board {
             NVIC::unmask(pac::Interrupt::USART2);
         }
 
-         // USB Serial
-         let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
-         usb_dp.set_low();
-         delay(clocks.sysclk().raw() / 100);
- 
-         let usb_dm = gpioa.pa11;
-         let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
- 
-         let usb = Peripheral {
-             usb: p.USB,
-             pin_dm: usb_dm,
-             pin_dp: usb_dp,
-         };
- 
-         // Unsafe to allow access to static variables
-         unsafe {
-             let bus = UsbBus::new(usb);
- 
-             USB_BUS = Some(bus);
- 
-             USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
- 
-             let usb_dev =
-                 UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
-                     .manufacturer("RRIV")
-                     .product("RRIV Data Logger")
-                     .serial_number("_rriv")
-                     .device_class(USB_CLASS_CDC)
-                     .build();
- 
-             USB_DEVICE = Some(usb_dev);
-         }
- 
-         unsafe {
-             NVIC::unmask(pac::Interrupt::USB_HP_CAN_TX);
-             NVIC::unmask(pac::Interrupt::USB_LP_CAN_RX0);
-         }
+        // USB Serial
+        let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
+        usb_dp.set_low();
+        delay(clocks.sysclk().raw() / 100);
 
-        //  serial = Serial { tx: &TX }; // maybe we dont need this
+        let usb_dm = gpioa.pa11;
+        let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
 
-        // Board {
-        //     serial: Serial { tx: &TX },
-        // }
+        let usb = Peripheral {
+            usb: p.USB,
+            pin_dm: usb_dm,
+            pin_dp: usb_dp,
+        };
+
+        // Unsafe to allow access to static variables
+        unsafe {
+            let bus = UsbBus::new(usb);
+
+            USB_BUS = Some(bus);
+
+            USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
+
+            let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
+                .manufacturer("RRIV")
+                .product("RRIV Data Logger")
+                .serial_number("_rriv")
+                .device_class(USB_CLASS_CDC)
+                .build();
+
+            USB_DEVICE = Some(usb_dev);
+        }
+
+        unsafe {
+            NVIC::unmask(pac::Interrupt::USB_HP_CAN_TX);
+            NVIC::unmask(pac::Interrupt::USB_LP_CAN_RX0);
+        }
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -180,11 +170,28 @@ impl RRIVBoard for Board {
         });
     }
 
-    fn critical_section<T,F>(&self, f: F) -> T
-        where F: Fn() -> T {
+    fn critical_section<T, F>(&self, f: F) -> T
+    where
+        F: Fn() -> T,
+    {
+        cortex_m::interrupt::free(|cs| f())
+    }
+
+    fn serial_send(&self, string: &str) {
         cortex_m::interrupt::free(|cs| {
-            f()
-        })
+            // USART
+            let bytes = string.as_bytes();
+            for char in bytes.iter() {
+                let t = TX.borrow(cs);
+                if let Some(tx) = t.borrow_mut().deref_mut() {
+                    _ = nb::block!(tx.write(char.clone()));
+                }
+            }
+
+            // USB
+            let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
+            serial.write(string.as_bytes()).ok();
+        });
     }
 }
 
@@ -217,7 +224,6 @@ unsafe fn USART2() {
         }
     })
 }
-
 
 #[interrupt]
 fn USB_HP_CAN_TX() {
@@ -256,7 +262,7 @@ fn usb_interrupt(cs: &CriticalSection) {
                     processor.process_character(c.clone());
                 }
             }
-            serial.write(&buf[0..count]).ok();  
+            serial.write(&buf[0..count]).ok();
         }
         _ => {}
     }

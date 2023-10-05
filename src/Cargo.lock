@@ -26,18 +26,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "baf1de4339761588bc0619e3cbc0120ee582ebb74b53b4efbf79117bd2da40fd"
 
 [[package]]
-name = "command_service"
-version = "0.1.0"
-dependencies = [
- "control_interface",
- "hashbrown",
- "rriv_board",
- "rtt-target",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "control_interface"
 version = "0.1.0"
 dependencies = [
@@ -56,9 +44,12 @@ checksum = "7059fff8937831a9ae6f0fe4d658ffabf58f2ca96aa9dec1c889f936f705f216"
 name = "datalogger"
 version = "0.1.0"
 dependencies = [
- "command_service",
+ "control_interface",
+ "hashbrown",
  "rriv_board",
  "rtt-target",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

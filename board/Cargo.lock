@@ -39,6 +39,7 @@ dependencies = [
  "embedded-hal",
  "nb 1.1.0",
  "panic-halt",
+ "rriv_board",
  "rriv_board_0_4_2",
  "rtt-target",
  "stm32f1xx-hal",
@@ -209,18 +210,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "command_service"
-version = "0.1.0"
-dependencies = [
- "control_interface",
- "hashbrown 0.14.0",
- "rriv_board",
- "rtt-target",
- "serde",
- "serde_json",
-]
-
-[[package]]
 name = "control_interface"
 version = "0.1.0"
 dependencies = [
@@ -272,9 +261,12 @@ checksum = "7059fff8937831a9ae6f0fe4d658ffabf58f2ca96aa9dec1c889f936f705f216"
 name = "datalogger"
 version = "0.1.0"
 dependencies = [
- "command_service",
+ "control_interface",
+ "hashbrown 0.14.0",
  "rriv_board",
  "rtt-target",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -617,7 +609,6 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cbindgen",
- "command_service",
  "cortex-m",
  "cortex-m-rt",
  "datalogger",
