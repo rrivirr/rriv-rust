@@ -25,13 +25,12 @@ pub struct DataloggerGetCommandPayload {
 pub enum CommandPayload {
     SetCommandPayload(DataloggerSetCommandPayload),
     GetCommandPayload(DataloggerGetCommandPayload),
-    UnrecognizedCommand(),
-    InvalidPayload()
 }
 
 
 // errors to use in refactor
-pub enum CommandErrors {
-    UnrecognizedCommand,
-    InvalidPayload
+pub enum CommandError {
+    ParseError(serde_json::Error),
+    InvalidCommand,
+    InvalidPayload(serde_json::Error)
 }

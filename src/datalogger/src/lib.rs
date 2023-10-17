@@ -37,9 +37,24 @@ impl DataLogger {
 
     pub fn run_loop_iteration(&mut self, board: & impl RRIVBoard) {
         // todo: refactor to use Result<T,E>
-        let pending_command_payload = command_service::get_pending_command(board);
-        if let Some(command_payload) = pending_command_payload {
-            self.executeCommand(board, command_payload);
+        let get_command_result = command_service::get_pending_command(board);
+        if let Some(get_command_result) = get_command_result {
+            match get_command_result {
+                Ok(command_payload) => {
+                    self.executeCommand(board, command_payload);
+                },
+                Err(error) => {
+                    board.serial_send("Error processing command");
+                    // board.serial_send(error); // TODO how to get the string from the error
+
+                    // CommandPayload::InvalidPayload() => {
+                    //     board.serial_send("invalid payload\n");
+                    // }
+                    // CommandPayload::UnrecognizedCommand() => {
+                    //     board.serial_send("unrecognized command\n");
+                    // }
+                }
+            }
         }
     }
     
@@ -51,12 +66,7 @@ impl DataLogger {
                 board.serial_send("updated datalogger settings\n");
             },
             CommandPayload::GetCommandPayload(_) => todo!(),
-            CommandPayload::InvalidPayload() => {
-                board.serial_send("invalid payload\n");
-            }
-            CommandPayload::UnrecognizedCommand() => {
-                board.serial_send("unrecognized command\n");
-            }
+           
         }
     }
 

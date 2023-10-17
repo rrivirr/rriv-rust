@@ -44,7 +44,6 @@ pub enum CommandType {
     BoardSignalExAdcLow = 33,
     BoardSignal3v3BoostHigh = 34,
     BoardSignal3v3BoostLow = 35,
-    Unrecognized = 36,
     Unknown = 37, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
 }
 
