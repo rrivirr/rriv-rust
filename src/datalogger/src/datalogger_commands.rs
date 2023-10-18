@@ -3,23 +3,24 @@ use serde_json::Value;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DataloggerSetCommandPayload {
-    object: Value,
-    action: Value,
-    logger_name: Option<Value>,
-    site_name: Option<Value>,
-    deployment_identifier: Option<Value>,
-    burst_number: Option<u8>,
-    start_up_delay: Option<u16>,
-    user_note: Option<Value>,
-    user_value: Option<i16>
+    pub object: Value,
+    pub action: Value,
+    pub logger_name: Option<Value>,
+    pub site_name: Option<Value>,
+    pub deployment_identifier: Option<Value>,
+    pub interval: Option<u16>,
+    pub burst_number: Option<u8>,
+    pub start_up_delay: Option<u16>,
+    pub user_note: Option<Value>,
+    pub user_value: Option<i16>
 }
 
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DataloggerGetCommandPayload {
-    object: Value,
-    action: Value,
-    propery: Option<Value>
+    pub object: Value,
+    pub action: Value,
+    pub propery: Option<Value>
 }
 
 pub enum CommandPayload {
@@ -30,7 +31,7 @@ pub enum CommandPayload {
 
 // errors to use in refactor
 pub enum CommandError {
-    ParseError(serde_json::Error),
+    ParseError(serde_json::Error), // can we store a string with the error string in the the enum class?
     InvalidCommand,
     InvalidPayload(serde_json::Error)
 }

@@ -35,7 +35,7 @@ fn main() -> ! {
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
     loop {
-        datalogger.run_loop_iteration(&board);
+        datalogger.run_loop_iteration(&mut board);
     }
 }
 
