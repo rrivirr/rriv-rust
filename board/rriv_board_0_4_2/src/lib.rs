@@ -5,6 +5,7 @@ extern crate panic_halt;
 
 use alloc::boxed::Box;
 use cortex_m::interrupt::enable;
+use stm32f1xx_hal::pac::can1::tx;
 use core::borrow::BorrowMut;
 use core::default;
 use core::fmt::Write;
@@ -25,7 +26,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::blocking::i2c;
-use stm32f1xx_hal::gpio::{Alternate, Pin};
+use stm32f1xx_hal::gpio::{Alternate, Pin, gpioa};
 use stm32f1xx_hal::i2c::I2c;
 use stm32f1xx_hal::pac::{I2C1, I2C2, RCC};
 
@@ -49,6 +50,8 @@ use usbd_serial::{SerialPort, USB_CLASS_CDC};
 use rriv_board::{RRIVBoard, RXProcessor};
 
 mod eeprom;
+mod pins;
+use pins::Pins;
 
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
@@ -66,6 +69,15 @@ pub struct Serial {
     tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
 }
 
+        // // Set up pins
+        // let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl); // USART2
+        // let rx_pin = gpioa.pa3; // USART2
+        // let scl = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl); // i2c
+        // let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl); // i2c
+        // let mut switched_pow = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
+        // let mut hse_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh); 
+        
+
 // type aliases to make things tenable
 type BoardI2c = BlockingI2c<
     I2C1,
@@ -74,16 +86,16 @@ type BoardI2c = BlockingI2c<
         Pin<'B', 7, Alternate<OpenDrain>>,
     ),
 >;
-// type sensor  = BlockingI2c<I2C1, (Pin<'B', 6, Alternate<OpenDrain>>, Pin<'B', 7, Alternate<OpenDrain>>)>;
 
 pub struct Board {
     pub i2c1: Option<BoardI2c>,
     pub delay: Option<SysDelay>,
+    pub pins: Option<Pins>
 }
 
 impl Board {
     pub fn new() -> Self {
-        Board { i2c1: None, delay: None}
+        Board { i2c1: None, delay: None, pins: None}
     }
 }
 
@@ -110,15 +122,19 @@ impl RRIVBoard for Board {
         let mut gpioa = device_peripherals.GPIOA.split();
         let mut gpiob = device_peripherals.GPIOB.split();
         let mut gpioc = device_peripherals.GPIOC.split();
+        let mut gpiod = device_peripherals.GPIOD.split();
+
 
         // Set up pins
-        let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl); // USART2
-        let rx_pin = gpioa.pa3; // USART2
-        let scl = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl); // i2c
-        let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl); // i2c
-        let mut switched_pow = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-        let mut hse_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh); // high speed external on/off
+        let mut pins = Pins::build(gpioa, gpiob, gpioc, gpiod);
+        // self.pins = Some(pins);
+        // let pins = self.pins;
+
+ 
+        let mut switched_pow = pins.enable_3v.into_push_pull_output(&mut pins.gpioc.crl);
+        let mut hse_pin = pins.enable_hse.into_push_pull_output(&mut pins.gpioc.crh); // high speed external on/off
         
+        let wake = pins.wake_button();
 
         // Turn on the HSE
         hse_pin.set_high();
@@ -135,7 +151,6 @@ impl RRIVBoard for Board {
         assert!(clocks.usbclk_valid());
 
   
-
         // Set up and initialize switched power bus
         self.delay = Some(core_peripherals.SYST.delay(&clocks));
         switched_pow.set_high();
@@ -148,12 +163,11 @@ impl RRIVBoard for Board {
         self.delay_ms(250_u16);
     
 
-   
-
-
-
         // Init Serial
         // rprintln!("initializing serial");
+        let tx_pin = pins.tx.into_alternate_push_pull(&mut gpioa.crl); // USART2
+        let rx_pin = pins.rx; // USART2
+
         let mut serial = Hal_Serial::new(
             device_peripherals.USART2,
             (tx_pin, rx_pin),
@@ -178,6 +192,7 @@ impl RRIVBoard for Board {
         unsafe {
             NVIC::unmask(pac::Interrupt::USART2);
         }
+
 
         // USB Serial
         let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
@@ -221,11 +236,34 @@ impl RRIVBoard for Board {
         rprintln!("starting i2c");
         core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
 
-        // let rcc = unsafe { &(*RCC::ptr()) };
 
+        let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut gpiob.crl); // i2c
+        let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut gpiob.crl); // i2c
         self.i2c1 = Some(BlockingI2c::i2c1(
             device_peripherals.I2C1,
-            (scl, sda),
+            (scl1, sda1),
+            &mut afio.mapr,
+            Mode::Standard {
+                frequency: 100.kHz(), // slower to same some energy?
+            },
+            // Mode::Fast {s
+            //     frequency: 400.kHz(),
+            //     duty_cycle: DutyCycle::Ratio16to9,
+            // },
+            clocks,
+            1000,
+            10,
+            1000,
+            1000,
+        ));
+        rprintln!("started i2c");
+
+
+        let scl2 = pins.i2c2_scl.into_alternate_open_drain(&mut gpiob.crh); // i2c
+        let sda2 = pins.i2c2_sda.into_alternate_open_drain(&mut gpiob.crh); // i2c
+        self.i2c1 = Some(BlockingI2c::i2c1(
+            device_peripherals.I2C1,
+            (scl1, sda1),
             &mut afio.mapr,
             Mode::Standard {
                 frequency: 100.kHz(), // slower to same some energy?
