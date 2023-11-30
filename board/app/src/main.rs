@@ -42,3 +42,9 @@ fn main() -> ! {
 // some serial commands to test for success and failure
 // {"cmd":"set","object":"datalogger"}
 // {"cmd":"foo","object":"bar"}
+
+
+
+    // let mut peripherals = BoardPeripherals::new();
+    // peripherals.setup();
+    // let mut board = Board::new(peripherals)

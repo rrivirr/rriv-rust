@@ -5,9 +5,12 @@ mod datalogger_commands;
 use datalogger_commands::*;
 use rriv_board::{RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE};
 use bitflags::bitflags;
+extern crate alloc;
+use alloc::format;
+use rtt_target::rprintln;
 
 
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,Debug)]
 struct DataloggerSettings {
     deployment_identifier: [u8;16],
     logger_name: [u8;8],
@@ -17,7 +20,7 @@ struct DataloggerSettings {
     burst_repetitions: u16,
     start_up_delay: u16,
     delay_between_bursts: u16,
-    mode: char,
+    mode: u8,
     // external_adc_enabled: u8:1, // how we we handle bitfields?
     // debug_includes_values: u8:1,
     // withold_incomplete_readings: u8:1,
@@ -36,8 +39,11 @@ impl DataloggerSettings {
             burst_repetitions: 1, 
             start_up_delay: 0, 
             delay_between_bursts: 0, 
-            mode: 'i' 
+            mode: b'i' 
         };
+        let deployment_identifier_default = "bcdefghijklmnopq".as_bytes();
+        settings.deployment_identifier.copy_from_slice(deployment_identifier_default);
+
         let logger_name_types = "MyLogger".as_bytes();
         settings.logger_name.copy_from_slice(logger_name_types);
         settings
@@ -83,6 +89,7 @@ impl DataLogger {
     fn retrieve_settings(&self, board: &mut impl RRIVBoard) -> DataloggerSettings {
         let mut bytes: [u8;EEPROM_DATALOGGER_SETTINGS_SIZE] = [b'\0'; EEPROM_DATALOGGER_SETTINGS_SIZE];
         board.retrieve_datalogger_settings(&mut bytes);
+        rprintln!("retrieved {:?}", bytes);
         return DataloggerSettings::new_from_bytes(& bytes);
         // convert the bytes pack into a DataloggerSettings
     }
@@ -90,13 +97,24 @@ impl DataLogger {
     fn store_settings(&self, board: &mut impl RRIVBoard){
         let bytes: &[u8] = unsafe { any_as_u8_slice(&self.settings) };
         let mut bytes_sized: [u8;EEPROM_DATALOGGER_SETTINGS_SIZE] = [0; EEPROM_DATALOGGER_SETTINGS_SIZE];
-        bytes_sized.copy_from_slice(&bytes[0..EEPROM_DATALOGGER_SETTINGS_SIZE]);
+        let copy_size = if bytes.len() >= EEPROM_DATALOGGER_SETTINGS_SIZE { EEPROM_DATALOGGER_SETTINGS_SIZE } else { bytes.len() };
+        bytes_sized[..bytes.len()].copy_from_slice(&bytes[0..copy_size]);
         board.store_datalogger_settings(&bytes_sized);
+        rprintln!("stored {:?}", bytes_sized);
     }
 
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
 
+        self.settings = DataloggerSettings::new();
+        self.settings.deployment_identifier = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e',b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
+        self.settings.logger_name = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
+        rprintln!("attempting to store settings for test purposes");
+        self.store_settings(board);
+
+        rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
+        rprintln!("retrieved settings {:?}", self.settings);
+
         // setup each service
         command_service::setup(board);
         // self.command_service
@@ -115,7 +133,7 @@ impl DataLogger {
                 },
                 Err(error) => {
                     board.serial_send("Error processing command");
-                    // board.serial_send(error); // TODO how to get the string from the error
+                    board.serial_send(format!("{:?}", error).as_str()); // TODO how to get the string from the error
 
                     // CommandPayload::InvalidPayload() => {
                     //     board.serial_send("invalid payload\n");
@@ -126,6 +144,8 @@ impl DataLogger {
                 }
             }
         }
+
+        // do the measurement cycle stuff
     }
     
     

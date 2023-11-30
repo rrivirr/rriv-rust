@@ -4,12 +4,9 @@ extern crate alloc;
 extern crate panic_halt;
 
 use alloc::boxed::Box;
-use cortex_m::peripheral::DWT;
-use embedded_hal::blocking::i2c;
-use stm32f1xx_hal::gpio::{Pin, Alternate};
-use stm32f1xx_hal::i2c::I2c;
-use stm32f1xx_hal::pac::{I2C2, I2C1};
+use cortex_m::interrupt::enable;
 use core::borrow::BorrowMut;
+use core::default;
 use core::fmt::Write;
 use core::marker::{Send, Sync};
 use core::{
@@ -21,21 +18,29 @@ use core::{
     option::{Option, Option::*},
     result::Result::*,
 };
+use cortex_m::peripheral::DWT;
 use cortex_m::{
     asm::{delay, dmb, dsb},
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
+use embedded_hal::blocking::i2c;
+use stm32f1xx_hal::gpio::{Alternate, Pin};
+use stm32f1xx_hal::i2c::I2c;
+use stm32f1xx_hal::pac::{I2C1, I2C2, RCC};
 
 use rtt_target::rprintln;
 use stm32f1xx_hal::{
     gpio::{self, OpenDrain, Output, PinState},
-    i2c::{BlockingI2c, DutyCycle, Mode},
+    i2c::{BlockingI2c, DutyCycle, Mode, Instance},
     pac,
     pac::interrupt,
     prelude::*,
     serial::{Config, Rx, Serial as Hal_Serial, Tx},
+    timer::delay::*,
 };
+use stm32f1xx_hal::rcc::{BusClock, Clocks, Enable, Reset};
+
 
 use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use usb_device::{bus::UsbBusAllocator, prelude::*};
@@ -61,35 +66,62 @@ pub struct Serial {
     tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
 }
 
-
 // type aliases to make things tenable
-type board_i2c  = BlockingI2c<I2C1, (Pin<'B', 6, Alternate<OpenDrain>>, Pin<'B', 7, Alternate<OpenDrain>>)>;
+type BoardI2c = BlockingI2c<
+    I2C1,
+    (
+        Pin<'B', 6, Alternate<OpenDrain>>,
+        Pin<'B', 7, Alternate<OpenDrain>>,
+    ),
+>;
 // type sensor  = BlockingI2c<I2C1, (Pin<'B', 6, Alternate<OpenDrain>>, Pin<'B', 7, Alternate<OpenDrain>>)>;
 
 pub struct Board {
-    pub i2c1: Option<board_i2c>
-
+    pub i2c1: Option<BoardI2c>,
+    pub delay: Option<SysDelay>,
 }
 
 impl Board {
     pub fn new() -> Self {
-        Board { 
-            i2c1: None
-        }
+        Board { i2c1: None, delay: None}
     }
 }
+
 
 impl RRIVBoard for Board {
     fn setup(&mut self) {
         rprintln!("board new");
 
+        let mut core_peripherals = cortex_m::Peripherals::take().unwrap();
+
         // Get access to the device specific peripherals from the peripheral access crate
-        let peripherals = pac::Peripherals::take().unwrap();
+        let device_peripherals = pac::Peripherals::take().unwrap();
+        // rprintln!("{:?}",device_peripherals.RCC.apb2enr); //.i2c1en();  //enabled();
+        // device_peripherals.RCC.apb2enr.
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
-        let mut flash = peripherals.FLASH.constrain();
-        let rcc = peripherals.RCC.constrain();
+        let mut flash = device_peripherals.FLASH.constrain();
+        let rcc = device_peripherals.RCC.constrain();
+        let mut afio = device_peripherals.AFIO.constrain();     // Prepare the alternate function I/O registers
+
+
+        // Prepare the GPIO
+        let mut gpioa = device_peripherals.GPIOA.split();
+        let mut gpiob = device_peripherals.GPIOB.split();
+        let mut gpioc = device_peripherals.GPIOC.split();
+
+        // Set up pins
+        let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl); // USART2
+        let rx_pin = gpioa.pa3; // USART2
+        let scl = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl); // i2c
+        let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl); // i2c
+        let mut switched_pow = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
+        let mut hse_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh); // high speed external on/off
+        
+
+        // Turn on the HSE
+        hse_pin.set_high();
 
         // Freeze the configuration of all the clocks in the system
         // and store the frozen frequencies in `clocks`
@@ -97,27 +129,33 @@ impl RRIVBoard for Board {
             .cfgr
             .use_hse(8.MHz())
             .sysclk(48.MHz())
-            .pclk1(24.MHz())
+            .pclk1(24.MHz()) // was 24, set to 6 following i2c code
             .freeze(&mut flash.acr);
 
         assert!(clocks.usbclk_valid());
 
-        // Prepare the alternate function I/O registers
-        let mut afio = peripherals.AFIO.constrain();
+  
 
-        // Prepare the peripherals
-        let mut gpioa = peripherals.GPIOA.split();
-        let mut gpiob = peripherals.GPIOB.split();
-        let mut gpioc = peripherals.GPIOC.split();
+        // Set up and initialize switched power bus
+        self.delay = Some(core_peripherals.SYST.delay(&clocks));
+        switched_pow.set_high();
+        self.delay_ms(250_u16);
+        switched_pow.set_low();
+        self.delay_ms(250_u16);
+        switched_pow.set_high();
+        self.delay_ms(250_u16);
+        switched_pow.set_low();
+        self.delay_ms(250_u16);
+    
 
-        // USART2
-        let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl);
-        let rx_pin = gpioa.pa3;
+   
+
+
 
         // Init Serial
         // rprintln!("initializing serial");
         let mut serial = Hal_Serial::new(
-            peripherals.USART2,
+            device_peripherals.USART2,
             (tx_pin, rx_pin),
             &mut afio.mapr,
             Config::default().baudrate(115200.bps()),
@@ -150,7 +188,7 @@ impl RRIVBoard for Board {
         let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
 
         let usb = Peripheral {
-            usb: peripherals.USB,
+            usb: device_peripherals.USB,
             pin_dm: usb_dm,
             pin_dp: usb_dp,
         };
@@ -178,27 +216,55 @@ impl RRIVBoard for Board {
             NVIC::unmask(pac::Interrupt::USB_LP_CAN_RX0);
         }
 
-        // now set up the i2c interface
-        let scl = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl);
-        let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl);
+
+
+        rprintln!("starting i2c");
+        core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
+
+        // let rcc = unsafe { &(*RCC::ptr()) };
 
         self.i2c1 = Some(BlockingI2c::i2c1(
-            peripherals.I2C1,
+            device_peripherals.I2C1,
             (scl, sda),
             &mut afio.mapr,
-            Mode::Fast {
-                frequency: 400.kHz(),
-                duty_cycle: DutyCycle::Ratio16to9,
+            Mode::Standard {
+                frequency: 100.kHz(), // slower to same some energy?
             },
+            // Mode::Fast {
+            //     frequency: 400.kHz(),
+            //     duty_cycle: DutyCycle::Ratio16to9,
+            // },
             clocks,
             1000,
             10,
             1000,
             1000,
         ));
+        rprintln!("started i2c");
+
+        // I2C1::disable(rcc);
+        // delay.delay_ms(50_u16);
+        // I2C1::enable(rcc);
+        // delay.delay_ms(50_u16);
+        // I2C1::reset(rcc);
+        // delay.delay_ms(50_u16);
 
 
-        // DWT::enable_cycle_counter(); // BlockingI2c says this is required
+        rprintln!("Start i2c scanning...");
+        rprintln!();
+
+        for addr in 0x00_u8..0x7F {
+            // Write the empty array and check the slave response.
+            // rprintln!("trying {:02x}", addr);
+            let mut buf = [b'\0'; 1];
+            if let Some(i2c) = &mut self.i2c1 {
+                if i2c.read(addr, &mut buf).is_ok() {
+                    rprintln!("{:02x} good", addr);
+                }
+            }
+            self.delay_ms(10_u16);
+        }
+        rprintln!("scan is done")
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -232,15 +298,26 @@ impl RRIVBoard for Board {
         });
     }
 
-    fn store_datalogger_settings(&mut self, bytes: &[u8;rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE]) {
+    fn store_datalogger_settings(
+        &mut self,
+        bytes: &[u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
+    ) {
         // who knows the eeprom bytes to use? - the board doeas
         eeprom::write_datalogger_settings_to_eeprom(self, bytes);
     }
 
-    fn retrieve_datalogger_settings(&mut self, buffer: &mut [u8;rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE]) {
+    fn retrieve_datalogger_settings(
+        &mut self,
+        buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
+    ) {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
     }
 
+    fn delay_ms(&mut self, ms: u16) {
+        if let Some(delay) = &mut self.delay {
+            delay.delay_ms(ms);
+        }
+    }
 }
 
 #[interrupt]

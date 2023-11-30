@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use alloc::fmt::Debug;
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DataloggerSetCommandPayload {
@@ -34,4 +35,14 @@ pub enum CommandError {
     ParseError(serde_json::Error), // can we store a string with the error string in the the enum class?
     InvalidCommand,
     InvalidPayload(serde_json::Error)
+}
+
+impl Debug for CommandError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::ParseError(arg0) => f.debug_tuple("ParseError").field(arg0).finish(),
+            Self::InvalidCommand => write!(f, "InvalidCommand"),
+            Self::InvalidPayload(arg0) => f.debug_tuple("InvalidPayload").field(arg0).finish(),
+        }
+    }
 }

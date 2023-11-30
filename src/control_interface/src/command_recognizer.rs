@@ -1,6 +1,6 @@
 // https://ferrous-systems.com/blog/test-embedded-app/
 
-use rtt_target::rprintln;
+// use rtt_target::rprintln;
 
 
 pub const BUFFER_NUM: usize = 11; // Includes an extra empty cell for end marker
