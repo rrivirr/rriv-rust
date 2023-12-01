@@ -51,7 +51,9 @@ use rriv_board::{RRIVBoard, RXProcessor};
 
 mod eeprom;
 mod pins;
-use pins::Pins;
+use pins::{Pins, PowerControl, GPIO, InternalAdc, RgbLed, OscillatorControl};
+
+use crate::pins::{GpioRaw, FreedDebugPins};
 
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
@@ -79,7 +81,7 @@ pub struct Serial {
         
 
 // type aliases to make things tenable
-type BoardI2c = BlockingI2c<
+type BoardI2c1 = BlockingI2c<
     I2C1,
     (
         Pin<'B', 6, Alternate<OpenDrain>>,
@@ -88,14 +90,29 @@ type BoardI2c = BlockingI2c<
 >;
 
 pub struct Board {
-    pub i2c1: Option<BoardI2c>,
+    pub i2c1: Option<BoardI2c1>,
+    pub i2c2: Option<BoardI2c>,
+
     pub delay: Option<SysDelay>,
-    pub pins: Option<Pins>
+
+    pub power_control: Option<PowerControl>,
+    pub gpio: Option<GPIO>,
+    pub internal_adc: Option<InternalAdc>,
+    pub rgb_led: Option<RgbLed>,
+    pub oscillator_control: Option<OscillatorControl>
 }
 
 impl Board {
     pub fn new() -> Self {
-        Board { i2c1: None, delay: None, pins: None}
+        Board {
+            i2c1: None, 
+            delay: None, 
+            power_control: None,
+            gpio: None,
+            internal_adc: None,
+            rgb_led: None,
+            oscillator_control: None
+        }
     }
 }
 
@@ -109,7 +126,6 @@ impl RRIVBoard for Board {
         // Get access to the device specific peripherals from the peripheral access crate
         let device_peripherals = pac::Peripherals::take().unwrap();
         // rprintln!("{:?}",device_peripherals.RCC.apb2enr); //.i2c1en();  //enabled();
-        // device_peripherals.RCC.apb2enr.
 
         // Take ownership over the raw flash and rcc devices and convert them into the corresponding
         // HAL structs
@@ -124,20 +140,41 @@ impl RRIVBoard for Board {
         let mut gpioc = device_peripherals.GPIOC.split();
         let mut gpiod = device_peripherals.GPIOD.split();
 
+        // afio::MAPR::disable_jtag(); ?? need this for PB3 ?
+        let debug_pins = afio.mapr.disable_jtag(
+            gpioa.pa15,
+            gpiob.pb3,
+            gpiob.pb4
+        );
+        let freed_debug_pins = FreedDebugPins::build(debug_pins);
 
         // Set up pins
-        let mut pins = Pins::build(gpioa, gpiob, gpioc, gpiod);
-        // self.pins = Some(pins);
-        // let pins = self.pins;
+        let mut gpio_raw = GpioRaw {gpioa, gpiob, gpioc, gpiod, freed_debug_pins};
+        let mut pins = Pins::build(gpio_raw);
 
- 
-        let mut switched_pow = pins.enable_3v.into_push_pull_output(&mut pins.gpioc.crl);
-        let mut hse_pin = pins.enable_hse.into_push_pull_output(&mut pins.gpioc.crh); // high speed external on/off
+        self.power_control = Some(PowerControl::build(
+            pins.enable_3v, 
+            pins.enable_5v, 
+            pins.enable_vin_measure,
+            pins.enable_external_adc,
+            pins.enable_avdd,    
+            &mut gpio_raw
+        ));
         
-        let wake = pins.wake_button();
+        self.gpio = Some(GPIO::build(
+            pins.gpio1,
+            pins.gpio2,
+            pins.gpio3,
+            pins.gpio4,
+            pins.gpio5,
+            pins.gpio6,
+            pins.gpio7,
+            pins.gpio8,
+            &mut gpio_raw
+        ));
+ 
 
         // Turn on the HSE
-        hse_pin.set_high();
 
         // Freeze the configuration of all the clocks in the system
         // and store the frozen frequencies in `clocks`
@@ -153,13 +190,14 @@ impl RRIVBoard for Board {
   
         // Set up and initialize switched power bus
         self.delay = Some(core_peripherals.SYST.delay(&clocks));
-        switched_pow.set_high();
+        let s = &mut self.power_control.unwrap().enable_3v;
+        s.set_high();
         self.delay_ms(250_u16);
-        switched_pow.set_low();
+        s.set_low();
         self.delay_ms(250_u16);
-        switched_pow.set_high();
+        s.set_high();
         self.delay_ms(250_u16);
-        switched_pow.set_low();
+        s.set_low();
         self.delay_ms(250_u16);
     
 
@@ -261,9 +299,9 @@ impl RRIVBoard for Board {
 
         let scl2 = pins.i2c2_scl.into_alternate_open_drain(&mut gpiob.crh); // i2c
         let sda2 = pins.i2c2_sda.into_alternate_open_drain(&mut gpiob.crh); // i2c
-        self.i2c1 = Some(BlockingI2c::i2c1(
-            device_peripherals.I2C1,
-            (scl1, sda1),
+        self.i2c2 = Some(BlockingI2c::i2c2(
+            device_peripherals.I2C2,
+            (scl2, sda2),
             &mut afio.mapr,
             Mode::Standard {
                 frequency: 100.kHz(), // slower to same some energy?
