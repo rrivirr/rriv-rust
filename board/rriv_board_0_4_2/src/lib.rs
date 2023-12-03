@@ -59,6 +59,12 @@ use pins::{Pins, GpioCr};
 mod pin_groups;
 use pin_groups::*;
 
+mod power;
+use power::*;
+
+mod internal_adc;
+use internal_adc::*;
+
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
 static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
@@ -90,28 +96,18 @@ type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
     pub delay: SysDelay,
-    pub power_control: Power,
-    pub gpio: DynamicGpio, //DynamicGpio ??
+    pub power_control: power::Power,
+    pub gpio: DynamicGpioPins, //DynamicGpio ??
     pub internal_adc: InternalAdc,
-    pub rgb_led: RgbLed,
-    pub oscillator_control: OscillatorControl,
+    pub rgb_led: RgbLedPin,
+    pub oscillator_control: OscillatorControlPins,
     pub i2c1: BoardI2c1,
     pub i2c2: BoardI2c2,
 }
 
 impl Board {
     pub fn start(&mut self) {
-        let pc = &mut self.power_control;
-        let s = &mut pc.enable_3v;
-        s.set_high();
-        let delay_ref = &mut self.delay;
-        delay_ref.delay_ms(250_u16);
-        s.set_low();
-        delay_ref.delay_ms(250_u16);
-        s.set_high();
-        delay_ref.delay_ms(250_u16);
-        s.set_low();
-        delay_ref.delay_ms(250_u16);
+       self.power_control.cycle_3v(&mut self);
     }
 }
 
@@ -122,11 +118,11 @@ pub struct BoardBuilder {
     pub delay: Option<SysDelay>,
 
     // pins groups
-    pub power_control: Option<Power>,
-    pub gpio: Option<DynamicGpio>,
-    pub internal_adc: Option<InternalAdc>,
-    pub rgb_led: Option<RgbLed>,
-    pub oscillator_control: Option<OscillatorControl>,
+    pub power_control: Option<PowerPins>,
+    pub gpio: Option<DynamicGpioPins>,
+    pub internal_adc: Option<InternalAdcPins>,
+    pub rgb_led: Option<RgbLedPin>,
+    pub oscillator_control: Option<OscillatorControlPins>,
 
     // board features
     pub i2c1: Option<BoardI2c1>,
@@ -160,7 +156,7 @@ impl BoardBuilder {
         }
     }
 
-    fn setup_clocks( oscillator_control: &mut OscillatorControl, cfgr: CFGR, flash_acr: &mut ACR ) -> Clocks {
+    fn setup_clocks( oscillator_control: &mut OscillatorControlPins, cfgr: CFGR, flash_acr: &mut ACR ) -> Clocks {
         oscillator_control.enable_hse.set_high();
 
         // Freeze the configuration of all the clocks in the system
@@ -168,7 +164,8 @@ impl BoardBuilder {
         let clocks = cfgr
             .use_hse(8.MHz())
             .sysclk(48.MHz())
-            .pclk1(24.MHz()) // was 24, set to 6 following i2c code
+            .pclk1(24.MHz()) 
+            .adcclk(14.MHz())
             .freeze(flash_acr);
 
         assert!(clocks.usbclk_valid());
@@ -176,7 +173,7 @@ impl BoardBuilder {
         clocks
     }
 
-    fn setup_serial(pins: pin_groups::Serial, cr: &mut GpioCr, mapr: &mut MAPR, usart: USART2, clocks: &Clocks) {
+    fn setup_serial(pins: pin_groups::SerialPins, cr: &mut GpioCr, mapr: &mut MAPR, usart: USART2, clocks: &Clocks) {
         // rprintln!("initializing serial");
 
         let mut serial = Hal_Serial::new(
@@ -203,7 +200,7 @@ impl BoardBuilder {
 
     }
 
-    fn setup_usb(pins: pin_groups::Usb, cr: &mut GpioCr, usb: USB, clocks: &Clocks) {
+    fn setup_usb(pins: pin_groups::UsbPins, cr: &mut GpioCr, usb: USB, clocks: &Clocks) {
         // USB Serial
         let mut usb_dp = pins.usb_dp; // take ownership
         usb_dp.make_push_pull_output(&mut cr.gpioa_crh);
@@ -243,7 +240,7 @@ impl BoardBuilder {
         }
     }
 
-    pub fn setup_i2c1(pins: pin_groups::I2c1, cr: &mut GpioCr, i2c1: I2C1, mapr: &mut MAPR,  clocks: &Clocks) -> BoardI2c1 {
+    pub fn setup_i2c1(pins: pin_groups::I2c1Pins, cr: &mut GpioCr, i2c1: I2C1, mapr: &mut MAPR,  clocks: &Clocks) -> BoardI2c1 {
         let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
         let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
         BlockingI2c::i2c1(
@@ -262,7 +259,7 @@ impl BoardBuilder {
     }
 
 
-    pub fn setup_i2c2(pins: pin_groups::I2c2, cr: &mut GpioCr, i2c2: I2C2, clocks: &Clocks) -> BoardI2c2 {
+    pub fn setup_i2c2(pins: pin_groups::I2c2Pins, cr: &mut GpioCr, i2c2: I2C2, clocks: &Clocks) -> BoardI2c2 {
 
         let scl2 = pins
             .i2c2_scl
@@ -335,9 +332,21 @@ impl BoardBuilder {
         self.i2c2 = Some(i2c2);
         rprintln!("set up i2c2");
 
+        // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
+        // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
+
+        // build the internal adc
+        // let internal_adc = InternalAdc.new()
+        // device_peripherals.ADC1.sr;
+        device_peripherals.ADC1.cr2;
+
+        // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
 
 
-        // // I2C1::disable(rcc);
+        // we can unsafely .steal on device peripherals to get rcc again
+        // unsafe {
+        // let rcc_block = pac::Peripherals::steal().RCC;
+        // I2C1::disable(rcc_block);
         // // delay.delay_ms(50_u16);
         // // I2C1::enable(rcc);
         // // delay.delay_ms(50_u16);

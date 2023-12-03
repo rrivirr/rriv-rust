@@ -2,7 +2,8 @@ use stm32f1xx_hal::{gpio::*, afio::MAPR};
 use crate::pins::*;
 
 
-pub struct InternalAdc {
+pub struct InternalAdcPins {
+    pub enable_avdd: Pin<'A', 1, Output>,
     pub channel1: Pin<'A', 0, Input>,
     pub channel2: Pin<'C', 3, Input>,
     pub channel3: Pin<'C', 2, Input>,
@@ -10,8 +11,9 @@ pub struct InternalAdc {
     pub channel5: Pin<'C', 0, Input>,
 }
 
-impl InternalAdc {
+impl InternalAdcPins {
     pub fn build(
+        enable_avdd: Pin<'A', 1>,
         channel1: Pin<'A', 0>,
         channel2: Pin<'C', 3>,
         channel3: Pin<'C', 2>,
@@ -19,7 +21,8 @@ impl InternalAdc {
         channel5: Pin<'C', 0>,
         cr: &mut GpioCr,
     ) -> Self {
-        return InternalAdc {
+        return InternalAdcPins {
+            enable_avdd: enable_avdd.into_push_pull_output(&mut cr.gpioa_crl),
             channel1: channel1.into_floating_input(&mut cr.gpioa_crl),
             channel2: channel2.into_floating_input(&mut cr.gpioc_crl),
             channel3: channel3.into_floating_input(&mut cr.gpioc_crl),

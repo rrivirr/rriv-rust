@@ -1,7 +1,7 @@
 use stm32f1xx_hal::{gpio::*, afio::MAPR};
 use crate::pins::*;
 
-pub struct DynamicGpio {
+pub struct DynamicGpioPins {
     pub gpio1: Pin<'B', 8, Dynamic>,
     pub gpio2: Pin<'B', 5, Dynamic>,
     pub gpio3: Pin<'B', 4, Dynamic>,
@@ -12,7 +12,7 @@ pub struct DynamicGpio {
     pub gpio8: Pin<'C', 10, Dynamic>,
 }
 
-impl DynamicGpio {
+impl DynamicGpioPins {
     pub fn build(
         gpio1: Pin<'B', 8>,
         gpio2: Pin<'B', 5>,
@@ -24,7 +24,7 @@ impl DynamicGpio {
         gpio8: Pin<'C', 10>,
         cr: &mut GpioCr,
     ) -> Self {
-        return DynamicGpio {
+        return DynamicGpioPins {
             gpio1: gpio1.into_dynamic(&mut cr.gpiob_crh),
             gpio2: gpio2.into_dynamic(&mut cr.gpiob_crl),
             gpio3: gpio3.into_dynamic(&mut cr.gpiob_crl),
