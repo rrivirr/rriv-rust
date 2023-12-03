@@ -27,8 +27,6 @@ pub fn write_bytes_to_eeprom(board: &mut crate::Board, start_address: u8, bytes:
         let bytes_to_send = [address, *byte];
         match board
             .i2c1
-            .as_mut()
-            .unwrap()
             .write(EEPROM_I2C_ADDRESS, &bytes_to_send)
         {
             Ok(_) => {
@@ -44,13 +42,12 @@ pub fn write_bytes_to_eeprom(board: &mut crate::Board, start_address: u8, bytes:
 }
 
 pub fn read_bytes_from_eeprom(board: &mut crate::Board, start_address: u8, buffer: &mut [u8]) {
-    if let Some(i2c) = &mut board.i2c1 {
         let mut i: usize = 0;
 
         while i < buffer.len() {
             let mut b: [u8; 1] = [254];
             let message = [start_address + i as u8];
-            match i2c.write_read(EEPROM_I2C_ADDRESS, &message, &mut b) {
+            match board.i2c1.write_read(EEPROM_I2C_ADDRESS, &message, &mut b) {
                 Ok(_) => {
                     // rprint!("read {} address {}\n", b[0], message[0]);
                     buffer[i] = b[0];
@@ -63,7 +60,7 @@ pub fn read_bytes_from_eeprom(board: &mut crate::Board, start_address: u8, buffe
             }
             i = i + 1;
         }
-    }
+    
 }
 
 pub fn write_datalogger_settings_to_eeprom(

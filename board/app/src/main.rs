@@ -12,10 +12,10 @@ use rtt_target::rtt_init_print;
 pub mod prelude;
 
 extern crate rriv_board;
-use rriv_board::RRIVBoard;
+use rriv_board::{RRIVBoard,RRIVBoardBuilder};
 
 extern crate rriv_board_0_4_2;
-use rriv_board_0_4_2::Board;
+use rriv_board_0_4_2::{Board,BoardBuilder};
 
 extern crate datalogger;
 use datalogger::DataLogger;
@@ -30,8 +30,7 @@ fn main() -> ! {
     rtt_init_print!();
     prelude::init();
 
-    let mut board = Board::new();
-    board.setup();
+    let mut board = rriv_board_0_4_2::build();
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
     loop {

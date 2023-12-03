@@ -1,0 +1,22 @@
+use stm32f1xx_hal::{gpio::*, afio::MAPR};
+use crate::pins::*;
+
+pub struct Serial {
+  pub tx: Pin<'A', 2, Alternate>,
+  pub rx: Pin<'A', 3>,
+}
+
+impl Serial {
+  pub fn build(
+    tx: Pin<'A', 2>,
+    rx: Pin<'A', 3>,
+    cr: &mut GpioCr
+  ) -> Self {
+
+    return Serial {
+      tx: tx.into_alternate_push_pull(&mut cr.gpioa_crl), // USART2,
+      rx: rx,
+    }
+  }
+
+}

@@ -4,8 +4,9 @@ extern crate alloc;
 extern crate panic_halt;
 
 use alloc::boxed::Box;
-use cortex_m::interrupt::enable;
-use stm32f1xx_hal::pac::can1::tx;
+use embedded_hal::digital::v2::OutputPin;
+use stm32f1xx_hal::afio::MAPR;
+use stm32f1xx_hal::flash::ACR;
 use core::borrow::BorrowMut;
 use core::default;
 use core::fmt::Write;
@@ -19,41 +20,44 @@ use core::{
     option::{Option, Option::*},
     result::Result::*,
 };
+use cortex_m::interrupt::{enable, free};
 use cortex_m::peripheral::DWT;
+use cortex_m::Peripherals;
 use cortex_m::{
     asm::{delay, dmb, dsb},
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
 use embedded_hal::blocking::i2c;
-use stm32f1xx_hal::gpio::{Alternate, Pin, gpioa};
+use stm32f1xx_hal::gpio::{gpioa, Alternate, Pin};
 use stm32f1xx_hal::i2c::I2c;
-use stm32f1xx_hal::pac::{I2C1, I2C2, RCC};
+use stm32f1xx_hal::pac::can1::tx;
+use stm32f1xx_hal::pac::{I2C1, I2C2, RCC, USART2, USB};
 
 use rtt_target::rprintln;
+use stm32f1xx_hal::rcc::{BusClock, Clocks, Enable, Reset, CFGR};
 use stm32f1xx_hal::{
     gpio::{self, OpenDrain, Output, PinState},
-    i2c::{BlockingI2c, DutyCycle, Mode, Instance},
+    i2c::{BlockingI2c, DutyCycle, Instance, Mode},
     pac,
     pac::interrupt,
     prelude::*,
     serial::{Config, Rx, Serial as Hal_Serial, Tx},
     timer::delay::*,
 };
-use stm32f1xx_hal::rcc::{BusClock, Clocks, Enable, Reset};
-
 
 use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
-use rriv_board::{RRIVBoard, RXProcessor};
+use rriv_board::{RRIVBoard, RRIVBoardBuilder, RXProcessor};
 
 mod eeprom;
 mod pins;
-use pins::{Pins, PowerControl, GPIO, InternalAdc, RgbLed, OscillatorControl};
+use pins::{Pins, GpioCr};
 
-use crate::pins::{GpioRaw, FreedDebugPins};
+mod pin_groups;
+use pin_groups::*;
 
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
@@ -71,145 +75,114 @@ pub struct Serial {
     tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
 }
 
-        // // Set up pins
-        // let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl); // USART2
-        // let rx_pin = gpioa.pa3; // USART2
-        // let scl = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl); // i2c
-        // let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl); // i2c
-        // let mut switched_pow = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-        // let mut hse_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh); 
-        
+// // Set up pins
+// let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl); // USART2
+// let rx_pin = gpioa.pa3; // USART2
+// let scl = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl); // i2c
+// let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl); // i2c
+// let mut switched_pow = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
+// let mut hse_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
 
 // type aliases to make things tenable
-type BoardI2c1 = BlockingI2c<
-    I2C1,
-    (
-        Pin<'B', 6, Alternate<OpenDrain>>,
-        Pin<'B', 7, Alternate<OpenDrain>>,
-    ),
->;
+type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
+
+type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
-    pub i2c1: Option<BoardI2c1>,
-    pub i2c2: Option<BoardI2c>,
-
-    pub delay: Option<SysDelay>,
-
-    pub power_control: Option<PowerControl>,
-    pub gpio: Option<GPIO>,
-    pub internal_adc: Option<InternalAdc>,
-    pub rgb_led: Option<RgbLed>,
-    pub oscillator_control: Option<OscillatorControl>
+    pub delay: SysDelay,
+    pub power_control: Power,
+    pub gpio: DynamicGpio, //DynamicGpio ??
+    pub internal_adc: InternalAdc,
+    pub rgb_led: RgbLed,
+    pub oscillator_control: OscillatorControl,
+    pub i2c1: BoardI2c1,
+    pub i2c2: BoardI2c2,
 }
 
 impl Board {
-    pub fn new() -> Self {
-        Board {
-            i2c1: None, 
-            delay: None, 
-            power_control: None,
-            gpio: None,
-            internal_adc: None,
-            rgb_led: None,
-            oscillator_control: None
-        }
+    pub fn start(&mut self) {
+        let pc = &mut self.power_control;
+        let s = &mut pc.enable_3v;
+        s.set_high();
+        let delay_ref = &mut self.delay;
+        delay_ref.delay_ms(250_u16);
+        s.set_low();
+        delay_ref.delay_ms(250_u16);
+        s.set_high();
+        delay_ref.delay_ms(250_u16);
+        s.set_low();
+        delay_ref.delay_ms(250_u16);
     }
 }
 
 
-impl RRIVBoard for Board {
-    fn setup(&mut self) {
-        rprintln!("board new");
+pub struct BoardBuilder {
 
-        let mut core_peripherals = cortex_m::Peripherals::take().unwrap();
+    // chip features
+    pub delay: Option<SysDelay>,
 
-        // Get access to the device specific peripherals from the peripheral access crate
-        let device_peripherals = pac::Peripherals::take().unwrap();
-        // rprintln!("{:?}",device_peripherals.RCC.apb2enr); //.i2c1en();  //enabled();
+    // pins groups
+    pub power_control: Option<Power>,
+    pub gpio: Option<DynamicGpio>,
+    pub internal_adc: Option<InternalAdc>,
+    pub rgb_led: Option<RgbLed>,
+    pub oscillator_control: Option<OscillatorControl>,
 
-        // Take ownership over the raw flash and rcc devices and convert them into the corresponding
-        // HAL structs
-        let mut flash = device_peripherals.FLASH.constrain();
-        let rcc = device_peripherals.RCC.constrain();
-        let mut afio = device_peripherals.AFIO.constrain();     // Prepare the alternate function I/O registers
+    // board features
+    pub i2c1: Option<BoardI2c1>,
+    pub i2c2: Option<BoardI2c2>,
+}
 
+impl BoardBuilder {
+    pub fn new() -> Self {
+        BoardBuilder {
+            i2c1: None,
+            i2c2: None,
+            delay: None,
+            power_control: None,
+            gpio: None,
+            internal_adc: None,
+            rgb_led: None,
+            oscillator_control: None,
+        }
+    }
 
-        // Prepare the GPIO
-        let mut gpioa = device_peripherals.GPIOA.split();
-        let mut gpiob = device_peripherals.GPIOB.split();
-        let mut gpioc = device_peripherals.GPIOC.split();
-        let mut gpiod = device_peripherals.GPIOD.split();
+    pub fn build(self) -> Board {
+        Board {
+            i2c1: self.i2c1.unwrap(),
+            i2c2: self.i2c2.unwrap(),
+            delay: self.delay.unwrap(),
+            power_control: self.power_control.unwrap(),
+            gpio: self.gpio.unwrap(),
+            internal_adc: self.internal_adc.unwrap(),
+            rgb_led: self.rgb_led.unwrap(),
+            oscillator_control: self.oscillator_control.unwrap(),
+        }
+    }
 
-        // afio::MAPR::disable_jtag(); ?? need this for PB3 ?
-        let debug_pins = afio.mapr.disable_jtag(
-            gpioa.pa15,
-            gpiob.pb3,
-            gpiob.pb4
-        );
-        let freed_debug_pins = FreedDebugPins::build(debug_pins);
-
-        // Set up pins
-        let mut gpio_raw = GpioRaw {gpioa, gpiob, gpioc, gpiod, freed_debug_pins};
-        let mut pins = Pins::build(gpio_raw);
-
-        self.power_control = Some(PowerControl::build(
-            pins.enable_3v, 
-            pins.enable_5v, 
-            pins.enable_vin_measure,
-            pins.enable_external_adc,
-            pins.enable_avdd,    
-            &mut gpio_raw
-        ));
-        
-        self.gpio = Some(GPIO::build(
-            pins.gpio1,
-            pins.gpio2,
-            pins.gpio3,
-            pins.gpio4,
-            pins.gpio5,
-            pins.gpio6,
-            pins.gpio7,
-            pins.gpio8,
-            &mut gpio_raw
-        ));
- 
-
-        // Turn on the HSE
+    fn setup_clocks( oscillator_control: &mut OscillatorControl, cfgr: CFGR, flash_acr: &mut ACR ) -> Clocks {
+        oscillator_control.enable_hse.set_high();
 
         // Freeze the configuration of all the clocks in the system
         // and store the frozen frequencies in `clocks`
-        let clocks = rcc
-            .cfgr
+        let clocks = cfgr
             .use_hse(8.MHz())
             .sysclk(48.MHz())
             .pclk1(24.MHz()) // was 24, set to 6 following i2c code
-            .freeze(&mut flash.acr);
+            .freeze(flash_acr);
 
         assert!(clocks.usbclk_valid());
 
-  
-        // Set up and initialize switched power bus
-        self.delay = Some(core_peripherals.SYST.delay(&clocks));
-        let s = &mut self.power_control.unwrap().enable_3v;
-        s.set_high();
-        self.delay_ms(250_u16);
-        s.set_low();
-        self.delay_ms(250_u16);
-        s.set_high();
-        self.delay_ms(250_u16);
-        s.set_low();
-        self.delay_ms(250_u16);
-    
+        clocks
+    }
 
-        // Init Serial
+    fn setup_serial(pins: pin_groups::Serial, cr: &mut GpioCr, mapr: &mut MAPR, usart: USART2, clocks: &Clocks) {
         // rprintln!("initializing serial");
-        let tx_pin = pins.tx.into_alternate_push_pull(&mut gpioa.crl); // USART2
-        let rx_pin = pins.rx; // USART2
 
         let mut serial = Hal_Serial::new(
-            device_peripherals.USART2,
-            (tx_pin, rx_pin),
-            &mut afio.mapr,
+            usart,
+            (pins.tx, pins.rx),
+            mapr,
             Config::default().baudrate(115200.bps()),
             &clocks,
         );
@@ -218,30 +191,30 @@ impl RRIVBoard for Board {
 
         serial.rx.listen();
 
-        let led = gpioa
-            .pa9
-            .into_open_drain_output_with_state(&mut gpioa.crh, PinState::Low);
         cortex_m::interrupt::free(|cs| {
             RX.borrow(cs).replace(Some(serial.rx));
             TX.borrow(cs).replace(Some(serial.tx));
-            WAKE_LED.borrow(cs).replace(Some(led));
+            // WAKE_LED.borrow(cs).replace(Some(led));
         });
         // rprintln!("unmasking USART2 interrupt");
         unsafe {
             NVIC::unmask(pac::Interrupt::USART2);
         }
 
+    }
 
+    fn setup_usb(pins: pin_groups::Usb, cr: &mut GpioCr, usb: USB, clocks: &Clocks) {
         // USB Serial
-        let mut usb_dp = gpioa.pa12.into_push_pull_output(&mut gpioa.crh);
+        let mut usb_dp = pins.usb_dp; // take ownership
+        usb_dp.make_push_pull_output(&mut cr.gpioa_crh);
         usb_dp.set_low();
         delay(clocks.sysclk().raw() / 100);
 
-        let usb_dm = gpioa.pa11;
-        let usb_dp = usb_dp.into_floating_input(&mut gpioa.crh);
+        let usb_dm = pins.usb_dm;
+        let usb_dp = usb_dp.into_floating_input(&mut cr.gpioa_crh);
 
         let usb = Peripheral {
-            usb: device_peripherals.USB,
+            usb: usb,
             pin_dm: usb_dm,
             pin_dp: usb_dp,
         };
@@ -268,81 +241,131 @@ impl RRIVBoard for Board {
             NVIC::unmask(pac::Interrupt::USB_HP_CAN_TX);
             NVIC::unmask(pac::Interrupt::USB_LP_CAN_RX0);
         }
+    }
 
-
-
-        rprintln!("starting i2c");
-        core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
-
-
-        let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut gpiob.crl); // i2c
-        let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut gpiob.crl); // i2c
-        self.i2c1 = Some(BlockingI2c::i2c1(
-            device_peripherals.I2C1,
+    pub fn setup_i2c1(pins: pin_groups::I2c1, cr: &mut GpioCr, i2c1: I2C1, mapr: &mut MAPR,  clocks: &Clocks) -> BoardI2c1 {
+        let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
+        let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
+        BlockingI2c::i2c1(
+            i2c1,
             (scl1, sda1),
-            &mut afio.mapr,
+            mapr,
             Mode::Standard {
                 frequency: 100.kHz(), // slower to same some energy?
             },
-            // Mode::Fast {s
-            //     frequency: 400.kHz(),
-            //     duty_cycle: DutyCycle::Ratio16to9,
-            // },
-            clocks,
+            *clocks,
             1000,
             10,
             1000,
             1000,
-        ));
-        rprintln!("started i2c");
+        ) 
+    }
 
 
-        let scl2 = pins.i2c2_scl.into_alternate_open_drain(&mut gpiob.crh); // i2c
-        let sda2 = pins.i2c2_sda.into_alternate_open_drain(&mut gpiob.crh); // i2c
-        self.i2c2 = Some(BlockingI2c::i2c2(
-            device_peripherals.I2C2,
+    pub fn setup_i2c2(pins: pin_groups::I2c2, cr: &mut GpioCr, i2c2: I2C2, clocks: &Clocks) -> BoardI2c2 {
+
+        let scl2 = pins
+            .i2c2_scl
+            .into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
+        let sda2 = pins
+            .i2c2_sda
+            .into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
+        BlockingI2c::i2c2(
+            i2c2,
             (scl2, sda2),
-            &mut afio.mapr,
             Mode::Standard {
                 frequency: 100.kHz(), // slower to same some energy?
             },
-            // Mode::Fast {
-            //     frequency: 400.kHz(),
-            //     duty_cycle: DutyCycle::Ratio16to9,
-            // },
-            clocks,
+            *clocks,
             1000,
             10,
             1000,
             1000,
-        ));
-        rprintln!("started i2c");
+        )
+    }
+     
+    fn setup(mut self) -> Self {
+        rprintln!("board new");
 
-        // I2C1::disable(rcc);
-        // delay.delay_ms(50_u16);
-        // I2C1::enable(rcc);
-        // delay.delay_ms(50_u16);
-        // I2C1::reset(rcc);
-        // delay.delay_ms(50_u16);
+        let mut core_peripherals = cortex_m::Peripherals::take().unwrap();
+        let device_peripherals = pac::Peripherals::take().unwrap();
 
+        // mcu device registers
+        let rcc = device_peripherals.RCC.constrain();
+        let mut flash = device_peripherals.FLASH.constrain();
+        let mut afio = device_peripherals.AFIO.constrain(); // Prepare the alternate function I/O registers
+
+
+
+        // Prepare the GPIO
+        let gpioa = device_peripherals.GPIOA.split();
+        let gpiob = device_peripherals.GPIOB.split();
+        let gpioc = device_peripherals.GPIOC.split();
+        let gpiod = device_peripherals.GPIOD.split();
+
+        // Set up pins
+        let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
+        let (
+            external_adc_pins,
+            internal_adc_pins,
+            battery_level_pins,
+            dynamic_gpio_pins,
+            i2c1_pins,
+            i2c2_pins,
+            oscillator_control_pins,
+            power_pins,
+            rgb_led_pinsS,
+            serial_pins,
+            usb_pins
+        ) = pin_groups::build(pins, &mut gpio_cr);
+  
+
+        let clocks = BoardBuilder::setup_clocks(&mut self.oscillator_control.as_mut().unwrap(), rcc.cfgr, &mut flash.acr);
+        self.delay = Some(core_peripherals.SYST.delay(&clocks));
+        BoardBuilder::setup_serial(serial_pins, &mut gpio_cr, &mut afio.mapr, device_peripherals.USART2, &clocks);
+        BoardBuilder::setup_usb(usb_pins, &mut gpio_cr,  device_peripherals.USB, &clocks);
+
+        // rprintln!("starting i2c");
+        core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
+        let i2c1 = BoardBuilder::setup_i2c1(i2c1_pins, &mut gpio_cr, device_peripherals.I2C1, &mut afio.mapr, &clocks);
+        self.i2c1 = Some(i2c1);
+        rprintln!("set up i2c1");
+
+        let i2c2 = BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
+        self.i2c2 = Some(i2c2);
+        rprintln!("set up i2c2");
+
+
+
+        // // I2C1::disable(rcc);
+        // // delay.delay_ms(50_u16);
+        // // I2C1::enable(rcc);
+        // // delay.delay_ms(50_u16);
+        // // I2C1::reset(rcc);
+        // // delay.delay_ms(50_u16);
 
         rprintln!("Start i2c scanning...");
         rprintln!();
 
-        for addr in 0x00_u8..0x7F {
-            // Write the empty array and check the slave response.
-            // rprintln!("trying {:02x}", addr);
-            let mut buf = [b'\0'; 1];
-            if let Some(i2c) = &mut self.i2c1 {
-                if i2c.read(addr, &mut buf).is_ok() {
-                    rprintln!("{:02x} good", addr);
-                }
-            }
-            self.delay_ms(10_u16);
-        }
-        rprintln!("scan is done")
-    }
+        // for addr in 0x00_u8..0x7F {
+        //     // Write the empty array and check the slave response.
+        //     // rprintln!("trying {:02x}", addr);
+        //     let mut buf = [b'\0'; 1];
+        //     if let Some(i2c) = &mut self.i2c1 {
+        //         if i2c.read(addr, &mut buf).is_ok() {
+        //             rprintln!("{:02x} good", addr);
+        //         }
+        //     }
+        //     self.delay.as_ref().unwrap().delay_ms(10_u16);
+        // }
+        // rprintln!("scan is done");
 
+        self
+
+    }
+}
+
+impl RRIVBoard for Board {
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
         cortex_m::interrupt::free(|cs| {
             let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
@@ -390,9 +413,7 @@ impl RRIVBoard for Board {
     }
 
     fn delay_ms(&mut self, ms: u16) {
-        if let Some(delay) = &mut self.delay {
-            delay.delay_ms(ms);
-        }
+        self.delay.delay_ms(ms);
     }
 }
 
@@ -467,4 +488,11 @@ fn usb_interrupt(cs: &CriticalSection) {
         }
         _ => {}
     }
+}
+
+pub fn build() -> Board {
+    let mut board_builder = BoardBuilder::new();
+    board_builder = board_builder.setup();
+    let board = board_builder.build();
+    board
 }
