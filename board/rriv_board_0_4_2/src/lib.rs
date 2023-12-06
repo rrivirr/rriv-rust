@@ -107,9 +107,11 @@ pub struct Board {
 
 impl Board {
     pub fn start(&mut self) {
-       self.power_control.cycle_3v(&mut self);
+        let power_control = &mut self.power_control;
+        power_control.cycle_3v(&mut self.delay);
     }
 }
+
 
 
 pub struct BoardBuilder {
@@ -336,9 +338,12 @@ impl BoardBuilder {
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
 
         // build the internal adc
+        let internal_adc_configuration = InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
+        self.internal_adc = Some(internal_adc_configuration.enable(&clocks));
+        
         // let internal_adc = InternalAdc.new()
         // device_peripherals.ADC1.sr;
-        device_peripherals.ADC1.cr2;
+        // device_peripherals.ADC1.cr2;
 
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
 
