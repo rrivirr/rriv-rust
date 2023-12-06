@@ -55,10 +55,12 @@ impl InternalAdc {
         3 => adc.read(&mut self.pins.channel3),
         4 => adc.read(&mut self.pins.channel4),
         5 => adc.read(&mut self.pins.channel5),
-      }
+      };
+
       match res {
 
-      } 
+      };
+       
     } else {
       return 0;
     }
