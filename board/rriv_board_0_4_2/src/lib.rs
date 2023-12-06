@@ -118,9 +118,9 @@ pub struct BoardBuilder {
     pub delay: Option<SysDelay>,
 
     // pins groups
-    pub power_control: Option<PowerPins>,
+    pub power_control: Option<Power>,
     pub gpio: Option<DynamicGpioPins>,
-    pub internal_adc: Option<InternalAdcPins>,
+    pub internal_adc: Option<InternalAdc>,
     pub rgb_led: Option<RgbLedPin>,
     pub oscillator_control: Option<OscillatorControlPins>,
 
