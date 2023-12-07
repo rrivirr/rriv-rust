@@ -1,12 +1,12 @@
 use crate::*;
 
-pub struct Power {
+pub struct PowerControl {
   pins: PowerPins
 }
 
-impl Power {
+impl PowerControl {
   pub fn new(pins: PowerPins) -> Self {
-    return Power {
+    return PowerControl {
       pins
     }
   }

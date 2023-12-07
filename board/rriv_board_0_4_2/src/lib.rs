@@ -59,11 +59,20 @@ use pins::{Pins, GpioCr};
 mod pin_groups;
 use pin_groups::*;
 
-mod power;
-use power::*;
+mod power_control;
+use power_control::*;
 
 mod internal_adc;
 use internal_adc::*;
+
+mod battery_level;
+use battery_level::*;
+
+mod rgb_led;
+use rgb_led::*;
+
+mod storage;
+use storage::*;
 
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
@@ -96,10 +105,11 @@ type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
     pub delay: SysDelay,
-    pub power_control: power::Power,
+    pub power_control: PowerControl,
     pub gpio: DynamicGpioPins, //DynamicGpio ??
     pub internal_adc: InternalAdc,
-    pub rgb_led: RgbLedPin,
+    pub battery_level: BatteryLevel,
+    pub rgb_led: RgbLed,
     pub oscillator_control: OscillatorControlPins,
     pub i2c1: BoardI2c1,
     pub i2c2: BoardI2c2,
@@ -112,6 +122,24 @@ impl Board {
     }
 }
 
+pub struct DelayUs<'a> {
+    delay: &'a  mut SysDelay
+}
+
+
+impl DelayUs<'_> {
+    pub fn new(delay: &mut SysDelay) -> Self {
+        {
+            delay
+        }
+    }
+}
+
+impl embedded_hal::blocking::delay::DelayUs<u8> for DelayUs<'_> {
+    fn delay_us(&mut self, us: u8) {
+        self.delay.delay_us(us);
+    }
+}
 
 
 pub struct BoardBuilder {
@@ -120,13 +148,14 @@ pub struct BoardBuilder {
     pub delay: Option<SysDelay>,
 
     // pins groups
-    pub power_control: Option<Power>,
     pub gpio: Option<DynamicGpioPins>,
-    pub internal_adc: Option<InternalAdc>,
-    pub rgb_led: Option<RgbLedPin>,
     pub oscillator_control: Option<OscillatorControlPins>,
 
     // board features
+    pub internal_adc: Option<InternalAdc>,
+    pub power_control: Option<PowerControl>,
+    pub battery_level: Option<BatteryLevel>,
+    pub rgb_led: Option<RgbLed>,
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
 }
@@ -137,9 +166,10 @@ impl BoardBuilder {
             i2c1: None,
             i2c2: None,
             delay: None,
-            power_control: None,
             gpio: None,
             internal_adc: None,
+            power_control: None,
+            battery_level: None,
             rgb_led: None,
             oscillator_control: None,
         }
@@ -153,6 +183,7 @@ impl BoardBuilder {
             power_control: self.power_control.unwrap(),
             gpio: self.gpio.unwrap(),
             internal_adc: self.internal_adc.unwrap(),
+            battery_level: self.battery_level.unwrap(),
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
         }
@@ -313,8 +344,9 @@ impl BoardBuilder {
             i2c2_pins,
             oscillator_control_pins,
             power_pins,
-            rgb_led_pinsS,
+            rgb_led_pins,
             serial_pins,
+            spi1_pins,
             usb_pins
         ) = pin_groups::build(pins, &mut gpio_cr);
   
@@ -337,14 +369,22 @@ impl BoardBuilder {
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
 
+        // build the power control
+        self.power_control = Some(PowerControl::new(power_pins));
+
         // build the internal adc
         let internal_adc_configuration = InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
-        self.internal_adc = Some(internal_adc_configuration.enable(&clocks));
-        
-        // let internal_adc = InternalAdc.new()
-        // device_peripherals.ADC1.sr;
-        // device_peripherals.ADC1.cr2;
+        let mut internal_adc = internal_adc_configuration.build(&clocks);
+        internal_adc.enable(& self.delay.unwrap());
+        self.internal_adc = Some(internal_adc);
 
+        self.rgb_led = Some(build_rgb_led(rgb_led_pins, device_peripherals.TIM1, &mut afio.mapr, &clocks));
+
+        let delay_share = DelayUs::new(&mut &self.delay);
+        storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, &self.delay.unwrap());
+
+        
+ 
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
 
 

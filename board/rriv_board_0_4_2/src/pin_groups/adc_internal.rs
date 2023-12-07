@@ -9,6 +9,8 @@ pub struct InternalAdcPins {
     pub channel3: Pin<'C', 2, Analog>,
     pub channel4: Pin<'C', 1, Analog>,
     pub channel5: Pin<'C', 0, Analog>,
+    pub vin_measure: Pin<'B', 0, Analog>,
+
 }
 
 impl InternalAdcPins {
@@ -19,6 +21,7 @@ impl InternalAdcPins {
         channel3: Pin<'C', 2>,
         channel4: Pin<'C', 1>,
         channel5: Pin<'C', 0>,
+        vin_measure: Pin<'B', 0>,
         cr: &mut GpioCr,
     ) -> Self {
         return InternalAdcPins {
@@ -28,6 +31,7 @@ impl InternalAdcPins {
             channel3: channel3.into_analog(&mut cr.gpioc_crl),
             channel4: channel4.into_analog(&mut cr.gpioc_crl),
             channel5: channel5.into_analog(&mut cr.gpioc_crl),
+            vin_measure: vin_measure.into_analog(&mut cr.gpiob_crl)
         };
     }
 }

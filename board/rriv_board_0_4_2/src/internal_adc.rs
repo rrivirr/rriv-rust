@@ -26,7 +26,7 @@ impl InternalAdcConfiguration {
     }
   }
 
-  pub fn enable(self, clocks: &Clocks) -> InternalAdc {
+  pub fn build(self, clocks: &Clocks) -> InternalAdc {
 
     let adc_device = self.adc_device;
     let adc = adc::Adc::adc1(adc_device, *clocks);
@@ -43,9 +43,18 @@ impl InternalAdc {
     }
   }
 
+  pub fn enable(&mut self, delay: &SysDelay) {
+    self.pins.enable_avdd.set_low();
+    delay.delay_ms(100_u16);
+  }
 
-  pub fn disable(self) -> InternalAdcConfiguration {
+  pub fn disable(&mut self){
+    self.pins.enable_avdd.set_high();
+  }
 
+
+  pub fn shutdown(mut self) -> InternalAdcConfiguration {
+    self.disable();
     let adc_device = self.adc.release();
     return InternalAdcConfiguration::new(self.pins, adc_device);
 
@@ -69,5 +78,17 @@ impl InternalAdc {
       }
    
   }
+
+  pub fn read_battery_level(&mut self) -> Result<u16, AdcError>  {
+    
+    let res = self.adc.read(&mut self.pins.vin_measure);
+    
+    match res {
+      Ok(value) => return Ok(value),
+      Err(error) =>  return Err(AdcError::NBError(error)), 
+    }
+    
+  }
+
 
 }

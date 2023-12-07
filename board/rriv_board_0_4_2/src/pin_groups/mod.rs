@@ -19,6 +19,8 @@ mod rgb_led;
 pub use rgb_led::*;
 mod serial;
 pub use serial::*;
+mod spi;
+pub use spi::*;
 mod usb;
 pub use usb::*;
 
@@ -34,8 +36,9 @@ pub fn build(
     I2c2Pins,
     OscillatorControlPins,
     PowerPins,
-    RgbLedPin,
+    RgbLedPins,
     SerialPins,
+    Spi1Pins,
     UsbPins,
 ) {
     let external_adc =
@@ -48,10 +51,11 @@ pub fn build(
         pins.internal_adc3,
         pins.internal_adc4,
         pins.internal_adc5,
+        pins.vin_measure,
         cr,
     );
 
-    let battery_level = BatteryLevelPins::build(pins.vin_measure, pins.enable_vin_measure, cr);
+    let battery_level = BatteryLevelPins::build(pins.enable_vin_measure, cr);
 
     let dynamic_gpio = DynamicGpioPins::build(
         pins.gpio1, pins.gpio2, pins.gpio3, pins.gpio4, pins.gpio5, pins.gpio6, pins.gpio7,
@@ -66,7 +70,7 @@ pub fn build(
 
     let power = PowerPins::build(pins.enable_3v, pins.enable_5v, cr);
 
-    let rgb_led = RgbLedPin::build(
+    let rgb_led = RgbLedPins::build(
         pins.rgb_red_and_wake_button,
         pins.rgb_green_and_spi2_chip_select,
         pins.rgb_blue,
@@ -74,6 +78,8 @@ pub fn build(
     );
 
     let serial = SerialPins::build(pins.tx, pins.rx, cr);
+
+    let spi1 = Spi1Pins::build(pins.spi1_sck, pins.spi1_miso, pins.spi1_mosi, pins.sd_card_chip_select, cr);
 
     let usb = UsbPins::build(pins.usb_p, pins.usb_n, cr);
 
@@ -88,6 +94,7 @@ pub fn build(
         power,
         rgb_led,
         serial,
+        spi1,
         usb,
     );
 }

@@ -51,8 +51,8 @@ pub struct Pins {
     pub rx: Pin<'A', 3>,
     pub external_adc_reset: Pin<'A', 4>,
     pub spi1_sck: Pin<'A', 5>,
-    pub spi1_mosi: Pin<'A', 6>,
-    pub spi1_miso: Pin<'A', 7>,
+    pub spi1_miso: Pin<'A', 6>,
+    pub spi1_mosi: Pin<'A', 7>,
     pub rgb_red_and_wake_button: Pin<'A', 8>, // multi-use pin
     pub rgb_green_and_spi2_chip_select: Pin<'A', 9>, // multi-use pin
     pub rgb_blue: Pin<'A', 10>,
@@ -134,8 +134,8 @@ impl Pins {
             rx: gpioa.pa3,
             external_adc_reset: gpioa.pa4,
             spi1_sck: gpioa.pa5,
-            spi1_mosi: gpioa.pa6,
-            spi1_miso: gpioa.pa7,
+            spi1_miso: gpioa.pa6,
+            spi1_mosi: gpioa.pa7,
             rgb_red_and_wake_button: gpioa.pa8,
             // wake_button: gpioa.pa8, // multi-use pin
             rgb_green_and_spi2_chip_select: gpioa.pa9,
