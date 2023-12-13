@@ -43,7 +43,7 @@ impl InternalAdc {
     }
   }
 
-  pub fn enable(&mut self, delay: &SysDelay) {
+  pub fn enable(&mut self, delay: &mut SysDelay) {
     self.pins.enable_avdd.set_low();
     delay.delay_ms(100_u16);
   }

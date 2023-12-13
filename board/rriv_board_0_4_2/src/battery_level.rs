@@ -11,7 +11,7 @@ impl BatteryLevel {
     }
   }
 
-  pub fn measure_battery_level(&self, adc: &InternalAdc, delay: &SysDelay) -> Result<u16, AdcError> {
+  pub fn measure_battery_level(&mut self, adc: &mut InternalAdc, delay: &mut SysDelay) -> Result<u16, AdcError> {
 
     self.pins.enable_vin_measure.set_low();
     delay.delay_ms(1000_u16);

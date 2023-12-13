@@ -56,20 +56,22 @@ impl RgbLed {
 
   }
 
-  pub fn test_colors_loop(&mut self, delay: & SysDelay) {
+  const FACTOR:u8 = 2;
+
+
+  pub fn test_colors_loop(&mut self, delay: &mut SysDelay) {
 
     let mut blue = 0;
     let mut red = 100;
     let mut green = 200;
-    let factor = 2;
 
     loop {
 
       self.set_color(red, green, blue);
 
-      blue = (blue + 1*factor) % 256;
-      red = (red + 2*factor) % 256;
-      green = (green + 3*factor) % 256;
+      blue = blue + 1*Self::FACTOR;
+      red = red + 2*Self::FACTOR;
+      green = green + 3*Self::FACTOR;
       delay.delay_ms(50_u16);
 
     }

@@ -2,8 +2,8 @@ use stm32f1xx_hal::{gpio::*, afio::MAPR};
 use crate::pins::*;
 
 pub struct ExternalAdcPins {
-  enable: Pin<'C', 6, Output>,
-  reset: Pin<'A', 4, Output>,
+  pub enable: Pin<'C', 6, Output>,
+  pub reset: Pin<'A', 4, Output>,
 }
 
 impl ExternalAdcPins {

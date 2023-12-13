@@ -74,6 +74,12 @@ use rgb_led::*;
 mod storage;
 use storage::*;
 
+mod oscillator_control;
+use oscillator_control::*;
+
+mod external_adc;
+use external_adc::*;
+
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
 static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
@@ -108,9 +114,10 @@ pub struct Board {
     pub power_control: PowerControl,
     pub gpio: DynamicGpioPins, //DynamicGpio ??
     pub internal_adc: InternalAdc,
+    pub external_adc: ExternalAdc,
     pub battery_level: BatteryLevel,
     pub rgb_led: RgbLed,
-    pub oscillator_control: OscillatorControlPins,
+    pub oscillator_control: OscillatorControl,
     pub i2c1: BoardI2c1,
     pub i2c2: BoardI2c2,
 }
@@ -122,24 +129,14 @@ impl Board {
     }
 }
 
-pub struct DelayUs<'a> {
-    delay: &'a  mut SysDelay
-}
 
+// pub struct delay_2 {}
 
-impl DelayUs<'_> {
-    pub fn new(delay: &mut SysDelay) -> Self {
-        {
-            delay
-        }
-    }
-}
-
-impl embedded_hal::blocking::delay::DelayUs<u8> for DelayUs<'_> {
-    fn delay_us(&mut self, us: u8) {
-        self.delay.delay_us(us);
-    }
-}
+// impl embedded_hal::blocking::delay::DelayUs<u8> for delay_2 {
+//     fn delay_us(&mut self, us: u8) {
+//         todo!()
+//     }
+// }
 
 
 pub struct BoardBuilder {
@@ -149,11 +146,12 @@ pub struct BoardBuilder {
 
     // pins groups
     pub gpio: Option<DynamicGpioPins>,
-    pub oscillator_control: Option<OscillatorControlPins>,
 
     // board features
     pub internal_adc: Option<InternalAdc>,
+    pub external_adc: Option<ExternalAdc>,
     pub power_control: Option<PowerControl>,
+    pub oscillator_control: Option<OscillatorControl>,
     pub battery_level: Option<BatteryLevel>,
     pub rgb_led: Option<RgbLed>,
     pub i2c1: Option<BoardI2c1>,
@@ -168,6 +166,7 @@ impl BoardBuilder {
             delay: None,
             gpio: None,
             internal_adc: None,
+            external_adc: None,
             power_control: None,
             battery_level: None,
             rgb_led: None,
@@ -183,6 +182,7 @@ impl BoardBuilder {
             power_control: self.power_control.unwrap(),
             gpio: self.gpio.unwrap(),
             internal_adc: self.internal_adc.unwrap(),
+            external_adc: self.external_adc.unwrap(),
             battery_level: self.battery_level.unwrap(),
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
@@ -325,8 +325,6 @@ impl BoardBuilder {
         let mut flash = device_peripherals.FLASH.constrain();
         let mut afio = device_peripherals.AFIO.constrain(); // Prepare the alternate function I/O registers
 
-
-
         // Prepare the GPIO
         let gpioa = device_peripherals.GPIOA.split();
         let gpiob = device_peripherals.GPIOB.split();
@@ -342,7 +340,7 @@ impl BoardBuilder {
             dynamic_gpio_pins,
             i2c1_pins,
             i2c2_pins,
-            oscillator_control_pins,
+            mut oscillator_control_pins,
             power_pins,
             rgb_led_pins,
             serial_pins,
@@ -351,8 +349,9 @@ impl BoardBuilder {
         ) = pin_groups::build(pins, &mut gpio_cr);
   
 
-        let clocks = BoardBuilder::setup_clocks(&mut self.oscillator_control.as_mut().unwrap(), rcc.cfgr, &mut flash.acr);
-        self.delay = Some(core_peripherals.SYST.delay(&clocks));
+        let clocks = BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
+        let mut delay = core_peripherals.SYST.delay(&clocks);
+
         BoardBuilder::setup_serial(serial_pins, &mut gpio_cr, &mut afio.mapr, device_peripherals.USART2, &clocks);
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr,  device_peripherals.USB, &clocks);
 
@@ -371,17 +370,29 @@ impl BoardBuilder {
 
         // build the power control
         self.power_control = Some(PowerControl::new(power_pins));
+    
 
         // build the internal adc
         let internal_adc_configuration = InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
         let mut internal_adc = internal_adc_configuration.build(&clocks);
-        internal_adc.enable(& self.delay.unwrap());
+        internal_adc.enable(&mut delay); // this should happen in board, not here
         self.internal_adc = Some(internal_adc);
 
         self.rgb_led = Some(build_rgb_led(rgb_led_pins, device_peripherals.TIM1, &mut afio.mapr, &clocks));
+        
+        self.battery_level = Some(BatteryLevel::new(battery_level_pins));
+        
+        self.oscillator_control = Some(OscillatorControl::new(oscillator_control_pins));
 
-        let delay_share = DelayUs::new(&mut &self.delay);
-        storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, &self.delay.unwrap());
+        self.external_adc = Some(ExternalAdc::new(external_adc_pins));
+
+        self.gpio = Some(dynamic_gpio_pins);
+
+
+        // let delay2: SysDelay = core_peripherals.SYST.delay(&clocks); // doesn't work, because SYST has been consumed
+        // let mut core_peripherals_stolen = cortex_m::Peripherals::steal(); // could this be ok?
+        // we need to create our own delay object...
+        // storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, delay2); // delay2 needs implement the delay_us trait
 
         
  
