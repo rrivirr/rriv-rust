@@ -1,4 +1,6 @@
 #![cfg_attr(not(test), no_std)]
+#![feature(array_methods)]
+
 
 mod command_service;
 mod datalogger_commands;
@@ -55,7 +57,50 @@ impl DataloggerSettings {
             *settings
         }
     }
+
+    pub fn configure_defaults(&mut self) {
+        
+        if self.burst_repetitions == 0 || self.burst_repetitions > 20 {
+            self.burst_repetitions = 1;
+        }
+
+        if self.delay_between_bursts > 300{
+            self.delay_between_bursts = 0;
+        }
+
+        if self.interval > 60*24 {
+            self.interval = 15;
+        }
+
+        if self.start_up_delay > 60 {
+            self.start_up_delay = 0;
+        }
+
+        if !check_alphanumeric(&self.logger_name) {
+            self.logger_name.clone_from_slice("logger".as_bytes());
+        }
+
+        if !check_alphanumeric(&self.site_name) {
+            self.site_name.clone_from_slice("site".as_bytes());
+        }
+
+        if !check_alphanumeric(&self.deployment_identifier) {
+            self.deployment_identifier.clone_from_slice("site".as_bytes());
+        }
+   
+
+    }
 }
+
+pub fn check_alphanumeric( array: &[u8]) -> bool {
+    let checks = array.iter();
+    let checks = checks.map(|x| (*x as char).is_alphanumeric());
+    checks.fold(true,
+            |acc, check|
+             if !check || !acc {false} else {true}
+            )
+}
+
 
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     ::core::slice::from_raw_parts(
@@ -66,32 +111,30 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 
 pub struct DataLogger {
-    settings: DataloggerSettings
+    settings: DataloggerSettings,
+
+    debug_values: bool,  // serial out of values as they are read
+    log_raw_data: bool,  // both raw and summary data writting to storage
 }
 
 impl DataLogger {
     pub fn new() -> Self {
         DataLogger {
-            settings: DataloggerSettings::new()
+            settings: DataloggerSettings::new(),
+            debug_values: true,
+            log_raw_data: true,
         }
-    }
-
-    extern "C" fn test_exec(buf: *const i8) {
-        let cmd_str = unsafe { from_c_str(buf) };
-        rtt_target::rprintln!("command executed! {}", cmd_str);
-    }
-
-    extern "C" fn unknown_command(buf: *const i8) {
-        let cmd_str = unsafe { from_c_str(buf) };
-        rtt_target::rprintln!("unknown command or invalid json. {}", cmd_str);
     }
 
     fn retrieve_settings(&self, board: &mut impl RRIVBoard) -> DataloggerSettings {
         let mut bytes: [u8;EEPROM_DATALOGGER_SETTINGS_SIZE] = [b'\0'; EEPROM_DATALOGGER_SETTINGS_SIZE];
         board.retrieve_datalogger_settings(&mut bytes);
         rprintln!("retrieved {:?}", bytes);
-        return DataloggerSettings::new_from_bytes(& bytes);
-        // convert the bytes pack into a DataloggerSettings
+        let mut settings = DataloggerSettings::new_from_bytes(& bytes);         // convert the bytes pack into a DataloggerSettings
+
+        settings.configure_defaults();
+
+        settings
     }
 
     fn store_settings(&self, board: &mut impl RRIVBoard){
@@ -105,18 +148,25 @@ impl DataLogger {
 
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
 
-        self.settings = DataloggerSettings::new();
-        self.settings.deployment_identifier = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e',b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
-        self.settings.logger_name = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
-        rprintln!("attempting to store settings for test purposes");
-        self.store_settings(board);
-
+        // enable power to the eeprom and bring i2c online
+    
         rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
         rprintln!("retrieved settings {:?}", self.settings);
 
         // setup each service
         command_service::setup(board);
+
+
+        // self.settings = DataloggerSettings::new();
+        // self.settings.deployment_identifier = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e',b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
+        // self.settings.logger_name = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
+        // rprintln!("attempting to store settings for test purposes");
+        // self.store_settings(board);
+
+
+
+  
         // self.command_service
         //     .register_command("datalogger", "set", Self::test_exec);
         // self.command_service
@@ -169,13 +219,5 @@ impl DataLogger {
 
 }
 
-use core::{str, future::pending};
 
-unsafe fn from_c_str<'a>(ptr: *const i8) -> &'a str {
-    let mut len = 0;
-    while *ptr.offset(len) != 0 {
-        len += 1;
-    }
-    let slice = core::slice::from_raw_parts(ptr as *const u8, len as usize);
-    str::from_utf8_unchecked(slice)
-}
+
