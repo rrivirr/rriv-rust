@@ -52,33 +52,14 @@ use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use rriv_board::{RRIVBoard, RRIVBoardBuilder, RXProcessor};
 
-mod eeprom;
+mod components;
+use components::*;
 mod pins;
 use pins::{Pins, GpioCr};
 
 mod pin_groups;
 use pin_groups::*;
 
-mod power_control;
-use power_control::*;
-
-mod internal_adc;
-use internal_adc::*;
-
-mod battery_level;
-use battery_level::*;
-
-mod rgb_led;
-use rgb_led::*;
-
-mod storage;
-use storage::*;
-
-mod oscillator_control;
-use oscillator_control::*;
-
-mod external_adc;
-use external_adc::*;
 
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
@@ -96,23 +77,15 @@ pub struct Serial {
     tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
 }
 
-// // Set up pins
-// let tx_pin = gpioa.pa2.into_alternate_push_pull(&mut gpioa.crl); // USART2
-// let rx_pin = gpioa.pa3; // USART2
-// let scl = gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl); // i2c
-// let sda = gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl); // i2c
-// let mut switched_pow = gpioc.pc6.into_push_pull_output(&mut gpioc.crl);
-// let mut hse_pin = gpioc.pc13.into_push_pull_output(&mut gpioc.crh);
 
 // type aliases to make things tenable
 type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
-
 type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
     pub delay: SysDelay,
     pub power_control: PowerControl,
-    pub gpio: DynamicGpioPins, //DynamicGpio ??
+    pub gpio: DynamicGpioPins, 
     pub internal_adc: InternalAdc,
     pub external_adc: ExternalAdc,
     pub battery_level: BatteryLevel,
@@ -124,9 +97,143 @@ pub struct Board {
 
 impl Board {
     pub fn start(&mut self) {
-        let power_control = &mut self.power_control;
-        power_control.cycle_3v(&mut self.delay);
+        self.power_control.cycle_3v(&mut self.delay);
+
+        self.internal_adc.enable(&mut self.delay); 
     }
+}
+
+impl RRIVBoard for Board {
+    fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
+        cortex_m::interrupt::free(|cs| {
+            let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
+            *global_rx_binding = Some(processor);
+        });
+    }
+
+    fn critical_section<T, F>(&self, f: F) -> T
+    where
+        F: Fn() -> T,
+    {
+        cortex_m::interrupt::free(|cs| f())
+    }
+
+    fn serial_send(&self, string: &str) {
+        cortex_m::interrupt::free(|cs| {
+            // USART
+            let bytes = string.as_bytes();
+            for char in bytes.iter() {
+                let t = TX.borrow(cs);
+                if let Some(tx) = t.borrow_mut().deref_mut() {
+                    _ = nb::block!(tx.write(char.clone()));
+                }
+            }
+
+            // USB
+            let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
+            serial.write(string.as_bytes()).ok();
+        });
+    }
+
+    fn store_datalogger_settings(
+        &mut self,
+        bytes: &[u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
+    ) {
+        // who knows the eeprom bytes to use? - the board doeas
+        eeprom::write_datalogger_settings_to_eeprom(self, bytes);
+    }
+
+    fn retrieve_datalogger_settings(
+        &mut self,
+        buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
+    ) {
+        eeprom::read_datalogger_settings_from_eeprom(self, buffer);
+    }
+
+    fn delay_ms(&mut self, ms: u16) {
+        self.delay.delay_ms(ms);
+    }
+}
+
+#[interrupt]
+unsafe fn USART2() {
+    cortex_m::interrupt::free(|cs| {
+        if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
+            if rx.is_rx_not_empty() {
+                if let Ok(c) = nb::block!(rx.read()) {
+                    rprintln!("serial rx byte: {}", c);
+                    let r = RX_PROCESSOR.borrow(cs);
+
+                    if let Some(processor) = r.borrow_mut().deref_mut() {
+                        processor.process_character(c);
+                    }
+                    let t = TX.borrow(cs);
+                    if let Some(tx) = t.borrow_mut().deref_mut() {
+                        _ = nb::block!(tx.write(c.clone())); // need to make a blocking call to TX
+                    }
+                }
+                // use PA9 to flash RGB led
+                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                    if led.is_low() {
+                        led.set_high();
+                    } else {
+                        led.set_low();
+                    }
+                }
+            }
+        }
+    })
+}
+
+#[interrupt]
+fn USB_HP_CAN_TX() {
+    cortex_m::interrupt::free(|cs| {
+        dsb();
+        usb_interrupt(cs);
+        dmb();
+    });
+}
+
+#[interrupt]
+fn USB_LP_CAN_RX0() {
+    cortex_m::interrupt::free(|cs| {
+        dsb();
+        usb_interrupt(cs);
+        dmb();
+    });
+}
+
+fn usb_interrupt(cs: &CriticalSection) {
+    let usb_dev = unsafe { USB_DEVICE.as_mut().unwrap() };
+    let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
+
+    if !usb_dev.poll(&mut [serial]) {
+        return;
+    }
+
+    let mut buf = [0u8; 8];
+
+    match serial.read(&mut buf) {
+        Ok(count) if count > 0 => {
+            // Echo back in upper case
+            for c in buf[0..count].iter() {
+                let r = RX_PROCESSOR.borrow(cs);
+                if let Some(processor) = r.borrow_mut().deref_mut() {
+                    processor.process_character(c.clone());
+                }
+            }
+            serial.write(&buf[0..count]).ok();
+        }
+        _ => {}
+    }
+}
+
+pub fn build() -> Board {
+    let mut board_builder = BoardBuilder::new();
+    board_builder = board_builder.setup();
+    let board = board_builder.build();
+    // board.setup();
+    board
 }
 
 
@@ -375,7 +482,6 @@ impl BoardBuilder {
         // build the internal adc
         let internal_adc_configuration = InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
         let mut internal_adc = internal_adc_configuration.build(&clocks);
-        internal_adc.enable(&mut delay); // this should happen in board, not here
         self.internal_adc = Some(internal_adc);
 
         self.rgb_led = Some(build_rgb_led(rgb_led_pins, device_peripherals.TIM1, &mut afio.mapr, &clocks));
@@ -387,6 +493,8 @@ impl BoardBuilder {
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
 
         self.gpio = Some(dynamic_gpio_pins);
+
+        self.delay = Some(delay);
 
 
         // let delay2: SysDelay = core_peripherals.SYST.delay(&clocks); // doesn't work, because SYST has been consumed
@@ -430,134 +538,3 @@ impl BoardBuilder {
     }
 }
 
-impl RRIVBoard for Board {
-    fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
-        cortex_m::interrupt::free(|cs| {
-            let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
-            *global_rx_binding = Some(processor);
-        });
-    }
-
-    fn critical_section<T, F>(&self, f: F) -> T
-    where
-        F: Fn() -> T,
-    {
-        cortex_m::interrupt::free(|cs| f())
-    }
-
-    fn serial_send(&self, string: &str) {
-        cortex_m::interrupt::free(|cs| {
-            // USART
-            let bytes = string.as_bytes();
-            for char in bytes.iter() {
-                let t = TX.borrow(cs);
-                if let Some(tx) = t.borrow_mut().deref_mut() {
-                    _ = nb::block!(tx.write(char.clone()));
-                }
-            }
-
-            // USB
-            let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
-            serial.write(string.as_bytes()).ok();
-        });
-    }
-
-    fn store_datalogger_settings(
-        &mut self,
-        bytes: &[u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
-    ) {
-        // who knows the eeprom bytes to use? - the board doeas
-        eeprom::write_datalogger_settings_to_eeprom(self, bytes);
-    }
-
-    fn retrieve_datalogger_settings(
-        &mut self,
-        buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
-    ) {
-        eeprom::read_datalogger_settings_from_eeprom(self, buffer);
-    }
-
-    fn delay_ms(&mut self, ms: u16) {
-        self.delay.delay_ms(ms);
-    }
-}
-
-#[interrupt]
-unsafe fn USART2() {
-    cortex_m::interrupt::free(|cs| {
-        if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
-            if rx.is_rx_not_empty() {
-                if let Ok(c) = nb::block!(rx.read()) {
-                    rprintln!("serial rx byte: {}", c);
-                    let r = RX_PROCESSOR.borrow(cs);
-
-                    if let Some(processor) = r.borrow_mut().deref_mut() {
-                        processor.process_character(c);
-                    }
-                    let t = TX.borrow(cs);
-                    if let Some(tx) = t.borrow_mut().deref_mut() {
-                        _ = nb::block!(tx.write(c.clone())); // need to make a blocking call to TX
-                    }
-                }
-                // use PA9 to flash RGB led
-                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    if led.is_low() {
-                        led.set_high();
-                    } else {
-                        led.set_low();
-                    }
-                }
-            }
-        }
-    })
-}
-
-#[interrupt]
-fn USB_HP_CAN_TX() {
-    cortex_m::interrupt::free(|cs| {
-        dsb();
-        usb_interrupt(cs);
-        dmb();
-    });
-}
-
-#[interrupt]
-fn USB_LP_CAN_RX0() {
-    cortex_m::interrupt::free(|cs| {
-        dsb();
-        usb_interrupt(cs);
-        dmb();
-    });
-}
-
-fn usb_interrupt(cs: &CriticalSection) {
-    let usb_dev = unsafe { USB_DEVICE.as_mut().unwrap() };
-    let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
-
-    if !usb_dev.poll(&mut [serial]) {
-        return;
-    }
-
-    let mut buf = [0u8; 8];
-
-    match serial.read(&mut buf) {
-        Ok(count) if count > 0 => {
-            // Echo back in upper case
-            for c in buf[0..count].iter() {
-                let r = RX_PROCESSOR.borrow(cs);
-                if let Some(processor) = r.borrow_mut().deref_mut() {
-                    processor.process_character(c.clone());
-                }
-            }
-            serial.write(&buf[0..count]).ok();
-        }
-        _ => {}
-    }
-}
-
-pub fn build() -> Board {
-    let mut board_builder = BoardBuilder::new();
-    board_builder = board_builder.setup();
-    let board = board_builder.build();
-    board
-}
