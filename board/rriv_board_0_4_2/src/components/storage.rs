@@ -9,7 +9,7 @@ pub const MODE: Mode = Mode {
   polarity: Polarity::IdleHigh,
 };
 
-pub fn build(pins: Spi1Pins, spi: SPI1, mapr: &mut MAPR, clocks: Clocks, delay: SysDelay) {
+pub fn build(pins: Spi1Pins, spi: SPI1, mapr: &mut MAPR, clocks: Clocks, delay: DelayUs<TIM2>) {
   let spi = Spi::spi1(
     spi,
     (pins.sck, pins.miso, pins.mosi),
@@ -20,7 +20,7 @@ pub fn build(pins: Spi1Pins, spi: SPI1, mapr: &mut MAPR, clocks: Clocks, delay: 
   );
 
   let sdcard = embedded_sdmmc::SdCard::new(spi, pins.sd_card_chip_select, delay);
-
+  
 }
 
 type RrivSdCard = SdCard<Spi<SPI1, Spi1NoRemap, (Pin<'A', 5, Alternate>, Pin<'A', 6>, Pin<'A', 7, Alternate>), u8>, Pin<'C', 8, Output>, SysDelay>;

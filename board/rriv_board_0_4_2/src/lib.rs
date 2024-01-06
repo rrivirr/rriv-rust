@@ -32,7 +32,7 @@ use embedded_hal::blocking::i2c;
 use stm32f1xx_hal::gpio::{gpioa, Alternate, Pin};
 use stm32f1xx_hal::i2c::I2c;
 use stm32f1xx_hal::pac::can1::tx;
-use stm32f1xx_hal::pac::{I2C1, I2C2, RCC, USART2, USB};
+use stm32f1xx_hal::pac::{I2C1, I2C2, RCC, USART2, USB, TIM1, TIM2};
 
 use rtt_target::rprintln;
 use stm32f1xx_hal::rcc::{BusClock, Clocks, Enable, Reset, CFGR};
@@ -458,7 +458,7 @@ impl BoardBuilder {
 
         let clocks = BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
         let mut delay = core_peripherals.SYST.delay(&clocks);
-
+        
         BoardBuilder::setup_serial(serial_pins, &mut gpio_cr, &mut afio.mapr, device_peripherals.USART2, &clocks);
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr,  device_peripherals.USB, &clocks);
 
@@ -497,13 +497,8 @@ impl BoardBuilder {
         self.delay = Some(delay);
 
 
-        // let delay2: SysDelay = core_peripherals.SYST.delay(&clocks); // doesn't work, because SYST has been consumed
-        // let mut core_peripherals_stolen = cortex_m::Peripherals::steal(); // could this be ok?
-        // we need to create our own delay object...
-        // storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, delay2); // delay2 needs implement the delay_us trait
-
-        
- 
+        let delay2: DelayUs<TIM2> =device_peripherals.TIM2.delay(&clocks);
+        storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
 
 
