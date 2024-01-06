@@ -21,6 +21,8 @@ mod serial;
 pub use serial::*;
 mod spi;
 pub use spi::*;
+mod spi2;
+pub use spi2::*;
 mod usb;
 pub use usb::*;
 
@@ -39,6 +41,7 @@ pub fn build(
     RgbLedPins,
     SerialPins,
     Spi1Pins,
+    Spi2Pins,
     UsbPins,
 ) {
     let external_adc =
@@ -81,6 +84,8 @@ pub fn build(
 
     let spi1 = Spi1Pins::build(pins.spi1_sck, pins.spi1_miso, pins.spi1_mosi, pins.sd_card_chip_select, cr);
 
+    let spi2 = Spi2Pins::build(pins.spi2_sck, pins.spi2_miso, pins.spi2_mosi, cr);
+
     let usb = UsbPins::build(pins.usb_p, pins.usb_n, cr);
 
     return (
@@ -95,6 +100,7 @@ pub fn build(
         rgb_led,
         serial,
         spi1,
+        spi2,
         usb,
     );
 }

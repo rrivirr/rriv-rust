@@ -75,8 +75,8 @@ pub struct Pins {
     pub i2c2_sda: Pin<'B', 11>,
     pub enable_5v: Pin<'B', 12>,
     pub spi2_sck: Pin<'B', 13>,
-    pub spi2_mosi: Pin<'B', 14>,
-    pub spi2_miso: Pin<'B', 15>,
+    pub spi2_miso: Pin<'B', 14>,
+    pub spi2_mosi: Pin<'B', 15>,
 
     pub internal_adc5: Pin<'C', 0>,
     pub internal_adc4: Pin<'C', 1>,
@@ -156,8 +156,8 @@ impl Pins {
             i2c2_sda: gpiob.pb11,
             enable_5v: gpiob.pb12,
             spi2_sck: gpiob.pb13,
-            spi2_mosi: gpiob.pb14,
-            spi2_miso: gpiob.pb15,
+            spi2_miso: gpiob.pb14,
+            spi2_mosi: gpiob.pb15,
 
             internal_adc5: gpioc.pc0,
             internal_adc4: gpioc.pc1,

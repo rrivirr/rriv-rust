@@ -5,8 +5,10 @@ extern crate panic_halt;
 
 use alloc::boxed::Box;
 use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::spi::Polarity;
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
+use stm32f1xx_hal::spi::{Spi, Spi2NoRemap};
 use core::borrow::BorrowMut;
 use core::default;
 use core::fmt::Write;
@@ -452,6 +454,7 @@ impl BoardBuilder {
             rgb_led_pins,
             serial_pins,
             spi1_pins,
+            spi2_pins,
             usb_pins
         ) = pin_groups::build(pins, &mut gpio_cr);
   
@@ -500,6 +503,18 @@ impl BoardBuilder {
         let delay2: DelayUs<TIM2> =device_peripherals.TIM2.delay(&clocks);
         storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
+
+        // let spi_mode = Mode {
+        //     polarity: Polarity::IdleLow,
+        //     phase: Phase::CaptureOnFirstTransition,
+        // };
+        let spi2 = Spi::spi2(
+            device_peripherals.SPI2,
+            (spi2_pins.sck, spi2_pins.miso, spi2_pins.mosi),
+            MODE,
+            1.MHz(),
+            clocks,
+          );
 
 
         // we can unsafely .steal on device peripherals to get rcc again

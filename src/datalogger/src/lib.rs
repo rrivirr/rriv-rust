@@ -19,9 +19,9 @@ struct DataloggerSettings {
     site_name: [u8;8],
     deployment_timestamp: u64,
     interval: u16,
-    burst_repetitions: u16,
     start_up_delay: u16,
     delay_between_bursts: u16,
+    burst_repetitions: u8,
     mode: u8,
     // external_adc_enabled: u8:1, // how we we handle bitfields?
     // debug_includes_values: u8:1,
@@ -211,9 +211,40 @@ impl DataLogger {
     }
 
     pub fn update_datalogger_settings(&mut self, board: &mut impl RRIVBoard, set_command_payload: DataloggerSetCommandPayload) {
+        
+        if let Some(logger_name) = set_command_payload.logger_name {
+            match serde_json::from_value(logger_name) {
+                Ok(logger_name) => self.settings.logger_name = logger_name,
+                Err(_) => todo!(),
+            }
+        }
+
+        if let Some(site_name) = set_command_payload.site_name {
+            match serde_json::from_value(site_name) {
+                Ok(site_name) => self.settings.site_name = site_name,
+                Err(_) => todo!(),
+            }
+        }
+
+        if let Some(deployment_identifier) = set_command_payload.deployment_identifier {
+            match serde_json::from_value(deployment_identifier) {
+                Ok(deployment_identifier) => self.settings.deployment_identifier = deployment_identifier,
+                Err(_) => todo!(),
+            }
+        }
+
         if let Some(interval) = set_command_payload.interval {
             self.settings.interval = interval;
         }
+
+        if let Some(burst_repetitions) = set_command_payload.burst_repetitions {
+            self.settings.burst_repetitions = burst_repetitions;
+        }
+
+        if let Some(start_up_delay) = set_command_payload.start_up_delay {
+            self.settings.start_up_delay = start_up_delay;
+        }
+
         self.store_settings(board)
     }
 
