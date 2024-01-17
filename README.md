@@ -11,6 +11,7 @@ You will need to install the Rust toolchain. The easiest way to do this is with 
 You will need the nightly toolchain since Rust on embedded needs unstable features. You will also need to install the `thumbv7m-none-eabi` target to build for the STM32F103RB.
 ```zsh
 rustup toolchain install nightly
+rustup default nightly
 rustup target add thumbv7m-none-eabi
 ```
 
