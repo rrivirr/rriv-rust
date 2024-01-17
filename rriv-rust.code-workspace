@@ -5,9 +5,6 @@
 		},
 		{
 			"path": "src"
-		},
-		{
-			"path": "test"
 		}
 	],
 	"settings": {
