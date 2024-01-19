@@ -44,6 +44,49 @@
                 }
             },
             "consoleLogLevel": "Console", //Info, Debug
+        },
+        {
+            "type": "probe-rs-debug",
+            "preLaunchTask": "RRIV: Build App Binary Crate",
+            "request": "launch",
+            "name": "Run Only",
+            "cwd": "${workspaceFolder}",
+            "chip": "STM32F103RE",
+            "wireProtocol": "Swd",
+ //           "probe": "1366:0101:000801023227", // Modify to match yours if needed, or keep commented
+            "flashingConfig": {
+                "flashingEnabled": false,
+                "resetAfterFlashing": false,
+                "haltAfterReset": false
+            },
+            "coreConfigs": [
+                {
+                    "programBinary": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/app",
+                    "svdFile": "${workspaceFolder}/STM32F103xx.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            "dataFormat": "String", // Format RTT data as String data
+                            "showTimestamps": true // Include host-side timestamps for every line of data transferred from the target RTT output
+                        },
+                        {
+                            "channelNumber": 1,
+                            "dataFormat": "BinaryLE" // Treat data as raw binary data, and do not format in any way
+                        }
+                    ]
+                }
+            ],
+            "env": {
+                "RUST_LOG": "trace", // If you set this variable, check the VSCode console log window for the location of the log file.
+            },
+            "linux": {
+                "env": { 
+                    "PATH": "/home/zaven/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/zaven/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin",
+                    
+                }
+            },
+            "consoleLogLevel": "Console", //Info, Debug
         }
     ],
 }

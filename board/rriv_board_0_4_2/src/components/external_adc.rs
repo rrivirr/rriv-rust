@@ -35,7 +35,7 @@ impl ExternalAdc {
 
   }
 
-  pub fn shutdown(&mut self, delay: &mut SysDelay){
+  pub fn shutdown(&mut self){
 
     self.pins.enable.set_high();
 
