@@ -1,9 +1,6 @@
 {
 	"folders": [
 		{
-			"path": "test"
-		},
-		{
 			"path": "board"
 		},
 		{
@@ -17,5 +14,8 @@
 		"probe-rs-debugger.debuggerExecutable": "probe-rs-debugger",
 		"rust-analyzer.check.allTargets": false,
 		"task.quickOpen.showAll": false,
+		"rust-analyzer.linkedProjects": [
+			"./rriv_board_0_4_2/Cargo.toml"
+		],
 	}
 }

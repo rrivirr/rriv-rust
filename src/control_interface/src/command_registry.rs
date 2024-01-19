@@ -7,7 +7,7 @@ use hashbrown::HashMap;
 /// we use from_str when processing commands from the serial side anyway though..
 #[repr(u8)]
 #[derive(Debug, Eq, Hash, PartialEq)]
-pub enum Command {
+pub enum CommandType {
     DataloggerSet = 0,
     DataloggerGet = 1,
     DataloggerReset = 2,
@@ -44,53 +44,54 @@ pub enum Command {
     BoardSignalExAdcLow = 33,
     BoardSignal3v3BoostHigh = 34,
     BoardSignal3v3BoostLow = 35,
-    Unknown = 36, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
+    Unknown = 37, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
 }
-impl Command {
+
+impl CommandType {
     pub fn from_str(cmd_str: &str) -> Self {
         match cmd_str {
-            "datalogger_set" => Command::DataloggerSet,
-            "datalogger_get" => Command::DataloggerGet,
-            "datalogger_reset" => Command::DataloggerReset,
-            "datalogger_set_mode" => Command::DataloggerSetMode,
-            "sensor_set" => Command::SensorSet,
-            "sensor_get" => Command::SensorGet,
-            "sensor_remove" => Command::SensorRemove,
-            "sensor_list" => Command::SensorList,
-            "sensor_calibrate_point" => Command::SensorCalibratePoint,
-            "sensor_calibrate_fit" => Command::SensorCalibrateFit,
-            "sensor_reset" => Command::SensorReset,
-            "actuator_set" => Command::ActuatorSet,
-            "actuator_get" => Command::ActuatorGet,
-            "actuator_remove" => Command::ActuatorRemove,
-            "actuator_list" => Command::ActuatorList,
-            "actuator_reset" => Command::ActuatorReset,
-            "telemeter_set" => Command::TelemeterSet,
-            "telemeter_get" => Command::TelemeterGet,
-            "telemeter_remove" => Command::TelemeterRemove,
-            "telemeter_list" => Command::TelemeterList,
-            "telemeter_reset" => Command::TelemeterReset,
-            "board_version" => Command::BoardVersion,
-            "board_firmware_warranty" => Command::BoardFirmwareWarranty,
-            "board_firmware_conditions" => Command::BoardFirmwareConditions,
-            "board_firmware_license" => Command::BoardFirmwareLicense,
-            "board_rtc_set" => Command::BoardRtcSet,
-            "board_rtc_get" => Command::BoardRtcGet,
-            "board_restart" => Command::BoardRestart,
-            "board_i2c_list" => Command::BoardI2cList,
-            "board_memory_check" => Command::BoardMemoryCheck,
-            "board_mcu_stop" => Command::BoardMcuStop,
-            "board_mcu_sleep" => Command::BoardMcuSleep,
-            "board_signal_ex_adc_high" => Command::BoardSignalExAdcHigh,
-            "board_signal_ex_adc_low" => Command::BoardSignalExAdcLow,
-            "board_signal_3v3_boost_high" => Command::BoardSignal3v3BoostHigh,
-            "board_signal_3v3_boost_low" => Command::BoardSignal3v3BoostLow,
-            _ => Command::Unknown,
+            "datalogger_set" => CommandType::DataloggerSet,
+            "datalogger_get" => CommandType::DataloggerGet,
+            "datalogger_reset" => CommandType::DataloggerReset,
+            "datalogger_set_mode" => CommandType::DataloggerSetMode,
+            "sensor_set" => CommandType::SensorSet,
+            "sensor_get" => CommandType::SensorGet,
+            "sensor_remove" => CommandType::SensorRemove,
+            "sensor_list" => CommandType::SensorList,
+            "sensor_calibrate_point" => CommandType::SensorCalibratePoint,
+            "sensor_calibrate_fit" => CommandType::SensorCalibrateFit,
+            "sensor_reset" => CommandType::SensorReset,
+            "actuator_set" => CommandType::ActuatorSet,
+            "actuator_get" => CommandType::ActuatorGet,
+            "actuator_remove" => CommandType::ActuatorRemove,
+            "actuator_list" => CommandType::ActuatorList,
+            "actuator_reset" => CommandType::ActuatorReset,
+            "telemeter_set" => CommandType::TelemeterSet,
+            "telemeter_get" => CommandType::TelemeterGet,
+            "telemeter_remove" => CommandType::TelemeterRemove,
+            "telemeter_list" => CommandType::TelemeterList,
+            "telemeter_reset" => CommandType::TelemeterReset,
+            "board_version" => CommandType::BoardVersion,
+            "board_firmware_warranty" => CommandType::BoardFirmwareWarranty,
+            "board_firmware_conditions" => CommandType::BoardFirmwareConditions,
+            "board_firmware_license" => CommandType::BoardFirmwareLicense,
+            "board_rtc_set" => CommandType::BoardRtcSet,
+            "board_rtc_get" => CommandType::BoardRtcGet,
+            "board_restart" => CommandType::BoardRestart,
+            "board_i2c_list" => CommandType::BoardI2cList,
+            "board_memory_check" => CommandType::BoardMemoryCheck,
+            "board_mcu_stop" => CommandType::BoardMcuStop,
+            "board_mcu_sleep" => CommandType::BoardMcuSleep,
+            "board_signal_ex_adc_high" => CommandType::BoardSignalExAdcHigh,
+            "board_signal_ex_adc_low" => CommandType::BoardSignalExAdcLow,
+            "board_signal_3v3_boost_high" => CommandType::BoardSignal3v3BoostHigh,
+            "board_signal_3v3_boost_low" => CommandType::BoardSignal3v3BoostLow,
+            _ => CommandType::Unknown,
         }
     }
 }
 
-type CommandMap = HashMap<Command, extern "C" fn(*const c_char)>;
+type CommandMap = HashMap<CommandType, extern "C" fn(*const c_char)>;
 
 pub struct CommandRegistry {
     command_map: CommandMap,
@@ -99,27 +100,27 @@ pub struct CommandRegistry {
 impl CommandRegistry {
     pub fn new() -> Self {
         // NOTE: This is a hack to get the number of commands. There is no better way.
-        let num_commands = Command::Unknown as u8 as usize + 1;
+        let num_commands = CommandType::Unknown as u8 as usize + 1;
         let command_map = HashMap::with_capacity(num_commands);
         CommandRegistry { command_map }
     }
-    pub fn register_command(&mut self, command: Command, action_fn: extern "C" fn(*const c_char)) {
+    pub fn register_command(&mut self, command: CommandType, action_fn: extern "C" fn(*const c_char)) {
         self.command_map.insert(command, action_fn);
     }
     pub fn register_command_str(&mut self, command: &str, action_fn: extern "C" fn(*const c_char)) {
-        let command = Command::from_str(command);
+        let command = CommandType::from_str(command);
         self.register_command(command, action_fn);
     }
     // NOTE: This is not needed since get_action_fn returns an Option, but may be useful for testing.
-    pub fn is_registered(&self, command: Command) -> bool {
+    pub fn is_registered(&self, command: CommandType) -> bool {
         self.command_map.contains_key(&command)
     }
-    pub fn get_action_fn(&self, command: Command) -> Option<extern "C" fn(*const c_char)> {
-        self.command_map.get(&command).copied()
+    pub fn get_action_fn(&self, command: &CommandType) -> Option<extern "C" fn(*const c_char)> {
+        self.command_map.get(command).copied()
     }
-    pub fn get_command_from_parts(&self, object: &str, action: &str) -> Command {
+    pub fn get_command_from_parts(&self, object: &str, action: &str) -> CommandType {
         let command_str = format!("{}_{}", object, action);
-        Command::from_str(&command_str)
+        CommandType::from_str(&command_str)
     }
 }
 
