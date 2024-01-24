@@ -450,7 +450,7 @@ impl BoardBuilder {
             i2c1_pins,
             i2c2_pins,
             mut oscillator_control_pins,
-            power_pins,
+            // power_pins,
             rgb_led_pins,
             serial_pins,
             spi1_pins,
@@ -475,18 +475,52 @@ impl BoardBuilder {
         self.i2c2 = Some(i2c2);
         rprintln!("set up i2c2");
 
+        // loop {
+            rprintln!("Start i2c1 scanning...");
+            rprintln!();
+
+            for addr in 0x00_u8..0x7F {
+                // Write the empty array and check the slave response.
+                // rprintln!("trying {:02x}", addr);
+                let mut buf = [b'\0'; 1];
+                if let Some(i2c) = &mut self.i2c1 {
+                    if i2c.read(addr, &mut buf).is_ok() {
+                        rprintln!("{:02x} good", addr);
+                    }
+                }
+                delay.delay_ms(10_u16);
+            }
+            rprintln!("scan is done");
+
+            rprintln!("Start i2c2 scanning...");
+            rprintln!();
+            for addr in 0x00_u8..0x7F {
+                // Write the empty array and check the slave response.
+                // rprintln!("trying {:02x}", addr);
+                let mut buf = [b'\0'; 1];
+                if let Some(i2c) = &mut self.i2c2 {
+                    if i2c.read(addr, &mut buf).is_ok() {
+                        rprintln!("{:02x} good", addr);
+                    }
+                }
+                delay.delay_ms(10_u16);
+            }
+            rprintln!("scan is done");
+
+        // }
+
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
 
         // build the power control
-        self.power_control = Some(PowerControl::new(power_pins));
+        // self.power_control = Some(PowerControl::new(power_pins));
     
 
         // build the internal adc
         let internal_adc_configuration = InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
-        let mut internal_adc = internal_adc_configuration.build(&clocks);
+        let internal_adc = internal_adc_configuration.build(&clocks);
         self.internal_adc = Some(internal_adc);
-
+ 
         self.rgb_led = Some(build_rgb_led(rgb_led_pins, device_peripherals.TIM1, &mut afio.mapr, &clocks));
         
         self.battery_level = Some(BatteryLevel::new(battery_level_pins));
@@ -497,17 +531,15 @@ impl BoardBuilder {
 
         self.gpio = Some(dynamic_gpio_pins);
 
-        self.delay = Some(delay);
-
-
         let delay2: DelayUs<TIM2> =device_peripherals.TIM2.delay(&clocks);
         storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
 
-        // let spi_mode = Mode {
-        //     polarity: Polarity::IdleLow,
-        //     phase: Phase::CaptureOnFirstTransition,
-        // };
+
+        // // let spi_mode = Mode {
+        // //     polarity: Polarity::IdleLow,
+        // //     phase: Phase::CaptureOnFirstTransition,
+        // // };
         let spi2 = Spi::spi2(
             device_peripherals.SPI2,
             (spi2_pins.sck, spi2_pins.miso, spi2_pins.mosi),
@@ -542,6 +574,8 @@ impl BoardBuilder {
         //     self.delay.as_ref().unwrap().delay_ms(10_u16);
         // }
         // rprintln!("scan is done");
+
+        rprintln!("done with setup");
 
         self
 

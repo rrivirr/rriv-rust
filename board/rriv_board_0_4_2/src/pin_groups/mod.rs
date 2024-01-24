@@ -37,7 +37,7 @@ pub fn build(
     I2c1Pins,
     I2c2Pins,
     OscillatorControlPins,
-    PowerPins,
+    // PowerPins,
     RgbLedPins,
     SerialPins,
     Spi1Pins,
@@ -71,7 +71,7 @@ pub fn build(
 
     let oscillator_control = OscillatorControlPins::build(pins.enable_hse, cr);
 
-    let power = PowerPins::build(pins.enable_3v, pins.enable_5v, cr);
+    // let power = PowerPins::build(pins.enable_3v, pins.enable_5v, cr);
 
     let rgb_led = RgbLedPins::build(
         pins.rgb_red_and_wake_button,
@@ -96,7 +96,7 @@ pub fn build(
         i2c1,
         i2c2,
         oscillator_control,
-        power,
+        // power,
         rgb_led,
         serial,
         spi1,
