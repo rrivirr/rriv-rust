@@ -1,6 +1,6 @@
 // https://ferrous-systems.com/blog/test-embedded-app/
 
-use rtt_target::rprintln;
+// use rtt_target::rprintln;
 
 
 pub const BUFFER_NUM: usize = 11; // Includes an extra empty cell for end marker
@@ -59,7 +59,7 @@ impl CommandRecognizer {
         let cur = command_data.cur;
         let pos: usize = command_data.command_pos;
         command_data.buffer[cur][pos] = character;
-        if pos < BUFFER_SIZE {
+        if pos < BUFFER_SIZE - 1 {
             command_data.command_pos = command_data.command_pos + 1;
         }
     }

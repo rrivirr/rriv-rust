@@ -35,10 +35,13 @@
                 }
             ],
             "env": {
-                "RUST_LOG": "trace" // If you set this variable, check the VSCode console log window for the location of the log file.
+                "RUST_LOG": "trace", // If you set this variable, check the VSCode console log window for the location of the log file.
             },
             "linux": {
-                "env": { "PATH": "/home/zaven/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/zaven/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin" }
+                "env": { 
+                    "PATH": "/home/zaven/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:/home/zaven/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin",
+                    
+                }
             },
             "consoleLogLevel": "Console", //Info, Debug
         }

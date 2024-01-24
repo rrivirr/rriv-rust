@@ -7,5 +7,9 @@ edition = "2021"
 
 [dependencies]
 rriv_board = { path = "../../board/rriv_board" } 
-command_service = { path = "../command_service" }
+control_interface = { path = "../../src/control_interface" }
+hashbrown = "0.14"
+serde_json = { version = "1.0.104", default-features = false, features = ["alloc"] }
+serde = { version = "1.0", default-features = false, features = ["derive"] }
 rtt-target = "0.4.0"
+bitflags = "2.4.1"

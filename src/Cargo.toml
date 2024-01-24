@@ -1,5 +1,5 @@
 [workspace]
-members = ["control_interface", "command_service", "datalogger"]
+members = ["control_interface", "datalogger"]
 resolver = "2"
 
 [workspace.package]

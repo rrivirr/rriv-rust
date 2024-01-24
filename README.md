@@ -21,6 +21,10 @@ cargo install probe-rs --features cli
 ```
 This will install the probe-rs, cargo-flash and cargo-embed binaries and put them in $PATH.
 
+Users of VSCode will also want to install the following extensions:
+* rust-analyzer
+* probe-rs-debugger
+
 
 ### Code Organization
 
