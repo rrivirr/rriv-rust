@@ -24,9 +24,41 @@ pub struct DataloggerGetCommandPayload {
     pub propery: Option<Value>
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorSetCommandPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+    pub r#type: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorGetCommandPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorRemoveCommandPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorListCommandPayload {
+    pub object: Value,
+    pub action: Value,
+}
+
 pub enum CommandPayload {
-    SetCommandPayload(DataloggerSetCommandPayload),
-    GetCommandPayload(DataloggerGetCommandPayload),
+    DataloggerSetCommandPayload(DataloggerSetCommandPayload),
+    DataloggerGetCommandPayload(DataloggerGetCommandPayload),
+    SensorSetCommandPayload(SensorSetCommandPayload),
+    SensorGetCommandPayload(SensorGetCommandPayload),
+    SensorRemoveCommandPayload(SensorRemoveCommandPayload),
+    SensorListCommandPayload(SensorListCommandPayload)
 }
 
 

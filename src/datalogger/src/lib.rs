@@ -158,19 +158,18 @@ impl DataLogger {
         command_service::setup(board);
 
 
-        // self.settings = DataloggerSettings::new();
-        // self.settings.deployment_identifier = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e',b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
-        // self.settings.logger_name = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
-        // rprintln!("attempting to store settings for test purposes");
-        // self.store_settings(board);
+        self.settings = DataloggerSettings::new();
+        self.settings.deployment_identifier = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e',b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
+        self.settings.logger_name = [b'n',b'a',b'm',b'e',b'e',b'e',b'e',b'e'];
+        rprintln!("attempting to store settings for test purposes");
+        self.store_settings(board);
 
 
-
+        // read all the sensors from EEPROM
+        let mut buffer: [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS] = [0; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS];
+        board.retrieve_sensor_settings(&mut buffer);
   
-        // self.command_service
-        //     .register_command("datalogger", "set", Self::test_exec);
-        // self.command_service
-        //     .register_command("unknown", "unknown", Self::unknown_command);
+       
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
@@ -201,11 +200,21 @@ impl DataLogger {
     
     pub fn executeCommand(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
         match command_payload {
-            CommandPayload::SetCommandPayload(payload) => {
+            CommandPayload::DataloggerSetCommandPayload(payload) => {
                 self.update_datalogger_settings(board, payload);
                 board.serial_send("updated datalogger settings\n");
             },
-            CommandPayload::GetCommandPayload(_) => todo!(),
+            CommandPayload::DataloggerGetCommandPayload(_) => todo!(),
+            CommandPayload::SensorSetCommandPayload(_) => {
+                
+                // look for id in sensor list
+                // if id is not present, insert
+                // if present, update
+
+            },
+            CommandPayload::SensorGetCommandPayload(_) => todo!(),
+            CommandPayload::SensorRemoveCommandPayload(_) => todo!(),
+            CommandPayload::SensorListCommandPayload(_) => todo!(),
            
         }
     }

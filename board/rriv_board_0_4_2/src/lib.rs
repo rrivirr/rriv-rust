@@ -152,9 +152,25 @@ impl RRIVBoard for Board {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
     }
 
+    fn retrieve_sensor_settings(
+        &mut self,
+        buffer: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS]
+    ) {
+        for slot in 0..rriv_board::EEPROM_TOTAL_SENSOR_SLOTS {
+            let slice = &mut buffer[slot*rriv_board::EEPROM_SENSOR_SETTINGS_SIZE..(slot+1)*rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
+            read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice) 
+        }
+    }
+
     fn delay_ms(&mut self, ms: u16) {
         self.delay.delay_ms(ms);
     }
+
+    fn store_sensor_settings(&mut self) {
+        todo!()
+    }
+
+
 }
 
 #[interrupt]

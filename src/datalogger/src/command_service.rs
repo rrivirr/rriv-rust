@@ -123,31 +123,42 @@ where
     return serde_json::from_str::<T>(command_data_str);
 }
 
+#[macro_export]
+macro_rules!  parse_command_to_payload {
+    ($payload_type:ty, $variant:path, $command_cstr:expr ) => {
+        let result = parse_command::<$payload_type>($command_cstr);
+        match result {
+            Ok(payload) => return Ok($variant(payload)),
+            Err(error) => return Err(CommandError::InvalidPayload(error)),
+        }
+    };
+}
+
 fn get_command_payload(
     command: CommandType,
     command_cstr: &CStr,
 ) -> Result<CommandPayload, CommandError> {
     match command {
         CommandType::DataloggerSet => {
-            let result = parse_command::<DataloggerSetCommandPayload>(command_cstr);
-            match result {
-                Ok(payload) => return Ok(CommandPayload::SetCommandPayload(payload)),
-                Err(error) => return Err(CommandError::InvalidPayload(error)),
-            }
+            parse_command_to_payload!(DataloggerSetCommandPayload, CommandPayload::DataloggerSetCommandPayload, command_cstr);
         }
         CommandType::DataloggerGet => {
-            let result = parse_command::<DataloggerGetCommandPayload>(command_cstr);
-            match result {
-                Ok(payload) => return Ok(CommandPayload::GetCommandPayload(payload)),
-                Err(error) => return Err(CommandError::InvalidPayload(error)),
-            }
+            parse_command_to_payload!(DataloggerGetCommandPayload, CommandPayload::DataloggerGetCommandPayload, command_cstr);
         }
         CommandType::DataloggerReset => todo!(),
         CommandType::DataloggerSetMode => todo!(),
-        CommandType::SensorSet => todo!(),
-        CommandType::SensorGet => todo!(),
-        CommandType::SensorRemove => todo!(),
-        CommandType::SensorList => todo!(),
+        CommandType::SensorSet => {
+            parse_command_to_payload!(SensorSetCommandPayload, CommandPayload::SensorSetCommandPayload, command_cstr);
+        },
+        CommandType::SensorGet => {
+            parse_command_to_payload!(SensorGetCommandPayload, CommandPayload::SensorGetCommandPayload, command_cstr);
+        },
+        CommandType::SensorRemove => {
+            parse_command_to_payload!(SensorRemoveCommandPayload, CommandPayload::SensorRemoveCommandPayload, command_cstr);
+        },
+        CommandType::SensorList => {
+            parse_command_to_payload!(SensorListCommandPayload, CommandPayload::SensorListCommandPayload, command_cstr);
+        },
         CommandType::SensorCalibratePoint => todo!(),
         CommandType::SensorCalibrateFit => todo!(),
         CommandType::SensorReset => todo!(),
@@ -176,7 +187,7 @@ fn get_command_payload(
         CommandType::BoardSignalExAdcLow => todo!(),
         CommandType::BoardSignal3v3BoostHigh => todo!(),
         CommandType::BoardSignal3v3BoostLow => todo!(),
-        // todo: refactor these to be an errors enumeration
+        // todo: refactor these to be an errors enumerationget_command_payload
         CommandType::Unknown => todo!(),
     }
 }

@@ -20,8 +20,7 @@ const UUID_LENGTH: u8 = 12; // STM32 has a 12 byte UUID, leave extra space for t
 
 const EEPROM_DATALOGGER_SETTINGS_START: u8 = 16;
 const EEPROM_SENSOR_SETTINGS_START: u8 = 80;
-const EEPROM_SENSOR_SETTINGS_SIZE: u8 = 64;
-const EEPROM_TOTAL_SENSOR_SLOTS: u8 = 12;
+
 
 pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address: u8, bytes: &[u8]) {
     let device_address = EEPROM_I2C_ADDRESS + block;
@@ -89,7 +88,7 @@ fn calculate_memory_position(slot: u8) -> MemoryPosition {
 
     let block = slot / 4 + 1;
     let offset = slot % 4;
-    let address = offset as u8 * EEPROM_SENSOR_SETTINGS_SIZE;
+    let address = offset as u8 * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE as u8;
 
     MemoryPosition { 
         block, 
@@ -102,7 +101,7 @@ pub fn write_sensor_configuration_to_eeprom(board: &mut Board, slot: u8, buffer:
    
     let memory_position = calculate_memory_position(slot);
     write_bytes_to_eeprom(board, memory_position.block, memory_position.address,buffer);
-
+    
 }
 
 pub fn read_sensor_configuration_from_eeprom(board: &mut Board, slot: u8, buffer: &mut [u8]) {
@@ -111,3 +110,10 @@ pub fn read_sensor_configuration_from_eeprom(board: &mut Board, slot: u8, buffer
     read_bytes_from_eeprom(board, memory_position.block, memory_position.address, buffer)
 
 }
+
+// pub fn read_all_sensor_configurations(board: &mut Board, buffer: &mut [u8; EEPROM_SENSOR_SETTINGS_SIZE * EEPROM_TOTAL_SENSOR_SLOTS]) {
+//     for slot in 0..EEPROM_TOTAL_SENSOR_SLOTS {
+//         let slice = &mut buffer[slot*EEPROM_SENSOR_SETTINGS_SIZE..(slot+1)*EEPROM_SENSOR_SETTINGS_SIZE];
+//         read_sensor_configuration_from_eeprom(board, slot.try_into().unwrap(), slice) 
+//     }
+// }
