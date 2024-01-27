@@ -165,20 +165,24 @@ fn get_registry() -> [ Option<fn(SensorDriverGeneralConfiguration,  &SpecialSett
 
 pub struct DataLogger {
     settings: DataloggerSettings,
-    driver_array: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-
-
+    sensor_drivers: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+    actuator_drivers: [Option<Box<dyn ActuatorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+    telemeter_drivers: [Option<Box<dyn TelemeterDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
 
     debug_values: bool,  // serial out of values as they are read
     log_raw_data: bool,  // both raw and summary data writting to storage
 }
+const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::SensorDriver>> = None;
+const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::ActuatorDriver>> = None;
+const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::TelemeterDriver>> = None;
 
 impl DataLogger {
     pub fn new() -> Self {
-        const ARRAY_INIT_VALUE: core::option::Option<Box<dyn drivers::SensorDriver>> = None;
         DataLogger {
             settings: DataloggerSettings::new(),
-            driver_array: [ARRAY_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+            sensor_drivers: [SENSOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+            actuator_drivers: [ACTUATOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+            telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             debug_values: true,
             log_raw_data: true,
         }
@@ -224,7 +228,7 @@ impl DataLogger {
         self.store_settings(board);
 
 
-        // read all the sensors from EEPROMSELF
+        // read all the sensors from EEPROM
         let registry = get_registry();
         let mut sensor_config_bytes: [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS] = [0; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS];
         board.retrieve_sensor_settings(&mut sensor_config_bytes);
@@ -240,7 +244,7 @@ impl DataLogger {
                 let mut s:[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE] = [0; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE];
                 s.clone_from_slice(special_settings_slice);
                 let driver = function(settings, &s);
-                self.driver_array[i] = Some(driver);
+                self.sensor_drivers[i] = Some(driver);
             }
     
         }

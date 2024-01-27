@@ -27,6 +27,14 @@ pub trait SensorDriver {
     fn setup(&mut self);
 }
 
+pub trait ActuatorDriver {
+    fn setup(&mut self);
+}
+
+pub trait TelemeterDriver {
+    fn setup(&mut self);
+}
+
 #[derive(Copy,Clone,Debug)]
 pub struct GenericAnalogSpecialConfiguration {
     empty: [u8; 32]
