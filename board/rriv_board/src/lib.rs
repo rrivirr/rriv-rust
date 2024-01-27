@@ -4,6 +4,7 @@ use alloc::boxed::Box;
 
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
+pub const EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE: usize = 32;
 pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 12;
 
 pub trait RXProcessor: Send + Sync {

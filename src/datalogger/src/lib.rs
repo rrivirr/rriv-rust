@@ -4,13 +4,18 @@
 
 mod command_service;
 mod datalogger_commands;
+use core::panic;
+
 use datalogger_commands::*;
 use rriv_board::{RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE};
 use bitflags::bitflags;
 extern crate alloc;
 use alloc::format;
 use rtt_target::rprintln;
+use alloc::boxed::Box;
 
+mod drivers;
+use drivers::*;
 
 #[derive(Copy,Clone,Debug)]
 struct DataloggerSettings {
@@ -29,6 +34,7 @@ struct DataloggerSettings {
     // low_raw_data: u8:1,
     // reserved: u8:4
 }
+
 
 impl DataloggerSettings {
     pub fn new() -> Self {
@@ -88,9 +94,11 @@ impl DataloggerSettings {
             self.deployment_identifier.clone_from_slice("site".as_bytes());
         }
    
-
     }
 }
+
+
+
 
 pub fn check_alphanumeric( array: &[u8]) -> bool {
     let checks = array.iter();
@@ -109,9 +117,57 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     )
 }
 
+/* start registry WIP */
+
+const SENSOR_NAMES: [&str; 4] = [
+    "no_match",
+    "generic_analog",
+    "atlas_ec",
+    "aht22"
+];
+
+fn sensor_type_id_from_name( name: &str) -> usize {
+    for i in 0..SENSOR_NAMES.len() {
+        if name == SENSOR_NAMES[i] {
+            return i
+        }
+    }
+    return 0;
+}
+
+
+type SpecialSettingsSlice = [u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE];
+
+#[macro_export]
+macro_rules!  driver_create_function {
+    ($driver:ty) => {
+        |settings: SensorDriverGeneralConfiguration, special_settings_slice: &SpecialSettingsSlice | -> Box<dyn SensorDriver> { 
+            let driver = <$driver>::new(settings, special_settings_slice);
+            Box::new(driver)
+        }
+    };
+}
+
+fn get_registry() -> [ Option<fn(SensorDriverGeneralConfiguration,  &SpecialSettingsSlice) -> Box<dyn SensorDriver>>; 256 ] {
+
+    const ARRAY_INIT_VALUE: Option<fn(SensorDriverGeneralConfiguration,  &SpecialSettingsSlice) -> Box<dyn SensorDriver>  > = None;
+    let mut driver_create_functions: [ Option<fn(SensorDriverGeneralConfiguration,  &SpecialSettingsSlice) -> Box<dyn SensorDriver> >; 256] = [ARRAY_INIT_VALUE; 256];
+    driver_create_functions[0] = Some( driver_create_function!(GenericAnalog) );
+    driver_create_functions[1] = None;
+    driver_create_functions[2] = Some( driver_create_function!(AHT22) );
+
+    driver_create_functions
+}
+
+
+/* end registry WIP */
+
 
 pub struct DataLogger {
     settings: DataloggerSettings,
+    driver_array: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+
+
 
     debug_values: bool,  // serial out of values as they are read
     log_raw_data: bool,  // both raw and summary data writting to storage
@@ -119,20 +175,23 @@ pub struct DataLogger {
 
 impl DataLogger {
     pub fn new() -> Self {
+        const ARRAY_INIT_VALUE: core::option::Option<Box<dyn drivers::SensorDriver>> = None;
         DataLogger {
             settings: DataloggerSettings::new(),
+            driver_array: [ARRAY_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             debug_values: true,
             log_raw_data: true,
         }
     }
-
+        
     fn retrieve_settings(&self, board: &mut impl RRIVBoard) -> DataloggerSettings {
         let mut bytes: [u8;EEPROM_DATALOGGER_SETTINGS_SIZE] = [b'\0'; EEPROM_DATALOGGER_SETTINGS_SIZE];
         board.retrieve_datalogger_settings(&mut bytes);
         rprintln!("retrieved {:?}", bytes);
-        let mut settings = DataloggerSettings::new_from_bytes(& bytes);         // convert the bytes pack into a DataloggerSettings
+        let mut settings: DataloggerSettings = DataloggerSettings::new_from_bytes(& bytes);         // convert the bytes pack into a DataloggerSettings
 
         settings.configure_defaults();
+        let mut settings: DataloggerSettings = DataloggerSettings::new_from_bytes(& bytes);         // convert the bytes pack into a DataloggerSettings
 
         settings
     }
@@ -148,7 +207,7 @@ impl DataLogger {
 
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
 
-        // enable power to the eeprom and bring i2c online
+        // enable power to the eeprom and bring i2bufferc online
     
         rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
@@ -165,12 +224,29 @@ impl DataLogger {
         self.store_settings(board);
 
 
-        // read all the sensors from EEPROM
-        let mut buffer: [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS] = [0; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS];
-        board.retrieve_sensor_settings(&mut buffer);
-  
+        // read all the sensors from EEPROMSELF
+        let registry = get_registry();
+        let mut sensor_config_bytes: [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS] = [0; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS];
+        board.retrieve_sensor_settings(&mut sensor_config_bytes);
+        for i in 0..rriv_board::EEPROM_TOTAL_SENSOR_SLOTS {
+            let base = i*rriv_board::EEPROM_SENSOR_SETTINGS_SIZE;
+            let general_settings_slice = &sensor_config_bytes[base..(base + rriv_board::EEPROM_SENSOR_SETTINGS_SIZE/2)];
+            let special_settings_slice: &[u8] = &sensor_config_bytes[(base + rriv_board::EEPROM_SENSOR_SETTINGS_SIZE/2)..(i+1)*rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
+
+            let settings: SensorDriverGeneralConfiguration = SensorDriverGeneralConfiguration::new_from_bytes(general_settings_slice);         // convert the bytes pack into a DataloggerSettings
+            
+            let create_function = registry[usize::from(settings.sensor_type_id)];
+            if let Some(function) = create_function {
+                let mut s:[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE] = [0; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE];
+                s.clone_from_slice(special_settings_slice);
+                let driver = function(settings, &s);
+                self.driver_array[i] = Some(driver);
+            }
+    
+        }
        
     }
+
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
         // todo: refactor to use Result<T,E>
