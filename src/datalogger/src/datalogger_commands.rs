@@ -11,7 +11,7 @@ pub struct DataloggerSetCommandPayload {
     pub deployment_identifier: Option<Value>,
     pub interval: Option<u16>,
     pub burst_repetitions: Option<u8>,
-    pub start_up_delay: Option<u16>,
+    pub start_up_delay: Option<u16>
     // pub user_note: Option<Value>, // not implemented for now
     // pub user_value: Option<i16>
 }
@@ -27,9 +27,9 @@ pub struct DataloggerGetCommandPayload {
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SensorSetCommandPayload {
     pub object: Value,
-    pub action: Value,
-    pub id: Value,
-    pub r#type: Value,
+    pub action: Value, 
+    pub id: [u8;6], // option
+    pub r#type: [u8;16], // option
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -55,7 +55,7 @@ pub struct SensorListCommandPayload {
 pub enum CommandPayload {
     DataloggerSetCommandPayload(DataloggerSetCommandPayload),
     DataloggerGetCommandPayload(DataloggerGetCommandPayload),
-    SensorSetCommandPayload(SensorSetCommandPayload),
+    SensorSetCommandPayload(SensorSetCommandPayload, Value),
     SensorGetCommandPayload(SensorGetCommandPayload),
     SensorRemoveCommandPayload(SensorRemoveCommandPayload),
     SensorListCommandPayload(SensorListCommandPayload)

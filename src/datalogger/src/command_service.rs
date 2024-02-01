@@ -7,12 +7,15 @@ use rriv_board::{RRIVBoard, RXProcessor};
 extern crate alloc;
 use alloc::boxed::Box;
 use alloc::format;
+use alloc::string::String;
+use serde_json::Value;
 
 use core::borrow::BorrowMut;
 use core::ffi::{c_char, CStr};
 use serde::{Deserialize, Serialize};
 
 use rtt_target::rprintln;
+
 
 use crate::datalogger_commands::*;
 
@@ -148,7 +151,26 @@ fn get_command_payload(
         CommandType::DataloggerReset => todo!(),
         CommandType::DataloggerSetMode => todo!(),
         CommandType::SensorSet => {
-            parse_command_to_payload!(SensorSetCommandPayload, CommandPayload::SensorSetCommandPayload, command_cstr);
+
+            // return serde_json::from_str::<T>(command_data_str);
+
+            let command_data_str = command_cstr.to_str().unwrap();
+
+            let mut raw_value: Value = serde_json::from_str(command_data_str).unwrap(); // use hashbrown HashMap?
+
+
+            let result = parse_command::<SensorSetCommandPayload>(command_cstr);
+            match result {
+                Ok(payload) => return Ok(CommandPayload::SensorSetCommandPayload(payload, raw_value)),
+                Err(error) => return Err(CommandError::InvalidPayload(error)),
+            }
+            // let mut map: HashMap<String, serde_json::Value> = HashMap::new();
+            // for key in keys {
+            //     let (k, v) = lookup.remove_entry (key).unwrap();
+            //     map.insert(k, v);
+            // }
+
+            // parse_command_to_payload!(SensorSetCommandPayload, CommandPayload::SensorSetCommandPayload, command_cstr);
         },
         CommandType::SensorGet => {
             parse_command_to_payload!(SensorGetCommandPayload, CommandPayload::SensorGetCommandPayload, command_cstr);

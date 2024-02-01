@@ -7,13 +7,25 @@ use rriv_board::EEPROM_SENSOR_SETTINGS_SIZE;
 
 #[derive(Copy,Clone,Debug)]
 pub struct SensorDriverGeneralConfiguration {
-    pub tag: [u8;6],
+    pub id: [u8;6],
     pub sensor_type_id: u16,
     pub warmup: u16,
-    pub burst_length: u8
+    pub burst_repetitions: u8
 }
 
 impl SensorDriverGeneralConfiguration {
+    pub fn new_from_values ( 
+        id: [u8;6],
+        sensor_type_id: u16,
+     ) -> SensorDriverGeneralConfiguration{
+            Self {
+                id: id,
+                sensor_type_id: sensor_type_id,
+                warmup: 0,
+                burst_repetitions: 1
+            }
+        }
+
     pub fn new_from_bytes(bytes: &[u8] ) -> SensorDriverGeneralConfiguration {
         let settings = bytes.as_ptr().cast::<SensorDriverGeneralConfiguration>();
         unsafe {
@@ -25,6 +37,7 @@ impl SensorDriverGeneralConfiguration {
 
 pub trait SensorDriver {
     fn setup(&mut self);
+    fn get_id(&mut self) -> [u8;6];
 }
 
 pub trait ActuatorDriver {
@@ -37,10 +50,39 @@ pub trait TelemeterDriver {
 
 #[derive(Copy,Clone,Debug)]
 pub struct GenericAnalogSpecialConfiguration {
-    empty: [u8; 32]
+    m: f64,
+    b: f64,
+    sensor_port: u8,
+    empty: [u8; 23]
 }
 
 impl GenericAnalogSpecialConfiguration {
+    pub fn new(value: serde_json::Value) -> GenericAnalogSpecialConfiguration {
+        let mut sensor_port: u8 = 0;
+        match value["sensor_port"] {
+            serde_json::Value::Number(number) => {
+                if let Some(number) = number.as_u64() {
+                    let number: Result<u8, _> = number.try_into();
+                    match number {
+                        Ok(number) => {
+                            sensor_port = number;
+                        }
+                        Err(_) => todo!(),
+
+                    }
+                }
+            }
+            _ => todo!(),
+        }
+
+        return Self {
+            m: 0.0,
+            b: 0.0,
+            sensor_port: sensor_port,
+            empty: [b'\0'; 23]
+        }
+    }
+
     pub fn new_from_bytes(bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE] ) -> GenericAnalogSpecialConfiguration {
         // panic if bytes.len() != 32
         let settings = bytes.as_ptr().cast::<GenericAnalogSpecialConfiguration>();
@@ -49,6 +91,7 @@ impl GenericAnalogSpecialConfiguration {
         }
     }
 }
+
 
 pub struct GenericAnalog {
     general_config: SensorDriverGeneralConfiguration,
@@ -59,12 +102,23 @@ impl SensorDriver for GenericAnalog {
     fn setup(&mut self) {
         todo!()
     }
+
+    fn get_id(&mut self) -> [u8;6] {
+        self.general_config.id.clone()
+    }
 }
 
 impl GenericAnalog {
-    pub fn new(general_config: SensorDriverGeneralConfiguration, specific_config_bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE]) -> Self {
+    pub fn new(general_config: SensorDriverGeneralConfiguration, special_config_bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE]) -> Self {
         
-        let special_config = GenericAnalogSpecialConfiguration::new_from_bytes(specific_config_bytes);
+        let special_config = GenericAnalogSpecialConfiguration::new_from_bytes(special_config_bytes);
+        GenericAnalog {
+            general_config,
+            special_config
+        }
+    }
+
+    pub fn new_from_configs(general_config: SensorDriverGeneralConfiguration, special_config: GenericAnalogSpecialConfiguration) -> Self  {
         GenericAnalog {
             general_config,
             special_config
@@ -75,7 +129,8 @@ impl GenericAnalog {
 
 #[derive(Copy,Clone,Debug)]
 pub struct AHT22SpecialConfiguration {
-    empty: [u8; 32]
+    wait_time : usize,
+    empty: [u8; 28]
 }
 
 impl AHT22SpecialConfiguration {
@@ -96,6 +151,10 @@ pub struct AHT22 {
 impl SensorDriver for AHT22 {
     fn setup(&mut self) {
         todo!()
+    }
+
+    fn get_id(&mut self) -> [u8;6] {
+        self.general_config.id.clone()
     }
 }
 
