@@ -29,7 +29,7 @@ dependencies = [
  "embedded-alloc",
  "embedded-hal",
  "nb 1.1.0",
- "panic-halt",
+ "panic-abort",
  "rriv_board",
  "rriv_board_0_4_2",
  "rtt-target",
@@ -316,6 +316,12 @@ name = "once_cell"
 version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
+
+[[package]]
+name = "panic-abort"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4e20e6499bbbc412f280b04a42346b356c6fa0753d5fd22b7bd752ff34c778ee"
 
 [[package]]
 name = "panic-halt"

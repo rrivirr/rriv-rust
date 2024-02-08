@@ -28,8 +28,8 @@ pub struct DataloggerGetCommandPayload {
 pub struct SensorSetCommandPayload {
     pub object: Value,
     pub action: Value, 
-    pub id: [u8;6], // option
-    pub r#type: [u8;16], // option
+    pub id: Option<Value>, // option
+    pub r#type: Value, // option
 }
 
 #[derive(Serialize, Deserialize, Debug)]

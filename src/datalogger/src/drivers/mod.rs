@@ -4,6 +4,10 @@
 use rriv_board::EEPROM_SENSOR_SETTINGS_SIZE;
 
 
+pub const SENSOR_SETTINGS_PARTITION_SIZE: usize = 32; // partitioning is part of the driver implemention, and not meaningful at the EEPROM level
+pub type SensorGeneralSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
+pub type SensorSpecialSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
+
 
 #[derive(Copy,Clone,Debug)]
 pub struct SensorDriverGeneralConfiguration {
@@ -14,7 +18,7 @@ pub struct SensorDriverGeneralConfiguration {
 }
 
 impl SensorDriverGeneralConfiguration {
-    pub fn new_from_values ( 
+    pub fn new ( 
         id: [u8;6],
         sensor_type_id: u16,
      ) -> SensorDriverGeneralConfiguration{
@@ -26,7 +30,7 @@ impl SensorDriverGeneralConfiguration {
             }
         }
 
-    pub fn new_from_bytes(bytes: &[u8] ) -> SensorDriverGeneralConfiguration {
+    pub fn new_from_bytes(bytes: &[u8; SENSOR_SETTINGS_PARTITION_SIZE] ) -> SensorDriverGeneralConfiguration {
         let settings = bytes.as_ptr().cast::<SensorDriverGeneralConfiguration>();
         unsafe {
             *settings
@@ -57,9 +61,9 @@ pub struct GenericAnalogSpecialConfiguration {
 }
 
 impl GenericAnalogSpecialConfiguration {
-    pub fn new(value: serde_json::Value) -> GenericAnalogSpecialConfiguration {
+    pub fn new_from_values(value: serde_json::Value) -> GenericAnalogSpecialConfiguration { // should we return a Result object here? because we are parsing?  parse_from_values?
         let mut sensor_port: u8 = 0;
-        match value["sensor_port"] {
+        match &value["sensor_port"] {
             serde_json::Value::Number(number) => {
                 if let Some(number) = number.as_u64() {
                     let number: Result<u8, _> = number.try_into();
@@ -67,12 +71,12 @@ impl GenericAnalogSpecialConfiguration {
                         Ok(number) => {
                             sensor_port = number;
                         }
-                        Err(_) => todo!(),
+                        Err(_) => todo!("need to handle invalid number"),
 
                     }
                 }
             }
-            _ => todo!(),
+            _ => {todo!("need to handle missing sensor port")},
         }
 
         return Self {
@@ -83,7 +87,7 @@ impl GenericAnalogSpecialConfiguration {
         }
     }
 
-    pub fn new_from_bytes(bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE] ) -> GenericAnalogSpecialConfiguration {
+    pub fn new_from_bytes(bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE] ) -> GenericAnalogSpecialConfiguration {
         // panic if bytes.len() != 32
         let settings = bytes.as_ptr().cast::<GenericAnalogSpecialConfiguration>();
         unsafe {
@@ -109,16 +113,16 @@ impl SensorDriver for GenericAnalog {
 }
 
 impl GenericAnalog {
-    pub fn new(general_config: SensorDriverGeneralConfiguration, special_config_bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE]) -> Self {
+    // pub fn new(general_config: SensorDriverGeneralConfiguration, special_config_bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE]) -> Self {
         
-        let special_config = GenericAnalogSpecialConfiguration::new_from_bytes(special_config_bytes);
-        GenericAnalog {
-            general_config,
-            special_config
-        }
-    }
+    //     let special_config = GenericAnalogSpecialConfiguration::new_from_bytes(special_config_bytes);
+    //     GenericAnalog {
+    //         general_config,
+    //         special_config
+    //     }
+    // }
 
-    pub fn new_from_configs(general_config: SensorDriverGeneralConfiguration, special_config: GenericAnalogSpecialConfiguration) -> Self  {
+    pub fn new(general_config: SensorDriverGeneralConfiguration, special_config: GenericAnalogSpecialConfiguration) -> Self  {
         GenericAnalog {
             general_config,
             special_config
@@ -134,7 +138,7 @@ pub struct AHT22SpecialConfiguration {
 }
 
 impl AHT22SpecialConfiguration {
-    pub fn new_from_bytes(bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE] ) -> AHT22SpecialConfiguration {
+    pub fn new_from_bytes(bytes: &[u8; SENSOR_SETTINGS_PARTITION_SIZE] ) -> AHT22SpecialConfiguration {
         let settings = bytes.as_ptr().cast::<AHT22SpecialConfiguration>();
         unsafe {
             *settings
@@ -159,7 +163,7 @@ impl SensorDriver for AHT22 {
 }
 
 impl AHT22 {
-    pub fn new(general_config: SensorDriverGeneralConfiguration, specific_config_bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE]) -> Self {
+    pub fn new(general_config: SensorDriverGeneralConfiguration, specific_config_bytes: &[u8; SENSOR_SETTINGS_PARTITION_SIZE]) -> Self {
         
         let special_config = AHT22SpecialConfiguration::new_from_bytes(specific_config_bytes);
         AHT22 {

@@ -1,25 +1,23 @@
-use core::{hash::BuildHasher, mem};
 
 use embedded_hal::prelude::{
     _embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write,
     _embedded_hal_blocking_i2c_WriteRead,
 };
-use nb::block;
 use crate::Board;
 use rriv_board::RRIVBoard;
-use rtt_target::rprint;
+use rtt_target::{rprint, rprintln};
 
 // implementation specific consts
 const EEPROM_I2C_ADDRESS: u8 = 0x50;
 
-const EEPROM_RESET_VALUE: u16 = 255; // max value of a byte
+const _EEPROM_RESET_VALUE: u16 = 255; // max value of a byte
 
-const EEPROM_UUID_ADDRESS_START: u8 = 0;
-const EEPROM_UUID_ADDRESS_END: u8 = 15;
-const UUID_LENGTH: u8 = 12; // STM32 has a 12 byte UUID, leave extra space for the future 16
+const _EEPROM_UUID_ADDRESS_START: u8 = 0;
+const _EEPROM_UUID_ADDRESS_END: u8 = 15;
+const _UUID_LENGTH: u8 = 12; // STM32 has a 12 byte UUID, leave extra space for the future 16
 
 const EEPROM_DATALOGGER_SETTINGS_START: u8 = 16;
-const EEPROM_SENSOR_SETTINGS_START: u8 = 80;
+const _EEPROM_SENSOR_SETTINGS_START: u8 = 80;
 
 
 pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address: u8, bytes: &[u8]) {
@@ -36,11 +34,12 @@ pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address:
                 board.delay_ms(5_u16);
             }
             Err(error) => {
-                rprint!("error: {:?}", error);
+                rprintln!("error: {:?}", error);
             }
         }
         address = address + 1;
     }
+    rprintln!("done with EEPROM writes");
 }
 
 pub fn read_bytes_from_eeprom(board: &mut crate::Board, block: u8, start_address: u8, buffer: &mut [u8]) {
@@ -97,10 +96,10 @@ fn calculate_memory_position(slot: u8) -> MemoryPosition {
     }
 }
 
-pub fn write_sensor_configuration_to_eeprom(board: &mut Board, slot: u8, buffer: &mut [u8]) {
+pub fn write_sensor_configuration_to_eeprom(board: &mut Board, slot: u8, bytes: &[u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
    
     let memory_position = calculate_memory_position(slot);
-    write_bytes_to_eeprom(board, memory_position.block, memory_position.address,buffer);
+    write_bytes_to_eeprom(board, memory_position.block, memory_position.address,bytes);
     
 }
 
@@ -111,9 +110,3 @@ pub fn read_sensor_configuration_from_eeprom(board: &mut Board, slot: u8, buffer
 
 }
 
-// pub fn read_all_sensor_configurations(board: &mut Board, buffer: &mut [u8; EEPROM_SENSOR_SETTINGS_SIZE * EEPROM_TOTAL_SENSOR_SLOTS]) {
-//     for slot in 0..EEPROM_TOTAL_SENSOR_SLOTS {
-//         let slice = &mut buffer[slot*EEPROM_SENSOR_SETTINGS_SIZE..(slot+1)*EEPROM_SENSOR_SETTINGS_SIZE];
-//         read_sensor_configuration_from_eeprom(board, slot.try_into().unwrap(), slice) 
-//     }
-// }

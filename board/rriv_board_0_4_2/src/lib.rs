@@ -5,14 +5,9 @@ extern crate panic_halt;
 
 use alloc::boxed::Box;
 use embedded_hal::digital::v2::OutputPin;
-use embedded_hal::spi::Polarity;
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
-use stm32f1xx_hal::spi::{Spi, Spi2NoRemap};
-use core::borrow::BorrowMut;
-use core::default;
-use core::fmt::Write;
-use core::marker::{Send, Sync};
+use stm32f1xx_hal::spi::{Spi};
 use core::{
     cell::RefCell,
     concat,
@@ -22,25 +17,19 @@ use core::{
     option::{Option, Option::*},
     result::Result::*,
 };
-use cortex_m::interrupt::{enable, free};
-use cortex_m::peripheral::DWT;
-use cortex_m::Peripherals;
 use cortex_m::{
     asm::{delay, dmb, dsb},
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
-use embedded_hal::blocking::i2c;
-use stm32f1xx_hal::gpio::{gpioa, Alternate, Pin};
-use stm32f1xx_hal::i2c::I2c;
-use stm32f1xx_hal::pac::can1::tx;
-use stm32f1xx_hal::pac::{I2C1, I2C2, RCC, USART2, USB, TIM1, TIM2};
+use stm32f1xx_hal::gpio::{Alternate, Pin};
+use stm32f1xx_hal::pac::{I2C1, I2C2, USART2, USB, TIM2};
 
 use rtt_target::rprintln;
-use stm32f1xx_hal::rcc::{BusClock, Clocks, Enable, Reset, CFGR};
+use stm32f1xx_hal::rcc::{Clocks, CFGR};
 use stm32f1xx_hal::{
-    gpio::{self, OpenDrain, Output, PinState},
-    i2c::{BlockingI2c, DutyCycle, Instance, Mode},
+    gpio::{self, OpenDrain, Output},
+    i2c::{BlockingI2c, Mode},
     pac,
     pac::interrupt,
     prelude::*,
@@ -86,7 +75,7 @@ type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
     pub delay: SysDelay,
-    pub power_control: PowerControl,
+    // // pub power_control: PowerControl,
     pub gpio: DynamicGpioPins, 
     pub internal_adc: InternalAdc,
     pub external_adc: ExternalAdc,
@@ -99,9 +88,9 @@ pub struct Board {
 
 impl Board {
     pub fn start(&mut self) {
-        self.power_control.cycle_3v(&mut self.delay);
+        // self.power_control.cycle_3v(&mut self.delay);
 
-        self.internal_adc.enable(&mut self.delay); 
+        // self.internal_adc.enable(&mut self.delay); 
     }
 }
 
@@ -152,7 +141,7 @@ impl RRIVBoard for Board {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
     }
 
-    fn retrieve_sensor_settings(
+    fn retrieve_sensor_settings( // retrieve_all_sensor_configurations
         &mut self,
         buffer: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS]
     ) {
@@ -162,13 +151,15 @@ impl RRIVBoard for Board {
         }
     }
 
+    fn store_sensor_settings(&mut self, slot: u8, bytes: &[u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE] ) { // sensor_configuration
+        write_sensor_configuration_to_eeprom(self, slot, bytes);
+    }
+
     fn delay_ms(&mut self, ms: u16) {
         self.delay.delay_ms(ms);
     }
 
-    fn store_sensor_settings(&mut self) {
-        todo!()
-    }
+ 
 
 
 }
@@ -248,20 +239,10 @@ fn usb_interrupt(cs: &CriticalSection) {
 
 pub fn build() -> Board {
     let mut board_builder = BoardBuilder::new();
-    board_builder = board_builder.setup();
+    board_builder.setup();
     let board = board_builder.build();
-    // board.setup();
     board
 }
-
-
-// pub struct delay_2 {}
-
-// impl embedded_hal::blocking::delay::DelayUs<u8> for delay_2 {
-//     fn delay_us(&mut self, us: u8) {
-//         todo!()
-//     }
-// }
 
 
 pub struct BoardBuilder {
@@ -300,11 +281,13 @@ impl BoardBuilder {
     }
 
     pub fn build(self) -> Board {
+
+        // loop{}
         Board {
             i2c1: self.i2c1.unwrap(),
             i2c2: self.i2c2.unwrap(),
             delay: self.delay.unwrap(),
-            power_control: self.power_control.unwrap(),
+            // // power_control: self.power_control.unwrap(),
             gpio: self.gpio.unwrap(),
             internal_adc: self.internal_adc.unwrap(),
             external_adc: self.external_adc.unwrap(),
@@ -439,7 +422,7 @@ impl BoardBuilder {
         )
     }
      
-    fn setup(mut self) -> Self {
+    fn setup(&mut self) {
         rprintln!("board new");
 
         let mut core_peripherals = cortex_m::Peripherals::take().unwrap();
@@ -564,8 +547,10 @@ impl BoardBuilder {
             clocks,
           );
 
+        self.delay = Some(delay);
 
-        // we can unsafely .steal on device peripherals to get rcc again
+
+        // we can unsafely .steal on device peripherals to get rcc again, or not?
         // unsafe {
         // let rcc_block = pac::Peripherals::steal().RCC;
         // I2C1::disable(rcc_block);
@@ -575,25 +560,7 @@ impl BoardBuilder {
         // // I2C1::reset(rcc);
         // // delay.delay_ms(50_u16);
 
-        rprintln!("Start i2c scanning...");
-        rprintln!();
-
-        // for addr in 0x00_u8..0x7F {
-        //     // Write the empty array and check the slave response.
-        //     // rprintln!("trying {:02x}", addr);
-        //     let mut buf = [b'\0'; 1];
-        //     if let Some(i2c) = &mut self.i2c1 {
-        //         if i2c.read(addr, &mut buf).is_ok() {
-        //             rprintln!("{:02x} good", addr);
-        //         }
-        //     }
-        //     self.delay.as_ref().unwrap().delay_ms(10_u16);
-        // }
-        // rprintln!("scan is done");
-
         rprintln!("done with setup");
-
-        self
 
     }
 }
