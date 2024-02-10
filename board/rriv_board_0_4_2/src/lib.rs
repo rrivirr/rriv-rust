@@ -1,7 +1,6 @@
 #![cfg_attr(not(test), no_std)]
 
 extern crate alloc;
-extern crate panic_halt;
 
 use alloc::boxed::Box;
 use embedded_hal::digital::v2::OutputPin;
@@ -439,30 +438,56 @@ impl BoardBuilder {
         let gpioc = device_peripherals.GPIOC.split();
         let gpiod = device_peripherals.GPIOD.split();
 
+        let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
+
         // Set up pins
         let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
         let (
-            external_adc_pins,
+            mut external_adc_pins,
             internal_adc_pins,
             battery_level_pins,
             dynamic_gpio_pins,
             i2c1_pins,
             i2c2_pins,
             mut oscillator_control_pins,
-            // power_pins,
+            mut power_pins,
             rgb_led_pins,
             serial_pins,
             spi1_pins,
             spi2_pins,
             usb_pins
-        ) = pin_groups::build(pins, &mut gpio_cr);
-  
+        ) = pin_groups::build(pins, &mut gpio_cr, delay);
 
         let clocks = BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
-        let mut delay = core_peripherals.SYST.delay(&clocks);
+        
+        let mut delay : Option<SysDelay> = None;
+        unsafe {
+            let core_peripherals = cortex_m::Peripherals::steal();
+            delay = Some(core_peripherals.SYST.delay(&clocks));
+        }
+        let mut delay = delay.unwrap();
         
         BoardBuilder::setup_serial(serial_pins, &mut gpio_cr, &mut afio.mapr, device_peripherals.USART2, &clocks);
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr,  device_peripherals.USB, &clocks);
+
+
+        self.external_adc = Some(ExternalAdc::new(external_adc_pins));
+
+
+        power_pins.enable_3v.set_high();
+        delay.delay_ms(500_u32);
+        power_pins.enable_3v.set_low();
+        delay.delay_ms(500_u32);
+        power_pins.enable_3v.set_high();
+        delay.delay_ms(500_u32);
+    
+       
+        // external adc and i2c stability require these steps 
+        power_pins.enable_5v.set_high();
+        delay.delay_ms(250_u32);
+        self.external_adc.as_mut().unwrap().enable(&mut delay);  
+        self.external_adc.as_mut().unwrap().reset(&mut delay);
+
 
         // rprintln!("starting i2c");
         core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
@@ -487,7 +512,8 @@ impl BoardBuilder {
                         rprintln!("{:02x} good", addr);
                     }
                 }
-                delay.delay_ms(10_u16);
+
+                delay.delay_ms(10_u32);
             }
             rprintln!("scan is done");
 
@@ -502,7 +528,7 @@ impl BoardBuilder {
                         rprintln!("{:02x} good", addr);
                     }
                 }
-                delay.delay_ms(10_u16);
+                delay.delay_ms(10_u32);
             }
             rprintln!("scan is done");
 
@@ -526,7 +552,6 @@ impl BoardBuilder {
         
         self.oscillator_control = Some(OscillatorControl::new(oscillator_control_pins));
 
-        self.external_adc = Some(ExternalAdc::new(external_adc_pins));
 
         self.gpio = Some(dynamic_gpio_pins);
 

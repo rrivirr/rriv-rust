@@ -34,7 +34,7 @@ pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address:
                 board.delay_ms(5_u16);
             }
             Err(error) => {
-                rprintln!("error: {:?}", error);
+                rprintln!("write error: {:?}", error);
             }
         }
         address = address + 1;

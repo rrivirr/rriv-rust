@@ -42,6 +42,7 @@ impl SensorDriverGeneralConfiguration {
 pub trait SensorDriver {
     fn setup(&mut self);
     fn get_id(&mut self) -> [u8;6];
+    fn get_type_id(&mut self) -> u16;
 }
 
 pub trait ActuatorDriver {
@@ -97,19 +98,30 @@ impl GenericAnalogSpecialConfiguration {
 }
 
 
+macro_rules! getters {
+    () => {
+        fn get_id(&mut self) -> [u8;6] {
+            self.general_config.id.clone()
+        } 
+
+        fn get_type_id(&mut self) -> u16 {
+            self.general_config.sensor_type_id.clone()
+        } 
+    };
+}
+
+
 pub struct GenericAnalog {
     general_config: SensorDriverGeneralConfiguration,
     special_config: GenericAnalogSpecialConfiguration
-}
+}   
 
 impl SensorDriver for GenericAnalog {
     fn setup(&mut self) {
         todo!()
     }
 
-    fn get_id(&mut self) -> [u8;6] {
-        self.general_config.id.clone()
-    }
+    getters!();
 }
 
 impl GenericAnalog {
@@ -157,9 +169,7 @@ impl SensorDriver for AHT22 {
         todo!()
     }
 
-    fn get_id(&mut self) -> [u8;6] {
-        self.general_config.id.clone()
-    }
+    getters!();
 }
 
 impl AHT22 {

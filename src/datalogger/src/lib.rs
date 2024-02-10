@@ -3,12 +3,10 @@
 
 mod command_service;
 mod datalogger_commands;
-use core::panic;
-use core::ptr::eq;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
-use rriv_board::{RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE};
+use rriv_board::{RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE};
 extern crate alloc;
 use alloc::boxed::Box;
 use alloc::format;
@@ -19,6 +17,8 @@ use drivers::*;
 use serde::de::value;
 use serde_json::json;
 use crate::alloc::string::ToString;
+use alloc::string::String;
+
 
 use core::str::from_utf8;
 
@@ -142,11 +142,22 @@ macro_rules! driver_create_functions {
         (
             |general_settings: SensorDriverGeneralConfiguration,
              special_settings_values: serde_json::Value|
-             -> Box<dyn SensorDriver> {
+             -> (Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE]) {
                 let special_settings =
                     <$special_settings_type>::new_from_values(special_settings_values);
                 let driver = <$driver>::new(general_settings, special_settings);
-                Box::new(driver)
+                
+                let bytes: &[u8] = unsafe { any_as_u8_slice(&special_settings) };
+                let mut bytes_sized: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
+                    [0; SENSOR_SETTINGS_PARTITION_SIZE];
+                let copy_size = if bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                    SENSOR_SETTINGS_PARTITION_SIZE
+                } else {
+                    bytes.len()
+                };
+                bytes_sized[..bytes.len()].copy_from_slice(&bytes[0..copy_size]);
+
+                (Box::new(driver), bytes_sized)
             },
             |general_settings: SensorDriverGeneralConfiguration,
              special_settings_slice: &[u8]|
@@ -163,7 +174,7 @@ macro_rules! driver_create_functions {
 }
 
 type DriverCreateFunctions = Option<(
-    fn(SensorDriverGeneralConfiguration, serde_json::Value) -> Box<dyn SensorDriver>,
+    fn(SensorDriverGeneralConfiguration, serde_json::Value) -> ( Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE] ),
     fn(SensorDriverGeneralConfiguration, &[u8]) -> Box<dyn SensorDriver>,
 )>;
 fn get_registry() -> [DriverCreateFunctions; 256] {
@@ -392,17 +403,40 @@ impl DataLogger {
                     slot = empty_slot
                 };
 
-            
+                rprintln!("looking up funcs");
                 let create_function = registry[usize::from(sensor_type_id)];
+
                 if let Some(functions) = create_function {
-                    // let s: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
-                    //     [0; SENSOR_SETTINGS_PARTITION_SIZE];
+        
                     let general_settings =
                         SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
-                    let driver = functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
+                    rprintln!("calling func 0"); // TODO: crashed here
+                    let (driver, special_settings_bytes) = functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
                     self.sensor_drivers[slot] = Some(driver);
 
-                    board.serial_send("update sensor configuration\n");
+                    // get the generic settings as bytes
+                    let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&general_settings) };
+                    let mut bytes_sized: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
+                        [0; EEPROM_SENSOR_SETTINGS_SIZE];
+                    let copy_size = if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                        SENSOR_SETTINGS_PARTITION_SIZE
+                    } else {
+                        generic_settings_bytes.len()
+                    };
+                    bytes_sized[..generic_settings_bytes.len()].copy_from_slice(&generic_settings_bytes[0..copy_size]);
+                    
+
+                    // get the special settings as bytes
+                    let copy_size = if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                        SENSOR_SETTINGS_PARTITION_SIZE
+                    } else {
+                        special_settings_bytes.len()
+                    };
+                    bytes_sized[SENSOR_SETTINGS_PARTITION_SIZE..(generic_settings_bytes.len()-1+SENSOR_SETTINGS_PARTITION_SIZE)].copy_from_slice(&special_settings_bytes[0..copy_size]);
+
+
+                    board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
+                    board.serial_send("updated sensor configuration\n");
                 }
             }
             CommandPayload::SensorGetCommandPayload(_) => {
@@ -410,19 +444,24 @@ impl DataLogger {
             }
             CommandPayload::SensorRemoveCommandPayload(_) => todo!(),
             CommandPayload::SensorListCommandPayload(_) => {
+
+                board.serial_send("{");
                 for i in 0..self.sensor_drivers.len() {
                     // create json and output it
                     if let Some(driver) = &mut self.sensor_drivers[i] {
 
+                        let id = "anid";
                         let json = json!({
-                            "id": driver.get_id(),
-                            // r#type: sensor_name_from_type_id(driver.r#type)
+                            "id": id, //driver.get_id(),
+                            "type": sensor_name_from_type_id(driver.get_type_id().into())
                         });
                         let string = json.to_string();
                         let str = string.as_str();
                         board.serial_send(str);
+                        board.serial_send("\n");
                     }
                 }
+                board.serial_send("}");
             },
         }
     }
@@ -451,7 +490,7 @@ impl DataLogger {
                 Ok(deployment_identifier) => {
                     self.settings.deployment_identifier = deployment_identifier
                 }
-                Err(_) => todo!(),
+                Err(_) => todo!()
             }
         }
 
