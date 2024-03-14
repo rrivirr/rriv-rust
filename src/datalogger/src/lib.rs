@@ -132,7 +132,7 @@ fn sensor_type_id_from_name(name: &str) -> u16 {
 fn sensor_name_from_type_id(id: usize) -> [u8; 16] {
     let mut rval = [b'\0'; 16];
     let name = SENSOR_NAMES[id].clone();
-    rval.copy_from_slice(name.as_bytes());
+    rval[..name.len()].copy_from_slice(name.as_bytes());
     rval
 }
 
@@ -453,12 +453,14 @@ impl DataLogger {
                 board.serial_send("{");
                 for i in 0..self.sensor_drivers.len() {
                     // create json and output it
+                    let test = & self.sensor_drivers[i];
                     if let Some(driver) = &mut self.sensor_drivers[i] {
 
-                        let id = "anid";
+                        let id = driver.get_id();
+                        let type_id = driver.get_type_id();
                         let json = json!({
-                            "id": id, //driver.get_id(),
-                            "type": sensor_name_from_type_id(driver.get_type_id().into())
+                            "id": id,
+                            "type": sensor_name_from_type_id(type_id.into())
                         });
                         let string = json.to_string();
                         let str = string.as_str();
