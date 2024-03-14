@@ -55,10 +55,10 @@ pub trait TelemeterDriver {
 
 #[derive(Copy,Clone,Debug)]
 pub struct GenericAnalogSpecialConfiguration {
-    m: f64,
-    b: f64,
-    sensor_port: u8,
-    empty: [u8; 23]
+    m: f64, //8
+    b: f64, // 8
+    sensor_port: u8, // 1
+    empty: [u8; 15] // 15
 }
 
 impl GenericAnalogSpecialConfiguration {
@@ -84,7 +84,7 @@ impl GenericAnalogSpecialConfiguration {
             m: 0.0,
             b: 0.0,
             sensor_port: sensor_port,
-            empty: [b'\0'; 23]
+            empty: [b'\0'; 15]
         }
     }
 

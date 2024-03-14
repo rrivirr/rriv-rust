@@ -144,18 +144,23 @@ macro_rules! driver_create_functions {
              special_settings_values: serde_json::Value|
              -> (Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE]) {
                 let special_settings =
-                    <$special_settings_type>::new_from_values(special_settings_values);
-                let driver = <$driver>::new(general_settings, special_settings);
+                    <$special_settings_type>::new_from_values(special_settings_values); // ok
+                let driver = <$driver>::new(general_settings, special_settings); // seems ok
                 
-                let bytes: &[u8] = unsafe { any_as_u8_slice(&special_settings) };
+                let bytes: &[u8] = unsafe { any_as_u8_slice(&special_settings) }; // must be this one, maybe size comes back wrong
+                if bytes.len() != SENSOR_SETTINGS_PARTITION_SIZE {
+                    // special_settings_type does not confrm to expected size.  this is a development fault
+                    rprintln!("{} is wrong size", "<$special_settings_type>");
+                    // causes crash later.  other way to gracefully handle?
+                }
                 let mut bytes_sized: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
                     [0; SENSOR_SETTINGS_PARTITION_SIZE];
-                let copy_size = if bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                let copy_size = if bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE { // this was supposed to make it safe...
                     SENSOR_SETTINGS_PARTITION_SIZE
                 } else {
                     bytes.len()
                 };
-                bytes_sized[..bytes.len()].copy_from_slice(&bytes[0..copy_size]);
+                bytes_sized[..SENSOR_SETTINGS_PARTITION_SIZE].copy_from_slice(&bytes[0..copy_size]);
 
                 (Box::new(driver), bytes_sized)
             },
@@ -423,7 +428,7 @@ impl DataLogger {
                     } else {
                         generic_settings_bytes.len()
                     };
-                    bytes_sized[..generic_settings_bytes.len()].copy_from_slice(&generic_settings_bytes[0..copy_size]);
+                    bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
                     
 
                     // get the special settings as bytes
@@ -432,7 +437,7 @@ impl DataLogger {
                     } else {
                         special_settings_bytes.len()
                     };
-                    bytes_sized[SENSOR_SETTINGS_PARTITION_SIZE..(generic_settings_bytes.len()-1+SENSOR_SETTINGS_PARTITION_SIZE)].copy_from_slice(&special_settings_bytes[0..copy_size]);
+                    bytes_sized[SENSOR_SETTINGS_PARTITION_SIZE..(SENSOR_SETTINGS_PARTITION_SIZE+copy_size)].copy_from_slice(&special_settings_bytes[0..copy_size]);
 
 
                     board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
