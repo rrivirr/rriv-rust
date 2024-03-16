@@ -6,7 +6,7 @@ mod datalogger_commands;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
-use rriv_board::{RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE};
+use rriv_board::{RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE, EEPROM_TOTAL_SENSOR_SLOTS};
 extern crate alloc;
 use alloc::boxed::Box;
 use alloc::format;
@@ -15,12 +15,12 @@ use rtt_target::rprintln;
 mod drivers;
 use drivers::*;
 use serde::de::value;
-use serde_json::json;
+use serde_json::{json, Value};
 use crate::alloc::string::ToString;
 use alloc::string::String;
 
 
-use core::str::from_utf8;
+use core::{ffi::CStr, str::from_utf8};
 
 const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
 
@@ -358,14 +358,14 @@ impl DataLogger {
                 }
 
                 let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
-                let mut id_exists = false;
+                let mut id_provided: bool = false;
 
                 if let Some(payload_id) = payload.id {
                     sensor_id = match payload_id {
                         serde_json::Value::String(id) => {
                             let mut prepared_id: [u8; 6] = [0; 6];
                             prepared_id.copy_from_slice(id.as_bytes());
-                            id_exists = true;
+                            id_provided = true;
                             prepared_id
                         }
                         _ => {
@@ -375,18 +375,40 @@ impl DataLogger {
                     };
                 }
 
-                // make sure it is unique
-                if !id_exists {
+                // create a new unique id
+                if !id_provided {
+
+                    // get all the current ids
+                    let mut driver_ids : [[u8;6]; EEPROM_TOTAL_SENSOR_SLOTS] = [[0;6]; EEPROM_TOTAL_SENSOR_SLOTS];
                     for i in 0..self.sensor_drivers.len() {
                         if let Some(driver) = &mut self.sensor_drivers[i] {
-                            let existing_id = driver.get_id();
-                            for i in 0..existing_id.len() {
-                                while existing_id[i] == sensor_id[i] {
-                                    sensor_id[i] = sensor_id[i] + 1;
-                                }
-                            }
+                            driver_ids[i] = driver.get_id();
                         }
                     }
+
+                    let mut unique = false;
+                    while unique == false {
+                        let mut i = 0;
+                        let mut changed = false;
+                        let sensor_id_scan = sensor_id.clone();
+                        while i < driver_ids.len() && changed == false {
+                            let mut same = true;
+                            for (j, (u1, u2)) in driver_ids[i].iter().zip(sensor_id_scan.iter()).enumerate() {
+                                // if hey are equal..
+                                if u1 != u2 {
+                                    same = false;
+                                    break;
+                                }
+                            }
+                            if same { // we need to make a change
+                                sensor_id[sensor_id.len() - 1] = sensor_id[sensor_id.len() - 1] + 1;
+                                changed = true;
+                            }
+                            i = i + 1;
+                        }
+                        unique = !changed;
+                    }
+
                 }
 
                 // find the slot
@@ -444,10 +466,47 @@ impl DataLogger {
                     board.serial_send("updated sensor configuration\n");
                 }
             }
-            CommandPayload::SensorGetCommandPayload(_) => {
+            CommandPayload::SensorGetCommandPayload(payload) => {
                 board.serial_send("get sensor settings not implemented\n");
             }
-            CommandPayload::SensorRemoveCommandPayload(_) => todo!(),
+            CommandPayload::SensorRemoveCommandPayload(payload) => {
+                
+                let sensor_id = match payload.id {
+                    serde_json::Value::String(id) => {
+                        let mut prepared_id: [u8; 6] = [0; 6];
+                        prepared_id.copy_from_slice(id.as_bytes());
+                        prepared_id
+                    }
+                    _ => {
+                        board.serial_send("Sensor not found");
+                        return;
+                    }
+                };    
+
+                for i in 0..self.sensor_drivers.len() {
+                    if let Some(driver) = &mut self.sensor_drivers[i] {
+                        let mut found = i; 
+                        for (j, (u1, u2)) in driver.get_id().iter().zip(sensor_id.iter()).enumerate() {
+                            if u1 != u2 {
+                                found = 256; // 256 mneans not found
+                                break;
+                            }
+                        }
+                        if usize::from(found) < EEPROM_TOTAL_SENSOR_SLOTS {
+                            // remove the sensor driver and write null to EEPROM
+                            let bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] = [0; EEPROM_DATALOGGER_SETTINGS_SIZE];
+                            if let Some(found_u8) = found.try_into().ok() {
+                                board.store_sensor_settings(found_u8, &bytes);
+                                self.sensor_drivers[found] = None;
+                                board.serial_send("Sensor removed\n");
+                                return;
+                            }
+                           
+                        }
+                    }
+                }
+
+            }
             CommandPayload::SensorListCommandPayload(_) => {
 
                 board.serial_send("{");
@@ -456,10 +515,18 @@ impl DataLogger {
                     let test = & self.sensor_drivers[i];
                     if let Some(driver) = &mut self.sensor_drivers[i] {
 
-                        let id = driver.get_id();
+                        let id_bytes = driver.get_id();
+                        // let id = "id";
+                        // let id = core::str::from_utf8_unchecked(&id_bytes);
+
+                        // let id_cstr = CStr::from_bytes_with_nul(&id_bytes).unwrap_or_default();
+                        // let id_str = id_cstr.to_str().unwrap_or_default();
+
+                        let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+
                         let type_id = driver.get_type_id();
                         let json = json!({
-                            "id": id,
+                            "id": id_str,
                             "type": sensor_name_from_type_id(type_id.into())
                         });
                         let string = json.to_string();
