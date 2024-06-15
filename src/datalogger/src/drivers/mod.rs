@@ -1,3 +1,5 @@
+use bitfield_struct::bitfield;
+use alloc::boxed::Box;
 
 // codes and sensor names mapped to a sensor implementation
 
@@ -43,6 +45,11 @@ pub trait SensorDriver {
     fn setup(&mut self);
     fn get_id(&mut self) -> [u8;6];
     fn get_type_id(&mut self) -> u16;
+    fn get_measured_parameter_count(&mut self) -> usize;
+    fn get_measured_parameter_value(&mut self, index: usize) -> f32;
+    fn get_measured_parameter_identifier(&mut self, index: usize) -> &str;
+    fn take_measurement(&mut self, board: &mut dyn rriv_board::ADCInterface );
+
 }
 
 pub trait ActuatorDriver {
@@ -53,12 +60,27 @@ pub trait TelemeterDriver {
     fn setup(&mut self);
 }
 
+#[bitfield(u8)]
+struct GenericAnalogDriverBitfield {
+    #[bits(2)]
+    adc_select: usize,
+
+    unused_1: bool,
+    unused_2: bool,
+    unused_3: bool,
+    unused_4: bool,
+    unused_5: bool,
+    unused_6: bool,
+}
+
+
 #[derive(Copy,Clone,Debug)]
 pub struct GenericAnalogSpecialConfiguration {
     m: f64, //8
     b: f64, // 8
     sensor_port: u8, // 1
-    empty: [u8; 15] // 15
+    settings: GenericAnalogDriverBitfield,
+    empty: [u8; 14] // 15
 }
 
 impl GenericAnalogSpecialConfiguration {
@@ -80,11 +102,31 @@ impl GenericAnalogSpecialConfiguration {
             _ => {todo!("need to handle missing sensor port")},
         }
 
+        let mut bits : u8 = 0;
+        match &value["adc_select"] {
+            serde_json::Value::String(string) => {
+               match string.as_str() {
+                "internal" => {
+                    bits = 0;
+                },
+               "external" => {
+                    bits = 1;
+               },
+               _ => {
+                todo!("need to handle bad adc select string");
+               }
+                
+               }
+            }
+            _ => {todo!("need to handle missing adc selection")},
+        }
+
         return Self {
             m: 0.0,
             b: 0.0,
             sensor_port: sensor_port,
-            empty: [b'\0'; 15]
+            settings: GenericAnalogDriverBitfield::from_bits(bits),
+            empty: [b'\0'; 14],
         }
     }
 
@@ -113,7 +155,8 @@ macro_rules! getters {
 
 pub struct GenericAnalog {
     general_config: SensorDriverGeneralConfiguration,
-    special_config: GenericAnalogSpecialConfiguration
+    special_config: GenericAnalogSpecialConfiguration,
+    measured_parameter_values: [f32; 2]
 }   
 
 impl SensorDriver for GenericAnalog {
@@ -122,6 +165,54 @@ impl SensorDriver for GenericAnalog {
     }
 
     getters!();
+    
+    // fn get_measured_parameter_values(&mut self) -> [f32; 2] {
+    //     return self.measured_parameter_values.clone();
+    // }
+    
+    // fn get_measured_parameter_identifiers(&mut self) -> [&str] {
+    //     return ["raw"];
+    // }
+    
+    fn take_measurement(&mut self, adc_interface: &mut dyn rriv_board::ADCInterface ) {
+        let mut value = 0;
+        match self.special_config.settings.adc_select() {
+                    0 => {
+                        value = adc_interface.query_internal_adc(self.special_config.sensor_port);
+                    },
+                    1 => todo!("exadc not implemented"),
+                    2_usize.. => todo!("other adcs not implemented"),
+                }
+        self.measured_parameter_values[0] = value;
+    }
+    
+    fn get_measured_parameter_count(&mut self) -> usize {
+        return 2;
+    }
+    
+    fn get_measured_parameter_value(&mut self, index: usize) -> f32 {
+        return self.measured_parameter_values[index];
+    }
+    
+    fn get_measured_parameter_identifier(&mut self, index: usize) -> &str {
+        let identifiers = ["raw", "cal"];
+        if index > 1 {
+            return "invalid";
+        }
+        return identifiers[index];
+    }
+    
+  
+    
+    // fn take_measurement(&mut self, board: Box<&mut impl rriv_board::RRIVBoard>) {
+    //     // implement exadc and intadc
+    //     match self.special_config.settings.adc_select {
+    //         0 => {
+    //             board.query_internal_adc(self.special_config.sensor_port);
+    //         },
+    //         1 => todo!("exadc not implemented"),
+    //     }
+    // }
 }
 
 impl GenericAnalog {
@@ -137,7 +228,8 @@ impl GenericAnalog {
     pub fn new(general_config: SensorDriverGeneralConfiguration, special_config: GenericAnalogSpecialConfiguration) -> Self  {
         GenericAnalog {
             general_config,
-            special_config
+            special_config,
+            measured_parameter_values: [0.0; 2]
         }
     }
 }
@@ -170,6 +262,25 @@ impl SensorDriver for AHT22 {
     }
 
     getters!();
+    
+
+    fn take_measurement(&mut self, board: &mut dyn rriv_board::ADCInterface ) {
+        todo!()
+    }
+    
+    fn get_measured_parameter_count(&mut self) -> usize {
+        todo!()
+    }
+    
+    fn get_measured_parameter_value(&mut self, index: usize) -> f32 {
+        todo!()
+    }
+    
+    fn get_measured_parameter_identifier(&mut self, index: usize) -> &str {
+        todo!()
+    }
+
+    
 }
 
 impl AHT22 {

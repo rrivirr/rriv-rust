@@ -40,7 +40,9 @@ use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
-use rriv_board::{RRIVBoard, RRIVBoardBuilder, RXProcessor};
+use rriv_board::{ADCInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor};
+
+use stm32f1xx_hal::rtc::Rtc;
 
 mod components;
 use components::*;
@@ -83,6 +85,7 @@ pub struct Board {
     pub oscillator_control: OscillatorControl,
     pub i2c1: BoardI2c1,
     pub i2c2: BoardI2c2,
+    pub rtc: Rtc,
 }
 
 impl Board {
@@ -158,8 +161,40 @@ impl RRIVBoard for Board {
         self.delay.delay_ms(ms);
     }
 
- 
+    fn timestamp(&mut self) -> u32 {
+        return self.rtc.current_time();
+    }
+    
+    fn get_adc_interface(&mut self) -> & impl ADCInterface {
+        return self;
+    }
 
+}
+
+
+impl ADCInterface for Board {
+
+    fn query_internal_adc(&mut self, channel: u8) -> u16 {
+        match self.internal_adc.read(channel) {
+            Ok(value) => return value,
+            Err(error) => {
+
+                let mut errorString = "unhandled error";
+                match error {
+                    AdcError::NBError(_) => errorString = "ADC NBError",
+                    AdcError::NotConfigured => errorString = "ADC Not Configured",
+                    AdcError::ReadError => errorString = "ADC Read Error",
+                }
+                self.serial_send(&errorString);
+                return 0;
+            }
+        }
+    }
+
+    fn query_external_adc(&mut self, channel: u8) -> u32 {
+        // return self.external_adc.read(1);
+        return 0;  // not implemented
+    }
 
 }
 
@@ -261,6 +296,7 @@ pub struct BoardBuilder {
     pub rgb_led: Option<RgbLed>,
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
+    pub rtc: Option<Rtc>
 }
 
 impl BoardBuilder {
@@ -276,6 +312,7 @@ impl BoardBuilder {
             battery_level: None,
             rgb_led: None,
             oscillator_control: None,
+            rtc: None
         }
     }
 
@@ -293,6 +330,7 @@ impl BoardBuilder {
             battery_level: self.battery_level.unwrap(),
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
+            rtc: self.rtc.unwrap()
         }
     }
 
@@ -432,8 +470,13 @@ impl BoardBuilder {
         let mut flash = device_peripherals.FLASH.constrain();
         let mut afio = device_peripherals.AFIO.constrain(); // Prepare the alternate function I/O registers
 
+
+        let mut pwr = device_peripherals.PWR;
+        let mut backup_domain = rcc.bkp.constrain(device_peripherals.BKP, &mut pwr);
+        self.rtc = Some(Rtc::new(device_peripherals.RTC, &mut backup_domain));
+
         // Prepare the GPIO
-        let gpioa = device_peripherals.GPIOA.split();
+        let gpioa: gpio::gpioa::Parts = device_peripherals.GPIOA.split();
         let gpiob = device_peripherals.GPIOB.split();
         let gpioc = device_peripherals.GPIOC.split();
         let gpiod = device_peripherals.GPIOD.split();

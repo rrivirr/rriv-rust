@@ -326,6 +326,75 @@ impl DataLogger {
         }
 
         // do the measurement cycle stuff
+        // implement interactive mode logging first
+
+        let interactive_mode_logging = true;
+        let mut last_interactive_log_time = 0;
+        if interactive_mode_logging {
+          
+            
+            if (board.timestamp() > last_interactive_log_time + 1)
+            {
+                // notify(F("interactive log"));
+                self.measure_sensor_values(board); // measureSensorValues(false);
+                self.write_last_measurement_to_serial(board);  //outputLastMeasurement();
+                // Serial2.print(F("CMD >> "));
+                // writeRawMeasurementToLogFile();
+                // fileSystemWriteCache->flushCache();
+                last_interactive_log_time = board.timestamp();
+            }
+        }
+
+    }
+
+    fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(ref mut driver) = self.sensor_drivers[i] {;
+                driver.take_measurement(board.get_adc_interface());
+            }
+        }
+
+    }
+
+    fn write_last_measurement_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard){
+
+        // first output the column headers
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
+                let sensor_name = driver.get_id(); // always output the id for now, later add bit to control append prefix behavior, default to false
+                // let mut prefix: &str = "";
+                // if let Some(sensor_name) = sensor_name {
+                let mut prefix = core::str::from_utf8(&sensor_name.clone()).unwrap().to_string();
+                prefix = (prefix + "_").clone(); 
+                // }
+                for i in 0..driver.get_measured_parameter_count() {
+                    let identifier = driver.get_measured_parameter_identifier(i);
+                    board.serial_send(&prefix);
+                    board.serial_send(identifier);
+                    if i != driver.get_measured_parameter_count() - 1 {
+                        board.serial_send(",");
+                    }
+                }
+                board.serial_send("\n");
+            }
+        }
+
+        // then output the last measurement values
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
+                for i in 0..driver.get_measured_parameter_count() {
+
+                    let value = driver.get_measured_parameter_value(i);
+                    let output = format!("{:.4}", value);
+                    board.serial_send(&output);
+                    if i != driver.get_measured_parameter_count() - 1 {
+                        board.serial_send(",");
+                    }
+                }
+                board.serial_send("\n");
+            }
+        }
+
     }
 
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {

@@ -55,6 +55,7 @@ dependencies = [
  "hashbrown",
  "rriv_board",
  "rtt-target",
+ "rust-bitfield",
  "serde",
  "serde_json",
 ]
@@ -128,6 +129,12 @@ dependencies = [
  "critical-section",
  "ufmt-write",
 ]
+
+[[package]]
+name = "rust-bitfield"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dc9367e7cc39d82e9214c430a4347a28028f6e742b1fb5f0b75e5b23efdd109"
 
 [[package]]
 name = "ryu"

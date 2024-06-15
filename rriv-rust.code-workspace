@@ -11,7 +11,7 @@
 		"[rust]": {
 			"editor.defaultFormatter": "rust-lang.rust-analyzer"
 		},
-		"probe-rs-debugger.debuggerExecutable": "/home/zaven/.cargo/bin/probe-rs",
+		"probe-rs-debugger.debuggerExecutable": "",
 		"rust-analyzer.check.allTargets": false,
 		"task.quickOpen.showAll": false,
 		"rust-analyzer.linkedProjects": [
