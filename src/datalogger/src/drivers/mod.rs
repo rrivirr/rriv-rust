@@ -144,6 +144,65 @@ macro_rules! getters {
     };
 }
 
+#[derive(Copy, Clone, Debug)]
+pub struct MCP9808TemperatureDriverSpecialConfiguration {
+    empty: [u8; 32], // 32
+}
+
+impl MCP9808TemperatureDriverSpecialConfiguration {
+    pub fn new_from_values(
+        value: serde_json::Value,
+    ) -> MCP9808TemperatureDriverSpecialConfiguration {
+        Self { empty: [b'\0'; 32] }
+    }
+    pub fn new_from_bytes(
+        bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE],
+    ) -> MCP9808TemperatureDriverSpecialConfiguration {
+        Self { empty: [b'\0'; 32] }
+    }
+}
+
+pub struct MCP9808TemperatureDriver {
+    general_config: SensorDriverGeneralConfiguration,
+    special_config: MCP9808TemperatureDriverSpecialConfiguration,
+    measured_parameter_values: [f32; 1],
+}
+
+impl SensorDriver for MCP9808TemperatureDriver {
+    fn setup(&mut self) {
+        todo!()
+    }
+
+    getters!();
+
+    fn get_measured_parameter_count(&mut self) -> usize {
+        1
+    }
+
+    fn get_measured_parameter_value(&mut self, index: usize) -> f32 {
+        self.measured_parameter_values[index]
+    }
+
+    fn get_measured_parameter_identifier(&mut self, index: usize) -> &str {
+        return "T";
+    }
+
+    fn take_measurement(&mut self, adc: &mut dyn rriv_board::ADCInterface) {}
+}
+
+impl MCP9808TemperatureDriver {
+    pub fn new(
+        general_config: SensorDriverGeneralConfiguration,
+        special_config: MCP9808TemperatureDriverSpecialConfiguration,
+    ) -> Self {
+        MCP9808TemperatureDriver {
+            general_config,
+            special_config,
+            measured_parameter_values: [0.0],
+        }
+    }
+}
+
 pub struct GenericAnalog {
     general_config: SensorDriverGeneralConfiguration,
     special_config: GenericAnalogSpecialConfiguration,
