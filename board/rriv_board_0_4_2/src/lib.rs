@@ -165,7 +165,7 @@ impl RRIVBoard for Board {
         return self.rtc.current_time();
     }
     
-    fn get_adc_interface(&mut self) -> & impl ADCInterface {
+    fn get_adc_interface(&mut self) -> & mut dyn ADCInterface {
         return self;
     }
 
