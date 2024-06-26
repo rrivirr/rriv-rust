@@ -223,7 +223,20 @@ impl SensorDriverServices for Board {
 
     control_services_impl!();
     
-
+    fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]) {
+        match self.i2c2.read(addr, buffer){
+            Ok(_) => return,
+            Err(_) => todo!(),
+        }
+    }
+    
+    fn ic2_write(&mut self, addr: u8, message: &[u8]) {
+        match self.i2c2.write(addr, message){
+            Ok(_) => return,
+            Err(_) => todo!(),
+        }
+    
+    }
 }
 
 impl ActuatorDriverServices for Board {
@@ -579,37 +592,37 @@ impl BoardBuilder {
         rprintln!("set up i2c2");
 
         // loop {
-            rprintln!("Start i2c1 scanning...");
-            rprintln!();
+        rprintln!("Start i2c1 scanning...");
+        rprintln!();
 
-            for addr in 0x00_u8..0x7F {
-                // Write the empty array and check the slave response.
-                // rprintln!("trying {:02x}", addr);
-                let mut buf = [b'\0'; 1];
-                if let Some(i2c) = &mut self.i2c1 {
-                    if i2c.read(addr, &mut buf).is_ok() {
-                        rprintln!("{:02x} good", addr);
-                    }
+        for addr in 0x00_u8..0x7F {
+            // Write the empty array and check the slave response.
+            // rprintln!("trying {:02x}", addr);
+            let mut buf = [b'\0'; 1];
+            if let Some(i2c) = &mut self.i2c1 {
+                if i2c.read(addr, &mut buf).is_ok() {
+                    rprintln!("{:02x} good", addr);
                 }
-
-                delay.delay_ms(10_u32);
             }
-            rprintln!("scan is done");
 
-            rprintln!("Start i2c2 scanning...");
-            rprintln!();
-            for addr in 0x00_u8..0x7F {
-                // Write the empty array and check the slave response.
-                // rprintln!("trying {:02x}", addr);
-                let mut buf = [b'\0'; 1];
-                if let Some(i2c) = &mut self.i2c2 {
-                    if i2c.read(addr, &mut buf).is_ok() {
-                        rprintln!("{:02x} good", addr);
-                    }
+            delay.delay_ms(10_u32);
+        }
+        rprintln!("scan is done");
+
+        rprintln!("Start i2c2 scanning...");
+        rprintln!();
+        for addr in 0x00_u8..0x7F {
+            // Write the empty array and check the slave response.
+            // rprintln!("trying {:02x}", addr);
+            let mut buf = [b'\0'; 1];
+            if let Some(i2c) = &mut self.i2c2 {
+                if i2c.read(addr, &mut buf).is_ok() {
+                    rprintln!("{:02x} good", addr);
                 }
-                delay.delay_ms(10_u32);
             }
-            rprintln!("scan is done");
+            delay.delay_ms(10_u32);
+        }
+        rprintln!("scan is done");
 
         // }
 

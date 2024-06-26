@@ -193,8 +193,41 @@ impl SensorDriver for MCP9808TemperatureDriver {
         return "T";
     }
 
-    fn take_measurement(&mut self, adc: &mut dyn rriv_board::SensorDriverServices) {}
+    fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
+        
+        let message = [AMBIENT_TEMPERATURE_REGISTER_ADDRESS];
+        let mut buffer: [u8; 2] = [0; 2];
+        board.ic2_write(self.address_byte(true), &message );
+        board.ic2_read(self.address_byte(false), &mut buffer);
+
+        //Convert the temperature data
+        //First Check flag bits
+        // follows from https://ww1.microchip.com/downloads/en/DeviceDoc/MCP9808-0.5C-Maximum-Accuracy-Digital-Temperature-Sensor-Data-Sheet-DS20005095B.pdf
+        let mut upperByte: u16 = buffer[0].into();
+        let mut lowerByte: u16 = buffer[1].into();
+        if ((upperByte & 0x80) == 0x80){ //T A ≥ TCRIT
+        }
+        if ((upperByte & 0x40) == 0x40){ //T A > TUPPER
+        }
+        if ((upperByte & 0x20) == 0x20){ //T A < TLOWER
+        }
+
+        upperByte = upperByte & 0x1F; //Clear flag bits
+        let mut temperature = 0;
+        if ((upperByte & 0x10) == 0x10){ //T A < 0°C
+            upperByte = upperByte & 0x0F;//Clear SIGN
+            temperature = 256 - (upperByte * 16 + lowerByte / 16);
+        } else { //T A ≥ 0°C
+            temperature = (upperByte * 16 + lowerByte / 16);
+            //Temperature = Ambient Temperature (°C)
+        }
+
+        self.measured_parameter_values[0] = temperature.into();
+    }
+        
 }
+
+const AMBIENT_TEMPERATURE_REGISTER_ADDRESS: u8 = 0x05;
 
 impl MCP9808TemperatureDriver {
     pub fn new(
@@ -205,6 +238,18 @@ impl MCP9808TemperatureDriver {
             general_config,
             special_config,
             measured_parameter_values: [0.0],
+        }
+    }
+
+
+    pub fn address_byte(&mut self, write: bool) -> u8 {
+        let base_address: u8 = 0b00110000;
+        let offset = 0;
+        let address: u8 = base_address + offset << 1;
+        if write {
+            address & 0xFE
+        } else {
+            address | 0x01
         }
     }
 }
