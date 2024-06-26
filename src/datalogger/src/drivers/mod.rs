@@ -193,7 +193,7 @@ impl SensorDriver for MCP9808TemperatureDriver {
         return "T";
     }
 
-    fn take_measurement(&mut self, adc: &mut dyn rriv_board::ADCInterface) {}
+    fn take_measurement(&mut self, adc: &mut dyn rriv_board::SensorDriverServices) {}
 }
 
 impl MCP9808TemperatureDriver {
