@@ -40,7 +40,7 @@ use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
-use rriv_board::{ADCInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor};
+use rriv_board::{ActuatorDriverServices, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices, TelemetryDriverServices};
 
 use stm32f1xx_hal::rtc::Rtc;
 
@@ -165,14 +165,38 @@ impl RRIVBoard for Board {
         return self.rtc.current_time();
     }
     
-    fn get_adc_interface(&mut self) -> & mut dyn ADCInterface {
+    fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices {
+        return self;
+    }
+
+    fn get_actuator_driver_services(&mut self) -> &mut dyn ActuatorDriverServices {
+        return self;
+    }
+
+    fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices {
         return self;
     }
 
 }
 
+macro_rules! control_services_impl {
+    () => {
+        fn serial_send(&self, string: &str) {
+            rriv_board::RRIVBoard::serial_send(self, string);
+        }    
 
-impl ADCInterface for Board {
+        fn delay_ms(&mut self, ms: u16){
+            rriv_board::RRIVBoard::delay_ms(self, ms);
+        }
+        fn timestamp(&mut self) -> u32 {
+            rriv_board::RRIVBoard::timestamp(self)
+        }
+    };
+}
+
+
+
+impl SensorDriverServices for Board {
 
     fn query_internal_adc(&mut self, channel: u8) -> u16 {
         match self.internal_adc.read(channel) {
@@ -185,7 +209,7 @@ impl ADCInterface for Board {
                     AdcError::NotConfigured => errorString = "ADC Not Configured",
                     AdcError::ReadError => errorString = "ADC Read Error",
                 }
-                self.serial_send(&errorString);
+                rriv_board::RRIVBoard::serial_send(self, &errorString);
                 return 0;
             }
         }
@@ -196,6 +220,18 @@ impl ADCInterface for Board {
         return 0;  // not implemented
     }
 
+
+    control_services_impl!();
+    
+
+}
+
+impl ActuatorDriverServices for Board {
+    control_services_impl!();
+}
+
+impl TelemetryDriverServices for Board {
+    control_services_impl!();
 }
 
 #[interrupt]

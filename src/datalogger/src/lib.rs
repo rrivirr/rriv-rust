@@ -350,7 +350,7 @@ impl DataLogger {
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {;
-                driver.take_measurement(board.get_adc_interface());
+                driver.take_measurement(board.get_sensor_driver_services());
             }
         }
 

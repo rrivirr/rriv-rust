@@ -39,10 +39,16 @@ pub trait SensorDriver {
     fn setup(&mut self);
     fn get_id(&mut self) -> [u8; 6];
     fn get_type_id(&mut self) -> u16;
+    // fn get_measurement_technology(&mut self) -> usize; // TODO: unnecessary for now, unless we split SensorDriverServices into different types of services collections
     fn get_measured_parameter_count(&mut self) -> usize;
     fn get_measured_parameter_value(&mut self, index: usize) -> f32;
     fn get_measured_parameter_identifier(&mut self, index: usize) -> &str;
-    fn take_measurement(&mut self, board: &mut dyn rriv_board::ADCInterface);
+
+    fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
+}
+
+pub trait ADCSensorDriver {
+    
 }
 
 pub trait ActuatorDriver {
@@ -165,16 +171,18 @@ impl SensorDriver for GenericAnalog {
     //     return ["raw"];
     // }
 
-    fn take_measurement(&mut self, adc_interface: &mut dyn rriv_board::ADCInterface) {
+    fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         let mut value = 0;
         match self.special_config.settings.adc_select() {
             0 => {
-                value = adc_interface.query_internal_adc(self.special_config.sensor_port);
+                value = board.query_internal_adc(self.special_config.sensor_port);
             }
             1 => todo!("exadc not implemented"),
             2_usize.. => todo!("other adcs not implemented"),
         }
         self.measured_parameter_values[0] = value.into();
+        self.measured_parameter_values[0] = value.into();
+
     }
 
     fn get_measured_parameter_count(&mut self) -> usize {
@@ -253,7 +261,7 @@ impl SensorDriver for AHT22 {
 
     getters!();
 
-    fn take_measurement(&mut self, board: &mut dyn rriv_board::ADCInterface) {
+    fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         todo!()
     }
 
