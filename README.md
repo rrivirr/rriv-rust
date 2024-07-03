@@ -12,18 +12,25 @@ You will need the nightly toolchain since Rust on embedded needs unstable featur
 ```zsh
 rustup toolchain install nightly
 rustup target add thumbv7m-none-eabi
+rustup default nightly
+rustup update
+```
+You can also list and set the toolchain directly like so:
+```
+rustup toolchain list
+rustup toochain default <toolchain from the list>
+rustup update
 ```
 
-[probe-rs](https://probe.rs/docs/getting-started/installation/) sets up the tooling for flashing and debugging. You will need to install the probe-rs cli tool. You can do this with cargo:
+[probe-rs](https://probe.rs/docs/getting-started/installation/) is used for flashing and debugging. 
 
-```zsh
-cargo install probe-rs --features cli
-```
-This will install the probe-rs, cargo-flash and cargo-embed binaries and put them in $PATH.
+There is a one-liner shell script installer availble here: [https://probe.rs/](https://probe.rs/)
+
 
 Users of VSCode will also want to install the following extensions:
 * rust-analyzer
 * probe-rs-debugger
+* crates
 
 
 ### Code Organization
