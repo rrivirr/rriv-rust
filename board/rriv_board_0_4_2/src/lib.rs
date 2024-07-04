@@ -233,7 +233,10 @@ impl SensorDriverServices for Board {
     fn ic2_write(&mut self, addr: u8, message: &[u8]) {
         match self.i2c2.write(addr, message){
             Ok(_) => return,
-            Err(_) => todo!(),
+            Err(e) => {
+                rprintln!("{:?}", e);
+                rriv_board::RRIVBoard::serial_send(self, "Problem writing I2C2");
+            }
         }
     
     }
@@ -522,7 +525,7 @@ impl BoardBuilder {
 
         let mut pwr = device_peripherals.PWR;
         let mut backup_domain = rcc.bkp.constrain(device_peripherals.BKP, &mut pwr);
-        self.rtc = Some(Rtc::new(device_peripherals.RTC, &mut backup_domain));
+        self.rtc = Some(Rtc::new(device_peripherals.RTC, &mut backup_domain)); // TODO: make sure LSE on and running?
 
         // Prepare the GPIO
         let gpioa: gpio::gpioa::Parts = device_peripherals.GPIOA.split();

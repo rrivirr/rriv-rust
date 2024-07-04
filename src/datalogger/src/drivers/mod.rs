@@ -41,7 +41,7 @@ pub trait SensorDriver {
     fn get_type_id(&mut self) -> u16;
     // fn get_measurement_technology(&mut self) -> usize; // TODO: unnecessary for now, unless we split SensorDriverServices into different types of services collections
     fn get_measured_parameter_count(&mut self) -> usize;
-    fn get_measured_parameter_value(&mut self, index: usize) -> f32;
+    fn get_measured_parameter_value(&mut self, index: usize) -> f64;
     fn get_measured_parameter_identifier(&mut self, index: usize) -> &str;
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
@@ -171,7 +171,7 @@ impl MCP9808TemperatureDriverSpecialConfiguration {
 pub struct MCP9808TemperatureDriver {
     general_config: SensorDriverGeneralConfiguration,
     special_config: MCP9808TemperatureDriverSpecialConfiguration,
-    measured_parameter_values: [f32; 1],
+    measured_parameter_values: [f64; 1],
 }
 
 impl SensorDriver for MCP9808TemperatureDriver {
@@ -185,7 +185,7 @@ impl SensorDriver for MCP9808TemperatureDriver {
         1
     }
 
-    fn get_measured_parameter_value(&mut self, index: usize) -> f32 {
+    fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
         self.measured_parameter_values[index]
     }
 
@@ -197,32 +197,37 @@ impl SensorDriver for MCP9808TemperatureDriver {
         
         let message = [AMBIENT_TEMPERATURE_REGISTER_ADDRESS];
         let mut buffer: [u8; 2] = [0; 2];
-        board.ic2_write(self.address_byte(true), &message );
-        board.ic2_read(self.address_byte(false), &mut buffer);
+        board.ic2_write(0b11000, &message );
+        board.ic2_read(0b11000, &mut buffer);
 
         //Convert the temperature data
         //First Check flag bits
         // follows from https://ww1.microchip.com/downloads/en/DeviceDoc/MCP9808-0.5C-Maximum-Accuracy-Digital-Temperature-Sensor-Data-Sheet-DS20005095B.pdf
-        let mut upperByte: u16 = buffer[0].into();
-        let mut lowerByte: u16 = buffer[1].into();
-        if ((upperByte & 0x80) == 0x80){ //T A ≥ TCRIT
+        let mut upper_byte: u16 = buffer[0].into();
+        let mut lower_byte: u16 = buffer[1].into();
+        if ((upper_byte & 0x80) == 0x80){ //T A ≥ TCRIT
         }
-        if ((upperByte & 0x40) == 0x40){ //T A > TUPPER
+        if ((upper_byte & 0x40) == 0x40){ //T A > TUPPER
         }
-        if ((upperByte & 0x20) == 0x20){ //T A < TLOWER
+        if ((upper_byte & 0x20) == 0x20){ //T A < TLOWER
         }
 
-        upperByte = upperByte & 0x1F; //Clear flag bits
-        let mut temperature = 0;
-        if ((upperByte & 0x10) == 0x10){ //T A < 0°C
-            upperByte = upperByte & 0x0F;//Clear SIGN
-            temperature = 256 - (upperByte * 16 + lowerByte / 16);
+        upper_byte = upper_byte & 0x1F; //Clear flag bits
+        let mut temperature: f64 = 0.0;
+        if (upper_byte & 0x10) == 0x10 { //T A < 0°Ca
+            upper_byte = upper_byte & 0x0F;//Clear SIGN
+            let upper_byte: f64 = upper_byte.into();
+            let lower_byte: f64 = lower_byte.into();
+            temperature = 256.0 - (upper_byte * 16.0 + lower_byte / 16.0);
         } else { //T A ≥ 0°C
-            temperature = (upperByte * 16 + lowerByte / 16);
+
+            let upper_byte: f64 = upper_byte.into();
+            let lower_byte: f64 = lower_byte.into();
+            temperature = upper_byte * 16.0 + lower_byte / 16.0;
             //Temperature = Ambient Temperature (°C)
         }
 
-        self.measured_parameter_values[0] = temperature.into();
+        self.measured_parameter_values[0] = temperature;
     }
         
 }
@@ -243,9 +248,9 @@ impl MCP9808TemperatureDriver {
 
 
     pub fn address_byte(&mut self, write: bool) -> u8 {
-        let base_address: u8 = 0b00110000;
+        let base_address: u8 = 0b0011000;
         let offset = 0;
-        let address: u8 = base_address + offset << 1;
+        let address: u8 = (base_address + offset) << 1;
         if write {
             address & 0xFE
         } else {
@@ -257,7 +262,7 @@ impl MCP9808TemperatureDriver {
 pub struct GenericAnalog {
     general_config: SensorDriverGeneralConfiguration,
     special_config: GenericAnalogSpecialConfiguration,
-    measured_parameter_values: [f32; 2],
+    measured_parameter_values: [f64; 2],
 }
 
 impl SensorDriver for GenericAnalog {
@@ -293,7 +298,7 @@ impl SensorDriver for GenericAnalog {
         return 2;
     }
 
-    fn get_measured_parameter_value(&mut self, index: usize) -> f32 {
+    fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
         return self.measured_parameter_values[index];
     }
 
@@ -373,7 +378,7 @@ impl SensorDriver for AHT22 {
         todo!()
     }
 
-    fn get_measured_parameter_value(&mut self, index: usize) -> f32 {
+    fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
         todo!()
     }
 
