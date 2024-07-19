@@ -3,6 +3,8 @@
 extern crate alloc;
 
 use alloc::boxed::Box;
+use alloc::format;
+
 use embedded_hal::digital::v2::OutputPin;
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
@@ -242,7 +244,13 @@ impl SensorDriverServices for Board {
     fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]) {
         match self.i2c2.read(addr, buffer){
             Ok(_) => return,
-            Err(_) => todo!(),
+            Err(e) => {
+                rprintln!("{:?}", e);
+                rriv_board::RRIVBoard::serial_send(self, &format!("Problem reading I2C2 {}", addr));
+                for i in 0..buffer.len() {
+                    buffer[i] = 0b11111111; // error value
+                }
+            }
         }
     }
     
@@ -251,7 +259,7 @@ impl SensorDriverServices for Board {
             Ok(_) => return,
             Err(e) => {
                 rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_send(self, "Problem writing I2C2");
+                rriv_board::RRIVBoard::serial_send(self, &format!("Problem writing I2C2 {}", addr));
             }
         }
     

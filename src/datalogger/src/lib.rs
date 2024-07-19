@@ -6,6 +6,7 @@ mod datalogger_commands;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
+use ring_temperature::{RingTemperatureDriver, RingTemperatureDriverSpecialConfiguration};
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
     EEPROM_TOTAL_SENSOR_SLOTS,
@@ -17,8 +18,10 @@ use rtt_target::rprintln;
 
 mod drivers;
 use crate::alloc::string::ToString;
-use alloc::string::String;
-use drivers::*;
+use drivers::{*,types::*};
+use mcp9808::*;
+use generic_analog::*;
+
 use serde::de::value;
 use serde_json::{json, Value};
 
@@ -120,12 +123,13 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 /* start registry WIP */
 
-const SENSOR_NAMES: [&str; 5] = [
+const SENSOR_NAMES: [&str; 6] = [
     "no_match",
     "generic_analog",
     "atlas_ec",
     "aht22",
     "mcp_9808",
+    "ring_temperature"
 ];
 
 fn sensor_type_id_from_name(name: &str) -> u16 {
@@ -201,11 +205,16 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
         GenericAnalog,
         GenericAnalogSpecialConfiguration
     )); //distinct settings? characteristic settings?
+    driver_create_functions[2] = None;
+    driver_create_functions[3] = None;
     driver_create_functions[4] = Some(driver_create_functions!(
         MCP9808TemperatureDriver,
         MCP9808TemperatureDriverSpecialConfiguration
     )); //distinct settings? characteristic settings?
-    driver_create_functions[2] = None;
+    driver_create_functions[5] = Some(driver_create_functions!(
+        RingTemperatureDriver,
+        RingTemperatureDriverSpecialConfiguration
+    ));
     // driver_create_functions[2] = Some(driver_create_function!(AHT22));
 
     driver_create_functions
@@ -224,9 +233,9 @@ pub struct DataLogger {
     debug_values: bool, // serial out of values as they are read
     log_raw_data: bool, // both raw and summary data writting to storage
 }
-const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::SensorDriver>> = None;
-const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::ActuatorDriver>> = None;
-const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::TelemeterDriver>> = None;
+const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
+const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> = None;
+const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::TelemeterDriver>> = None;
 
 impl DataLogger {
     pub fn new() -> Self {
@@ -382,8 +391,9 @@ impl DataLogger {
                 // }
                 for i in 0..driver.get_measured_parameter_count() {
                     let identifier = driver.get_measured_parameter_identifier(i);
+                    let identifir_str = core::str::from_utf8(&identifier).unwrap();
                     board.serial_send(&prefix);
-                    board.serial_send(identifier);
+                    board.serial_send(identifir_str);
                     if i != driver.get_measured_parameter_count() - 1 {
                         board.serial_send(",");
                     }
