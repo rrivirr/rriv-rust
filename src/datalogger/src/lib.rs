@@ -219,6 +219,8 @@ pub struct DataLogger {
     actuator_drivers: [Option<Box<dyn ActuatorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
     telemeter_drivers: [Option<Box<dyn TelemeterDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
 
+    last_interactive_log_time: i64,
+
     debug_values: bool, // serial out of values as they are read
     log_raw_data: bool, // both raw and summary data writting to storage
 }
@@ -233,6 +235,7 @@ impl DataLogger {
             sensor_drivers: [SENSOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             actuator_drivers: [ACTUATOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+            last_interactive_log_time: 0,
             debug_values: true,
             log_raw_data: true,
         }
@@ -344,16 +347,15 @@ impl DataLogger {
         // implement interactive mode logging first
 
         let interactive_mode_logging = true;
-        let mut last_interactive_log_time = 0;
         if interactive_mode_logging {
-            if (board.timestamp() > last_interactive_log_time + 1) {
+            if (board.timestamp() > self.last_interactive_log_time + 1) {
                 // notify(F("interactive log"));
                 self.measure_sensor_values(board); // measureSensorValues(false);
                 self.write_last_measurement_to_serial(board); //outputLastMeasurement();
                                                               // Serial2.print(F("CMD >> "));
                                                               // writeRawMeasurementToLogFile();
                                                               // fileSystemWriteCache->flushCache();
-                last_interactive_log_time = board.timestamp();
+                self.last_interactive_log_time = board.timestamp();
             }
         }
     }
@@ -396,6 +398,7 @@ impl DataLogger {
                 for i in 0..driver.get_measured_parameter_count() {
                     let value = driver.get_measured_parameter_value(i);
                     let output = format!("{:.4}", value);
+                    rprintln!("{}",value);
                     board.serial_send(&output);
                     if i != driver.get_measured_parameter_count() - 1 {
                         board.serial_send(",");

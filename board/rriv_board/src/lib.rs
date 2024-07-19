@@ -20,7 +20,7 @@ macro_rules! control_services {
     () => {
         fn serial_send(&self, string: &str);    
         fn delay_ms(&mut self, ms: u16);
-        fn timestamp(&mut self) -> u32;
+        fn timestamp(&mut self) -> i64;
     };
 }
 

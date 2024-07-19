@@ -7,6 +7,7 @@ use embedded_hal::digital::v2::OutputPin;
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::spi::{Spi};
+use core::{mem, result};
 use core::{
     cell::RefCell,
     concat,
@@ -43,6 +44,7 @@ use usbd_serial::{SerialPort, USB_CLASS_CDC};
 use rriv_board::{ActuatorDriverServices, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices, TelemetryDriverServices};
 
 use stm32f1xx_hal::rtc::Rtc;
+use ds323x::{Ds323x, NaiveDate, DateTimeAccess};
 
 mod components;
 use components::*;
@@ -83,9 +85,9 @@ pub struct Board {
     pub battery_level: BatteryLevel,
     pub rgb_led: RgbLed,
     pub oscillator_control: OscillatorControl,
-    pub i2c1: BoardI2c1,
+    pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
-    pub rtc: Rtc,
+    pub internal_rtc: Rtc
 }
 
 impl Board {
@@ -161,8 +163,22 @@ impl RRIVBoard for Board {
         self.delay.delay_ms(ms);
     }
 
-    fn timestamp(&mut self) -> u32 {
-        return self.rtc.current_time();
+    fn timestamp(&mut self) -> i64 {
+        // TODO: we want to use the internal RTC here but the oscillator is malfunctioning
+        return self.internal_rtc.current_time().into();
+        // so for now we use the i2c rtc
+ 
+        // let i2c1 = mem::replace(&mut self.i2c1, None);
+        // let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+        // let result = ds3231.datetime();
+        // self.i2c1 = Some(ds3231.destroy_ds3231());
+
+        // match result {
+        //     Ok(date_time) => {
+        //         date_time.and_utc().timestamp()
+        //     },
+        //     Err(_) => return 0, // this could fail back to some other clock
+        // }
     }
     
     fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices {
@@ -188,7 +204,7 @@ macro_rules! control_services_impl {
         fn delay_ms(&mut self, ms: u16){
             rriv_board::RRIVBoard::delay_ms(self, ms);
         }
-        fn timestamp(&mut self) -> u32 {
+        fn timestamp(&mut self) -> i64 {
             rriv_board::RRIVBoard::timestamp(self)
         }
     };
@@ -348,7 +364,7 @@ pub struct BoardBuilder {
     pub rgb_led: Option<RgbLed>,
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
-    pub rtc: Option<Rtc>
+    pub internal_rtc: Option<Rtc>
 }
 
 impl BoardBuilder {
@@ -364,7 +380,7 @@ impl BoardBuilder {
             battery_level: None,
             rgb_led: None,
             oscillator_control: None,
-            rtc: None
+            internal_rtc: None
         }
     }
 
@@ -372,7 +388,7 @@ impl BoardBuilder {
 
         // loop{}
         Board {
-            i2c1: self.i2c1.unwrap(),
+            i2c1: self.i2c1,
             i2c2: self.i2c2.unwrap(),
             delay: self.delay.unwrap(),
             // // power_control: self.power_control.unwrap(),
@@ -382,7 +398,7 @@ impl BoardBuilder {
             battery_level: self.battery_level.unwrap(),
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
-            rtc: self.rtc.unwrap()
+            internal_rtc: self.internal_rtc.unwrap()
         }
     }
 
@@ -497,7 +513,7 @@ impl BoardBuilder {
         let sda2 = pins
             .i2c2_sda
             .into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
-        BlockingI2c::i2c2(
+        let mut x = BlockingI2c::i2c2(
             i2c2,
             (scl2, sda2),
             Mode::Standard {
@@ -508,7 +524,20 @@ impl BoardBuilder {
             10,
             1000,
             1000,
-        )
+        );
+
+
+        // this works, so moving out and putting back could conceivably work.
+        // let mut ds3231 = Ds323x::new_ds3231( x);
+        // let result = ds3231.datetime();
+        // x = ds3231.destroy_ds3231();
+
+    
+        // let mut ds3231 = Ds323x::new_ds3231( x);
+        // let result = ds3231.datetime();
+        // x = ds3231.destroy_ds3231();
+
+        return x;
     }
      
     fn setup(&mut self) {
@@ -525,7 +554,7 @@ impl BoardBuilder {
 
         let mut pwr = device_peripherals.PWR;
         let mut backup_domain = rcc.bkp.constrain(device_peripherals.BKP, &mut pwr);
-        self.rtc = Some(Rtc::new(device_peripherals.RTC, &mut backup_domain)); // TODO: make sure LSE on and running?
+        self.internal_rtc = Some(Rtc::new(device_peripherals.RTC, &mut backup_domain)); // TODO: make sure LSE on and running?
 
         // Prepare the GPIO
         let gpioa: gpio::gpioa::Parts = device_peripherals.GPIOA.split();
@@ -626,6 +655,7 @@ impl BoardBuilder {
             delay.delay_ms(10_u32);
         }
         rprintln!("scan is done");
+
 
         // }
 

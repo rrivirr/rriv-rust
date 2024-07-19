@@ -27,6 +27,8 @@ pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address:
         let bytes_to_send = [address, *byte];
         match board
             .i2c1
+            .as_mut()
+            .unwrap()
             .write(device_address, &bytes_to_send)
         {
             Ok(_) => {
@@ -50,7 +52,7 @@ pub fn read_bytes_from_eeprom(board: &mut crate::Board, block: u8, start_address
         while i < buffer.len() {
             let mut b: [u8; 1] = [254];
             let message = [start_address + i as u8];
-            match board.i2c1.write_read(device_address, &message, &mut b) {
+            match board.i2c1.as_mut().unwrap().write_read(device_address, &message, &mut b) {
                 Ok(_) => {
                     // rprint!("read {} address {}\n", b[0], message[0]);
                     buffer[i] = b[0];
