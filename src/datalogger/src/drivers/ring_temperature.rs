@@ -30,7 +30,7 @@ const TEMPERATURE_SENSORS_ON_RING:u8 = 6;
 pub struct RingTemperatureDriver {
     general_config: SensorDriverGeneralConfiguration,
     special_config: RingTemperatureDriverSpecialConfiguration,
-    measured_parameter_values: [f64; 1],
+    measured_parameter_values: [f64; 6],
     sensor_drivers: [MCP9808TemperatureDriver; 6],
 }
 
@@ -49,7 +49,7 @@ impl RingTemperatureDriver {
         RingTemperatureDriver {
             general_config,
             special_config,
-            measured_parameter_values: [0.0],
+            measured_parameter_values: [0.0; 6],
             sensor_drivers: [
                 MCP9808TemperatureDriver::new_with_address(SensorDriverGeneralConfiguration::empty(), 
                                                            MCP9808TemperatureDriverSpecialConfiguration::empty(), 
@@ -98,7 +98,7 @@ impl SensorDriver for RingTemperatureDriver {
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         
-        for i in 1..6 {
+        for i in 0..6 {
             self.sensor_drivers[i].take_measurement(board);
             self.measured_parameter_values[i] = self.sensor_drivers[i].get_measured_parameter_value(0);
 
