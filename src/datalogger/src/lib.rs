@@ -331,7 +331,7 @@ impl DataLogger {
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
-        // todo: refactor to use Result<T,E>
+        //todo: refactor to use Result<T,E>
         let get_command_result = command_service::get_pending_command(board);
         if let Some(get_command_result) = get_command_result {
             match get_command_result {
