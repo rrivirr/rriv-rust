@@ -424,6 +424,8 @@ impl BoardBuilder {
 
         assert!(clocks.usbclk_valid());
 
+        rprintln!("{:?}", clocks);
+
         clocks
     }
 
@@ -689,8 +691,10 @@ impl BoardBuilder {
         self.gpio = Some(dynamic_gpio_pins);
 
         let delay2: DelayUs<TIM2> =device_peripherals.TIM2.delay(&clocks);
+        rprintln!("{:?}", clocks);
         storage::build(spi1_pins, device_peripherals.SPI1, &mut afio.mapr, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
+        rprintln!("{:?}", clocks);
 
 
         // // let spi_mode = Mode {
@@ -704,6 +708,7 @@ impl BoardBuilder {
             1.MHz(),
             clocks,
           );
+        rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);
 
