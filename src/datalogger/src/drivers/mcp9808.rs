@@ -48,6 +48,7 @@ impl SensorDriver for MCP9808TemperatureDriver {
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
         let mut buf = [0u8;16];
         buf[0] = b'T';
+        buf[1] = b'\0';
         return buf;
     }
 

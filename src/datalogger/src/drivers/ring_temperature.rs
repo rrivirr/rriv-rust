@@ -74,6 +74,9 @@ impl RingTemperatureDriver {
     }
 }
 
+
+const INDEX_TO_BYTE_CHAR: [u8; 6] = [b'0',b'1',b'2',b'3',b'4',b'5'];
+
 impl SensorDriver for RingTemperatureDriver {
     fn setup(&mut self) {
         
@@ -92,7 +95,8 @@ impl SensorDriver for RingTemperatureDriver {
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
         let mut buf : [u8;16] = [0u8; 16];
         buf[0] = b'T';
-        buf[1] = index.try_into().unwrap();
+        buf[1] = INDEX_TO_BYTE_CHAR[index];
+        buf[2] = b'\0';
         return buf;
     }
 

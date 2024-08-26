@@ -357,7 +357,7 @@ impl DataLogger {
 
         let interactive_mode_logging = true;
         if interactive_mode_logging {
-            if (board.timestamp() > self.last_interactive_log_time + 1) {
+            if board.timestamp() > self.last_interactive_log_time + 1 {
                 // notify(F("interactive log"));
                 self.measure_sensor_values(board); // measureSensorValues(false);
                 self.write_last_measurement_to_serial(board); //outputLastMeasurement();
@@ -391,9 +391,11 @@ impl DataLogger {
                 // }
                 for i in 0..driver.get_measured_parameter_count() {
                     let identifier = driver.get_measured_parameter_identifier(i);
-                    let identifir_str = core::str::from_utf8(&identifier).unwrap();
+                    let identifier_str = core::str::from_utf8(&identifier).unwrap();
                     board.serial_send(&prefix);
-                    board.serial_send(identifir_str);
+                    let end = identifier.iter().position(|&x| x == b'\0').unwrap_or_else(|| 1);
+                    let var = &identifier_str[ 0..end];
+                    board.serial_send(var);
                     if i != driver.get_measured_parameter_count() - 1 {
                         board.serial_send(",");
                     }
