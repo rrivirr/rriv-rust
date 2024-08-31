@@ -11,7 +11,7 @@ pub struct DataloggerSetCommandPayload {
     pub deployment_identifier: Option<Value>,
     pub interval: Option<u16>,
     pub burst_repetitions: Option<u8>,
-    pub start_up_delay: Option<u16>,
+    pub start_up_delay: Option<u16>
     // pub user_note: Option<Value>, // not implemented for now
     // pub user_value: Option<i16>
 }
@@ -24,9 +24,50 @@ pub struct DataloggerGetCommandPayload {
     pub propery: Option<Value>
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DataloggerSetModeCommandPayload {
+    pub object: Value,
+    pub action: Value,
+    pub mode: Option<Value>
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorSetCommandPayload {
+    pub object: Value,
+    pub action: Value, 
+    pub id: Option<Value>, // option
+    pub r#type: Value, // option
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorGetCommandPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorRemoveCommandPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorListCommandPayload {
+    pub object: Value,
+    pub action: Value,
+}
+
 pub enum CommandPayload {
-    SetCommandPayload(DataloggerSetCommandPayload),
-    GetCommandPayload(DataloggerGetCommandPayload),
+    DataloggerSetCommandPayload(DataloggerSetCommandPayload),
+    DataloggerGetCommandPayload(DataloggerGetCommandPayload),
+    DataloggerSetModeCommandPayload(DataloggerSetModeCommandPayload),
+    SensorSetCommandPayload(SensorSetCommandPayload, Value),
+    SensorGetCommandPayload(SensorGetCommandPayload),
+    SensorRemoveCommandPayload(SensorRemoveCommandPayload),
+    SensorListCommandPayload(SensorListCommandPayload)
 }
 
 

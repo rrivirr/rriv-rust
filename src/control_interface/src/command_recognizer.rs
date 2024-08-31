@@ -3,8 +3,9 @@
 // use rtt_target::rprintln;
 
 
+
 pub const BUFFER_NUM: usize = 11; // Includes an extra empty cell for end marker
-pub const BUFFER_SIZE: usize = 100;
+pub const BUFFER_SIZE: usize = 500;
 
 pub struct CommandData {
     receiving: bool,
@@ -72,7 +73,7 @@ impl CommandRecognizer {
         }
     }    
 
-    pub fn take_command(command_data: &mut CommandData) -> [u8; 100] {
+    pub fn take_command(command_data: &mut CommandData) -> [u8; BUFFER_SIZE] {
         // clone the command bytes buffer so the caller isn't borrowing the command_data buffer
         let buffer_index = (command_data.end + 1) % BUFFER_NUM;
         let command = command_data.buffer[buffer_index].clone();
