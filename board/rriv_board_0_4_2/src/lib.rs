@@ -249,7 +249,7 @@ impl SensorDriverServices for Board {
             Ok(_) => return,
             Err(e) => {
                 rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_send(self, &format!("Problem reading I2C2 {}", addr));
+                rriv_board::RRIVBoard::serial_send(self, &format!("Problem reading I2C2 {}\n", addr));
                 for i in 0..buffer.len() {
                     buffer[i] = 0b11111111; // error value
                 }

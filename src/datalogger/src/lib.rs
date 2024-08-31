@@ -222,6 +222,13 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
 
 /* end registry WIP */
 
+pub enum DataLoggerMode {
+    Interactive,
+    Watch,
+    Quiet
+}
+
+
 pub struct DataLogger {
     settings: DataloggerSettings,
     sensor_drivers: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
@@ -232,6 +239,8 @@ pub struct DataLogger {
 
     debug_values: bool, // serial out of values as they are read
     log_raw_data: bool, // both raw and summary data writting to storage
+
+    mode: DataLoggerMode,
 }
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
 const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> = None;
@@ -247,6 +256,7 @@ impl DataLogger {
             last_interactive_log_time: 0,
             debug_values: true,
             log_raw_data: true,
+            mode: DataLoggerMode::Interactive
         }
     }
 
@@ -377,8 +387,8 @@ impl DataLogger {
         }
     }
 
-    fn write_last_measurement_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
-        // first output the column headers
+    fn write_column_headers_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
                 let sensor_name = driver.get_id(); // always output the id for now, later add bit to control append prefix behavior, default to false
@@ -404,7 +414,9 @@ impl DataLogger {
             }
         }
 
-        // then output the last measurement values
+    }
+
+    fn write_measured_parameters_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
                 for i in 0..driver.get_measured_parameter_count() {
@@ -421,6 +433,23 @@ impl DataLogger {
         }
     }
 
+
+    fn write_last_measurement_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
+        // first output the column headers
+        match self.mode {
+            DataLoggerMode::Interactive => self.write_column_headers_to_serial(board),
+            _ => {},
+        }
+
+        // then output the last measurement values
+        match self.mode {
+            DataLoggerMode::Interactive | DataLoggerMode::Watch => self.write_measured_parameters_to_serial(board),
+            _ => {}
+        }
+        
+    }
+
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
         match command_payload {
             CommandPayload::DataloggerSetCommandPayload(payload) => {
@@ -429,6 +458,26 @@ impl DataLogger {
             }
             CommandPayload::DataloggerGetCommandPayload(_) => {
                 board.serial_send("get datalogger settings not implemented\n");
+            },
+            CommandPayload::DataloggerSetModeCommandPayload(payload) => {
+
+                if let Some(mode) = payload.mode {
+                    match mode {
+                        Value::String(mode) => {
+                            let mode = mode.as_str();
+                            match mode {
+                                "watch" => { 
+                                    self.write_column_headers_to_serial(board);
+                                    self.mode = DataLoggerMode::Watch
+                                },
+                                "quiet" => self.mode = DataLoggerMode::Quiet,
+                                _ => self.mode = DataLoggerMode::Interactive
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+
             }
             CommandPayload::SensorSetCommandPayload(payload, values) => {
                 let registry = get_registry();

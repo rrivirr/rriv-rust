@@ -25,6 +25,14 @@ pub struct DataloggerGetCommandPayload {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct DataloggerSetModeCommandPayload {
+    pub object: Value,
+    pub action: Value,
+    pub mode: Option<Value>
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct SensorSetCommandPayload {
     pub object: Value,
     pub action: Value, 
@@ -55,6 +63,7 @@ pub struct SensorListCommandPayload {
 pub enum CommandPayload {
     DataloggerSetCommandPayload(DataloggerSetCommandPayload),
     DataloggerGetCommandPayload(DataloggerGetCommandPayload),
+    DataloggerSetModeCommandPayload(DataloggerSetModeCommandPayload),
     SensorSetCommandPayload(SensorSetCommandPayload, Value),
     SensorGetCommandPayload(SensorGetCommandPayload),
     SensorRemoveCommandPayload(SensorRemoveCommandPayload),

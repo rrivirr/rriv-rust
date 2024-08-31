@@ -149,7 +149,9 @@ fn get_command_payload(
             parse_command_to_payload!(DataloggerGetCommandPayload, CommandPayload::DataloggerGetCommandPayload, command_cstr);
         }
         CommandType::DataloggerReset => todo!(),
-        CommandType::DataloggerSetMode => todo!(),
+        CommandType::DataloggerSetMode => {
+            parse_command_to_payload!(DataloggerSetModeCommandPayload, CommandPayload::DataloggerSetModeCommandPayload, command_cstr);
+        },
         CommandType::SensorSet => {
 
             // return serde_json::from_str::<T>(command_data_str);
