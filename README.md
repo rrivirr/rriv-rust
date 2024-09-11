@@ -23,7 +23,7 @@ This will install the probe-rs, cargo-flash and cargo-embed binaries and put the
 
 Users of VSCode will also want to install the following extensions:
 * rust-analyzer
-* probe-rs-debugger
+* ~~probe-rs-debugger~~: This is now installed with probe-rs.
 
 
 ### Code Organization
