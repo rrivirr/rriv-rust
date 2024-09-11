@@ -14,10 +14,10 @@ rustup toolchain install nightly
 rustup target add thumbv7m-none-eabi
 ```
 
-[probe-rs](https://probe.rs/docs/getting-started/installation/) sets up the tooling for flashing and debugging. You will need to install the probe-rs cli tool. You can do this with cargo:
+[probe-rs]([https://probe.rs/docs/getting-started/installation/](https://probe.rs/docs/getting-started/installation/)) sets up the tooling for flashing and debugging. You will need to install the probe-rs cli tool. You can do this with a curl command in Linux or MacOS:
 
 ```zsh
-cargo install probe-rs --features cli
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.sh | sh
 ```
 This will install the probe-rs, cargo-flash and cargo-embed binaries and put them in $PATH.
 
