@@ -12,6 +12,7 @@ You will need the nightly toolchain since Rust on embedded needs unstable featur
 ```zsh
 rustup toolchain install nightly
 rustup target add thumbv7m-none-eabi
+rustup default nightly
 ```
 
 [probe-rs]([https://probe.rs/docs/getting-started/installation/](https://probe.rs/docs/getting-started/installation/)) sets up the tooling for flashing and debugging. You will need to install the probe-rs cli tool. You can do this with a curl command in Linux or MacOS:
