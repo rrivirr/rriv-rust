@@ -44,7 +44,7 @@ pub trait SensorDriver {
     fn get_type_id(&mut self) -> u16;
     // fn get_measurement_technology(&mut self) -> usize; // TODO: unnecessary for now, unless we split SensorDriverServices into different types of services collections
     fn get_measured_parameter_count(&mut self) -> usize;
-    fn get_measured_parameter_value(&mut self, index: usize) -> f64;
+    fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()>;
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16];
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices);

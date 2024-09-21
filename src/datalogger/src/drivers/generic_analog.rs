@@ -40,8 +40,8 @@ impl SensorDriver for GenericAnalog {
         return 2;
     }
 
-    fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
-        return self.measured_parameter_values[index];
+    fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
+        return Ok(self.measured_parameter_values[index]);
     }
 
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {

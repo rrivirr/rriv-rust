@@ -35,7 +35,7 @@ impl SensorDriver for AHT22 {
         todo!()
     }
 
-    fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
+    fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
         todo!()
     }
 

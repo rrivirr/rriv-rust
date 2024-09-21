@@ -88,9 +88,12 @@ impl SensorDriver for RingTemperatureDriver {
         6
     }
 
-    fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
-        self.measured_parameter_values[index]
-    }
+    fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
+        if(self.measured_parameter_values[index] == f64::MAX){
+            Err(())
+        } else {
+            Ok(self.measured_parameter_values[index])
+        }    }
 
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
         let mut buf : [u8;16] = [0u8; 16];
@@ -104,7 +107,10 @@ impl SensorDriver for RingTemperatureDriver {
         
         for i in 0..6 {
             self.sensor_drivers[i].take_measurement(board);
-            self.measured_parameter_values[i] = self.sensor_drivers[i].get_measured_parameter_value(0);
+            self.measured_parameter_values[i] = match self.sensor_drivers[i].get_measured_parameter_value(0){
+                Ok(value) => value,
+                Err(_) => { f64::MAX },
+            }
 
         }
         

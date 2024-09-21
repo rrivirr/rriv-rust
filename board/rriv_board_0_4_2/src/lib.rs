@@ -91,6 +91,8 @@ pub struct Board {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
     pub internal_rtc: Rtc,
+
+    pub debug: bool,
 }
 
 impl Board {
@@ -131,6 +133,13 @@ impl RRIVBoard for Board {
             let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
             serial.write(string.as_bytes()).ok();
         });
+    }
+
+    fn serial_debug(&self, string: &str) {
+        if self.debug {
+            rriv_board::RRIVBoard::serial_send(self, string);
+            rriv_board::RRIVBoard::serial_send(self, "\n");
+        }
     }
 
     fn store_datalogger_settings(
@@ -203,12 +212,20 @@ impl RRIVBoard for Board {
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices {
         return self;
     }
+    
+    fn set_debug(&mut self, debug: bool) {
+       self.debug = debug;
+    }
 }
 
 macro_rules! control_services_impl {
     () => {
         fn serial_send(&self, string: &str) {
             rriv_board::RRIVBoard::serial_send(self, string);
+        }
+
+        fn serial_debug(&self, string: &str) {
+            rriv_board::RRIVBoard::serial_debug(self, string);
         }
 
         fn delay_ms(&mut self, ms: u16) {
@@ -244,25 +261,30 @@ impl SensorDriverServices for Board {
 
     control_services_impl!();
 
-    fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]) {
+    fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), ()> {
         match self.i2c2.read(addr, buffer) {
-            Ok(_) => return,
+            Ok(_) => return Ok(()),
             Err(e) => {
                 rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_send(self, &format!("Problem reading I2C2 {}\n", addr));
+                // rprintln!(&format!("Problem reading I2C2 {}\n", addr))
+                // let error_msg  = &format!("Problem reading I2C2 {}\n", addr);
+                // rprintln!(error_msg);
+                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem reading I2C2 {}\n", addr));
                 for i in 0..buffer.len() {
                     buffer[i] = 0b11111111; // error value
                 }
+                return Err(());
             }
         }
     }
 
-    fn ic2_write(&mut self, addr: u8, message: &[u8]) {
+    fn ic2_write(&mut self, addr: u8, message: &[u8]) -> Result<(), ()> {
         match self.i2c2.write(addr, message) {
-            Ok(_) => return,
+            Ok(_) => return Ok(()),
             Err(e) => {
                 rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_send(self, &format!("Problem writing I2C2 {}", addr));
+                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {}", addr));
+                return Err(());
             }
         }
     }
@@ -414,6 +436,7 @@ impl BoardBuilder {
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
             internal_rtc: self.internal_rtc.unwrap(),
+            debug: true
         }
     }
 

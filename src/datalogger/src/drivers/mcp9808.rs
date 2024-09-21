@@ -41,8 +41,12 @@ impl SensorDriver for MCP9808TemperatureDriver {
         1
     }
 
-    fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
-        self.measured_parameter_values[index]
+    fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
+        if(self.measured_parameter_values[index] == f64::MAX){
+            Err(())
+        } else {
+            Ok(self.measured_parameter_values[index])
+        }
     }
 
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
@@ -56,8 +60,27 @@ impl SensorDriver for MCP9808TemperatureDriver {
         
         let message = [AMBIENT_TEMPERATURE_REGISTER_ADDRESS];
         let mut buffer: [u8; 2] = [0; 2];
-        board.ic2_write(self.address, &message );
-        board.ic2_read(self.address, &mut buffer);
+        match board.ic2_write(self.address, &message ) {
+            Ok(_) => {
+                // continue
+            }
+            Err(_) =>  {
+                // read error, improve this output later by returning a Result<> from take measurement
+                self.measured_parameter_values[0] = f64::MAX;
+                return;
+            },
+
+        }
+        match board.ic2_read(self.address, &mut buffer) {
+            Ok(_) => {
+                // continue
+            },
+            Err(_) => {
+                // read error, improve this output later by returning a Result<> from take measurement
+                self.measured_parameter_values[0] = f64::MAX;
+                return;
+            },
+        }
 
         //Convert the temperature data
         //First Check flag bits

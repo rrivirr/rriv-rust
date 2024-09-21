@@ -389,8 +389,18 @@ impl DataLogger {
 
     fn write_column_headers_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
 
+        let mut first = true;
+
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
+
+                if first {
+                    first = false;
+                } else {
+                    board.serial_send(",");
+                }
+
+
                 let sensor_name = driver.get_id(); // always output the id for now, later add bit to control append prefix behavior, default to false
                                                    // let mut prefix: &str = "";
                                                    // if let Some(sensor_name) = sensor_name {
@@ -399,38 +409,58 @@ impl DataLogger {
                     .to_string();
                 prefix = (prefix + "_").clone();
                 // }
-                for i in 0..driver.get_measured_parameter_count() {
-                    let identifier = driver.get_measured_parameter_identifier(i);
+                for j in 0..driver.get_measured_parameter_count() {
+                    let identifier = driver.get_measured_parameter_identifier(j);
                     let identifier_str = core::str::from_utf8(&identifier).unwrap();
                     board.serial_send(&prefix);
                     let end = identifier.iter().position(|&x| x == b'\0').unwrap_or_else(|| 1);
                     let var = &identifier_str[ 0..end];
                     board.serial_send(var);
-                    if i != driver.get_measured_parameter_count() - 1 {
+                    if j != driver.get_measured_parameter_count() - 1 {
                         board.serial_send(",");
                     }
                 }
-                board.serial_send("\n");
+             
             }
         }
+        board.serial_send("\n");
 
     }
 
     fn write_measured_parameters_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+        let mut first = true;
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
-                for i in 0..driver.get_measured_parameter_count() {
-                    let value = driver.get_measured_parameter_value(i);
-                    let output = format!("{:.4}", value);
-                    rprintln!("{}",value);
-                    board.serial_send(&output);
-                    if i != driver.get_measured_parameter_count() - 1 {
+
+                if first {
+                    first = false;
+                } else {
+                    board.serial_send(",");
+                }
+
+                for j in 0..driver.get_measured_parameter_count() {
+
+                    match driver.get_measured_parameter_value(j){
+                        Ok(value) => {
+                            let output = format!("{:.4}", value);
+                            rprintln!("{}",value);
+                            board.serial_send(&output);
+                        },
+                        Err(_) => {
+                            rprintln!("{}","Error");
+                            board.serial_send("Error");
+                        },
+                    }
+
+                    if j != driver.get_measured_parameter_count() - 1 {
                         board.serial_send(",");
                     }
+                    
                 }
-                board.serial_send("\n");
+               
             }
         }
+        board.serial_send("\n");
     }
 
 
@@ -468,10 +498,22 @@ impl DataLogger {
                             match mode {
                                 "watch" => { 
                                     self.write_column_headers_to_serial(board);
-                                    self.mode = DataLoggerMode::Watch
+                                    self.mode = DataLoggerMode::Watch;
+                                    board.set_debug(false);
                                 },
-                                "quiet" => self.mode = DataLoggerMode::Quiet,
-                                _ => self.mode = DataLoggerMode::Interactive
+                                "watch-debug" => { 
+                                    self.write_column_headers_to_serial(board);
+                                    self.mode = DataLoggerMode::Watch;
+                                    board.set_debug(true);
+                                },
+                                "quiet" => {
+                                    self.mode = DataLoggerMode::Quiet;
+                                    board.set_debug(false);
+                                },
+                                _ => { 
+                                    self.mode = DataLoggerMode::Interactive;
+                                    board.set_debug(true);
+                                }
                             }
                         }
                         _ => {}
@@ -612,7 +654,41 @@ impl DataLogger {
                 }
             }
             CommandPayload::SensorGetCommandPayload(payload) => {
-                board.serial_send("get sensor settings not implemented\n");
+
+                for i in 0..self.sensor_drivers.len() {
+                    // create json and output it
+                    if let Some(driver) = &mut self.sensor_drivers[i] {
+
+                        let id_bytes = driver.get_id();
+                        let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+                        
+
+                        match payload.id {
+                            serde_json::Value::String(ref payload_id) => {
+                                if payload_id == id_str {
+                                    //echo the details and return
+                                    let sensor_name_bytes = sensor_name_from_type_id(driver.get_type_id().into());
+                                    let sensor_name_str = core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+                                    
+                                    // TODO: get the other sensor values
+                                    let json = json!({
+                                        "id": id_str,
+                                        "type": sensor_name_str
+                                    });
+                                    let string = json.to_string();
+                                    let str = string.as_str();
+                                    board.serial_send(str);
+                                    board.serial_send("\n");
+                                    return;
+                                }
+                            },
+                            _ => {}
+
+                        }
+                    }
+                }
+                board.serial_send("didn't find the sensor\n");
+
             }
             CommandPayload::SensorRemoveCommandPayload(payload) => {
                 let sensor_id = match payload.id {
@@ -645,7 +721,7 @@ impl DataLogger {
                             if let Some(found_u8) = found.try_into().ok() {
                                 board.store_sensor_settings(found_u8, &bytes);
                                 self.sensor_drivers[found] = None;
-                                board.serial_send("Sensor removed\n");
+                                board.serial_send("{ \"status\" : \"sensor removed\"}\n");
                                 return;
                             }
                         }
@@ -653,11 +729,18 @@ impl DataLogger {
                 }
             }
             CommandPayload::SensorListCommandPayload(_) => {
-                board.serial_send("{");
+                board.serial_send("[");
+                let mut first = true;
                 for i in 0..self.sensor_drivers.len() {
                     // create json and output it
-                    let test = &self.sensor_drivers[i];
                     if let Some(driver) = &mut self.sensor_drivers[i] {
+
+                        if first {
+                            first = false
+                        } else {
+                            board.serial_send(",");
+                        }
+
                         let id_bytes = driver.get_id();
                         // let id = "id";
                         // let id = core::str::from_utf8_unchecked(&id_bytes);
@@ -668,17 +751,19 @@ impl DataLogger {
                         let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
 
                         let type_id = driver.get_type_id();
+                        let sensor_name_bytes = sensor_name_from_type_id(type_id.into());
+                        let sensor_name_str = core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
                         let json = json!({
                             "id": id_str,
-                            "type": sensor_name_from_type_id(type_id.into())
+                            "type": sensor_name_str
                         });
                         let string = json.to_string();
                         let str = string.as_str();
                         board.serial_send(str);
-                        board.serial_send("\n");
                     }
                 }
-                board.serial_send("}");
+                board.serial_send("]");
+                board.serial_send("\n");
             }
         }
     }
