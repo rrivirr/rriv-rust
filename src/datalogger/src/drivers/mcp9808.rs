@@ -42,7 +42,7 @@ impl SensorDriver for MCP9808TemperatureDriver {
     }
 
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
-        if(self.measured_parameter_values[index] == f64::MAX){
+        if(self.measured_parameter_values[index] == f64::MAX){  
             Err(())
         } else {
             Ok(self.measured_parameter_values[index])

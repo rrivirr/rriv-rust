@@ -374,6 +374,11 @@ impl DataLogger {
                                                               // Serial2.print(F("CMD >> "));
                                                               // writeRawMeasurementToLogFile();
                                                               // fileSystemWriteCache->flushCache();
+
+
+                // for each self.telemeter_drivers
+                // upload the data payload
+                
                 self.last_interactive_log_time = board.timestamp();
             }
         }

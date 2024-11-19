@@ -61,6 +61,9 @@ pub trait ActuatorDriver {
 
 pub trait TelemeterDriver {
     fn setup(&mut self);
+    fn upload_measurement(&mut self, board: &mut dyn rriv_board::TelemetryDriverServices);
+    // error handling
+    // busy i.e. don't power down
 }
 
 
