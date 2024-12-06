@@ -337,6 +337,17 @@ impl DataLogger {
                 self.sensor_drivers[i] = Some(driver);
             }
         }
+
+        // rawly do a bunch of lorawan stuff
+        board.serial_send("AT+JOIN=0");
+        board.delay_ms(2000);
+        board.serial_send("AT+BAND=5");
+        board.delay_ms(2000);
+        board.serial_send("AT+MASK=0002");
+        board.delay_ms(2000);
+        board.serial_send("AT+JOIN=1:1:7:100");
+        board.delay_ms(2000);
+
         rprintln!("done loading sensors");
     }
 
@@ -375,6 +386,15 @@ impl DataLogger {
                                                               // writeRawMeasurementToLogFile();
                                                               // fileSystemWriteCache->flushCache();
                 self.last_interactive_log_time = board.timestamp();
+
+                if let Some(ref mut driver) = self.sensor_drivers[0] {
+                    if driver.get_measured_parameter_count() > 0 {
+                        match driver.get_measured_parameter_value(0) {
+                            Ok(value) =>  board.serial_send(format!("AT+SEND={}",value).as_str()),
+                            Err(_) => {},
+                        }
+                    }
+                }
             }
         }
     }
