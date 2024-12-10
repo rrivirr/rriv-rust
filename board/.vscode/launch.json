@@ -36,7 +36,7 @@
             ],
             "runtimeExecutable": "probe-rs",
             "env": {
-                "RUST_LOG": "trace", // If you set this variable, check the VSCode console log window for the location of the log file.
+                // "RUST_LOG": "trace", // If you set this variable, check the VSCode console log window for the location of the log file.
                 "RUST_BACKTRACE": "1",
             },
             "linux": {

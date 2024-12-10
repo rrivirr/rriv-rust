@@ -4,7 +4,7 @@
 
 
 
-pub const BUFFER_NUM: usize = 11; // Includes an extra empty cell for end marker
+pub const BUFFER_NUM: usize = 3; // Includes an extra empty cell for end marker
 pub const BUFFER_SIZE: usize = 500;
 
 pub struct CommandData {
