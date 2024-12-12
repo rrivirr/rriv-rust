@@ -370,14 +370,13 @@ impl DataLogger {
             if board.timestamp() > self.last_interactive_log_time + 1 {
                 // notify(F("interactive log"));
                 self.measure_sensor_values(board); // measureSensorValues(false);
-                self.write_last_measurement_to_serial(board); //outputLastMeasurement();
-                                                              // Serial2.print(F("CMD >> "));
-                                                              // writeRawMeasurementToLogFile();
-                                                              // fileSystemWriteCache->flushCache();
+                self.write_last_measurement_to_serial(board);
+                 //outputLastMeasurement();
+                // Serial2.print(F("CMD >> "));
+                // writeRawMeasurementToLogFile();
+                // fileSystemWriteCache->flushCache();
 
-
-                // for each self.telemeter_drivers
-                // upload the data payload
+                self.upload_data_payloads(board);
                 
                 self.last_interactive_log_time = board.timestamp();
             }
@@ -386,8 +385,16 @@ impl DataLogger {
 
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
-            if let Some(ref mut driver) = self.sensor_drivers[i] {;
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
                 driver.take_measurement(board.get_sensor_driver_services());
+            }
+        }
+    }
+
+    fn upload_data_payloads(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+        for i in 0..self.telemeter_drivers.len() {
+            if let Some(ref mut telemeter) = self.telemeter_drivers[i] {
+                telemeter.upload_measurement(board.get_telemetry_driver_services());
             }
         }
     }

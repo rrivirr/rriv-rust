@@ -13,11 +13,7 @@ use rtt_target::rtt_init_print;
 pub mod prelude;
 
 extern crate rriv_board;
-use rriv_board::{RRIVBoard,RRIVBoardBuilder};
-
 extern crate rriv_board_0_4_2;
-use rriv_board_0_4_2::{Board,BoardBuilder};
-
 extern crate datalogger;
 use datalogger::DataLogger;
 
