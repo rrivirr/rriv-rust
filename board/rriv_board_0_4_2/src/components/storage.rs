@@ -203,7 +203,8 @@ impl Storage {
   // look at the c code to copy the structure of these calls
   pub fn create_file(&mut self, timestamp: i64){
 
-    // let timestamp = timestamp - 1704067200; // the RRIV epoch starts on Jan 1 2024, necessary to support short file names
+    let timestamp = if timestamp > 9999999 { timestamp & 9999999 } else { timestamp };
+    // let timestamp = timestamp > 1704067200 ? timestamp - 1704067200 : timestamp; // the RRIV epoch starts on Jan 1 2024, necessary to support short file names
     let filename = format!("{:0>7}.csv", timestamp);
     let filename = filename.as_bytes(); 
     rprintln!("file: {:?}", core::str::from_utf8(filename));
@@ -215,33 +216,6 @@ impl Storage {
     //   root_dir, output.as_str(), embedded_sdmmc::Mode::ReadWriteCreateOrAppend).unwrap();
 
     self.reopen_file();
-
-    if let Some(file) = self.file {
-
-   
-      match self.volume_manager.write(file, b"hello\n") {
-        Ok(ret) => rprintln!("Success: {:?}", ret),
-        Err(err) => rprintln!("Err: {:?}", err),
-      };
-      match self.volume_manager.write(file, b"hello\n") {
-        Ok(ret) => rprintln!("Success: {:?}", ret),
-        Err(err) => rprintln!("Err: {:?}", err),
-      };
-      match self.volume_manager.write(file, b"hello\n") {
-        Ok(ret) => rprintln!("Success: {:?}", ret),
-        Err(err) => rprintln!("Err: {:?}", err),
-      };
-      match self.volume_manager.write(file, b"hello\n") {
-        Ok(ret) => rprintln!("Success: {:?}", ret),
-        Err(err) => rprintln!("Err: {:?}", err),
-      };
-      match self.volume_manager.write(file, b"hello\n") {
-        Ok(ret) => rprintln!("Success: {:?}", ret),
-        Err(err) => rprintln!("Err: {:?}", err),
-      };
-      // self.volume_manager.close_file(my_file);
-
-    }
     
   }
 

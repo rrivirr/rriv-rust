@@ -101,9 +101,8 @@ impl Board {
         // self.power_control.cycle_3v(&mut self.delay);
 
         // self.internal_adc.enable(&mut self.delay);
-        let timestamp: i64 = rriv_board::RRIVBoard::timestamp(self);
+        let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         self.storage.create_file(timestamp);
-        self.storage.write("something".as_bytes());
     }
 }
 
@@ -187,11 +186,9 @@ impl RRIVBoard for Board {
         self.delay.delay_ms(ms);
     }
 
-    fn timestamp(&mut self) -> i64 {
-        return self.internal_rtc.current_time().into(); // internal RTC
-
-        // let i2c1 = mem::replace(&mut self.i2c1, None);
-        // let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+    fn epoch_timestamp(&mut self) -> i64 {
+        let i2c1 = mem::replace(&mut self.i2c1, None);
+        let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
 
         // let d = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
         // let t = NaiveTime::from_hms_milli_opt(12, 34, 56, 789).unwrap();
@@ -203,19 +200,26 @@ impl RRIVBoard for Board {
         //         panic!("{:?}", err);
         //     }
         // }
-        // let result = ds3231.datetime();
-        // self.i2c1 = Some(ds3231.destroy_ds3231());
+        let result = ds3231.datetime();
+        self.i2c1 = Some(ds3231.destroy_ds3231());
 
-        // match result {
-        //     Ok(date_time) => {
-        //         rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
-        //         date_time.and_utc().timestamp()
-        //     },
-        //     Err(err) => {
-        //         rprintln!("DS3231 error {:?}", err);
-        //         return 0 // this could fail back to some other clock
-        //     }
-        // }
+        match result {
+            Ok(date_time) => {
+                rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
+                date_time.and_utc().timestamp()
+            },
+            Err(err) => {
+                rprintln!("DS3231 error {:?}", err);
+                return 0 // this could fail back to some other clock
+            }
+        }
+    }
+
+    // crystal time, systick
+    fn timestamp(&mut self) -> i64 {
+        return self.internal_rtc.current_time().into(); // internal RTC
+
+       
     }
 
     fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices {
