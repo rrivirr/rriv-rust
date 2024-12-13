@@ -3,27 +3,6 @@ name = "app"
 version = "0.1.0"
 edition = "2021"
 
-[profile.release]
-opt-level = 'z'     # optimize for size and don't unroll loops
-codegen-units = 256 # setting this to 1 causes better optimizations, but slower code. setting it higher makes compiling parallelizable
-debug = false       # symbols are nice and they don't increase the size on Flash
-lto = true          # link-time optimizations
-
-[profile.dev]
-opt-level = 'z'     # optimize for size and don't unroll loops
-codegen-units = 256 # setting this to 1 causes better optimizations, but slower code. setting it higher makes compiling parallelizable
-debug = true        # symbols are nice and they don't increase the size on Flash
-lto = true          # link-time optimizations
-panic = "abort"
-
-
-# Optimize all dependencies
-[profile.release.package."*"]
-opt-level = "z"
-
-[profile.dev.package."*"]
-opt-level = "z"
-
 [dependencies]
 embedded-hal = "0.2.7"
 nb = "1"

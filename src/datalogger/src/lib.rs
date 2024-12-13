@@ -367,13 +367,15 @@ impl DataLogger {
 
         let interactive_mode_logging = true;
         if interactive_mode_logging {
-            if board.timestamp() > self.last_interactive_log_time + 1 {
-                // notify(F("interactive log"));
+            if board.timestamp() > self.last_interactive_log_time + 1 { // need to separate logic here.
+                // notify(F("interactive log"));  
                 self.measure_sensor_values(board); // measureSensorValues(false);
                 self.write_last_measurement_to_serial(board); //outputLastMeasurement();
                                                               // Serial2.print(F("CMD >> "));
                                                               // writeRawMeasurementToLogFile();
                                                               // fileSystemWriteCache->flushCache();
+                self.write_last_measurement_to_storage(board);
+
                 self.last_interactive_log_time = board.timestamp();
             }
         }
@@ -463,6 +465,41 @@ impl DataLogger {
         board.serial_send("\n");
     }
 
+    fn write_last_measurement_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+        let mut first = true;
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
+
+                if first {
+                    first = false;
+                } else {
+                    board.write_log_file(",");
+                }
+
+                for j in 0..driver.get_measured_parameter_count() {
+
+                    match driver.get_measured_parameter_value(j){
+                        Ok(value) => {
+                            let output = format!("{:.4}", value);
+                            rprintln!("{}",value);
+                            board.write_log_file(&output);
+                        },
+                        Err(_) => {
+                            rprintln!("{}","Error");
+                            board.write_log_file("Error");
+                        },
+                    }
+
+                    if j != driver.get_measured_parameter_count() - 1 {
+                        board.write_log_file(",");
+                    }
+                    
+                }
+               
+            }
+        }
+        board.write_log_file("\n");
+    }
 
     fn write_last_measurement_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
 

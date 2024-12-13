@@ -48,7 +48,7 @@ use rriv_board::{
     TelemetryDriverServices,
 };
 
-use ds323x::{DateTimeAccess, Ds323x, NaiveDate};
+use ds323x::{DateTimeAccess, Ds323x, NaiveDate, NaiveDateTime, NaiveTime};
 use stm32f1xx_hal::rtc::Rtc;
 
 mod components;
@@ -91,15 +91,19 @@ pub struct Board {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
     pub internal_rtc: Rtc,
-
+    pub storage: Storage,
     pub debug: bool,
 }
 
 impl Board {
     pub fn start(&mut self) {
+        rprintln!("starting board");
         // self.power_control.cycle_3v(&mut self.delay);
 
         // self.internal_adc.enable(&mut self.delay);
+        let timestamp: i64 = rriv_board::RRIVBoard::timestamp(self);
+        self.storage.create_file(timestamp);
+        self.storage.write("something".as_bytes());
     }
 }
 
@@ -184,20 +188,33 @@ impl RRIVBoard for Board {
     }
 
     fn timestamp(&mut self) -> i64 {
-        // TODO: we want to use the internal RTC here but the oscillator is malfunctioning
-        return self.internal_rtc.current_time().into();
-        // so for now we use the i2c rtc
+        return self.internal_rtc.current_time().into(); // internal RTC
 
         // let i2c1 = mem::replace(&mut self.i2c1, None);
         // let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+
+        // let d = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
+        // let t = NaiveTime::from_hms_milli_opt(12, 34, 56, 789).unwrap();
+        // let datetime = NaiveDateTime::new(d, t);
+        // match ds3231.set_datetime(&datetime) {
+        //     Ok(_) => {},
+        //     Err(err) => {
+        //         rprintln!("{:?}", err);
+        //         panic!("{:?}", err);
+        //     }
+        // }
         // let result = ds3231.datetime();
         // self.i2c1 = Some(ds3231.destroy_ds3231());
 
         // match result {
         //     Ok(date_time) => {
+        //         rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
         //         date_time.and_utc().timestamp()
         //     },
-        //     Err(_) => return 0, // this could fail back to some other clock
+        //     Err(err) => {
+        //         rprintln!("DS3231 error {:?}", err);
+        //         return 0 // this could fail back to some other clock
+        //     }
         // }
     }
 
@@ -215,6 +232,14 @@ impl RRIVBoard for Board {
     
     fn set_debug(&mut self, debug: bool) {
        self.debug = debug;
+    }
+
+    fn write_log_file(&mut self, data: &str) {
+        self.storage.write(data.as_bytes());
+    }
+
+    fn flush_log_file(&mut self) {
+        //
     }
 }
 
@@ -403,6 +428,7 @@ pub struct BoardBuilder {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
+    pub storage: Option<Storage>
 }
 
 impl BoardBuilder {
@@ -419,6 +445,7 @@ impl BoardBuilder {
             rgb_led: None,
             oscillator_control: None,
             internal_rtc: None,
+            storage: None
         }
     }
 
@@ -436,6 +463,7 @@ impl BoardBuilder {
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
             internal_rtc: self.internal_rtc.unwrap(),
+            storage: self.storage.unwrap(),
             debug: true
         }
     }
@@ -745,28 +773,39 @@ impl BoardBuilder {
         self.gpio = Some(dynamic_gpio_pins);
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
+        // delay2.delay(2);
         rprintln!("{:?}", clocks);
-        storage::build(
-            spi1_pins,
-            device_peripherals.SPI1,
-            &mut afio.mapr,
+        
+        // let mut storage = storage::build(
+        //     spi1_pins,
+        //     device_peripherals.SPI1,
+        //     &mut afio.mapr,
+        //     clocks,
+        //     delay2,
+        // );
+
+        let mut storage = storage::build(
+            spi2_pins,
+            device_peripherals.SPI2,
             clocks,
             delay2,
         );
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);
+   
+        self.storage = Some(storage);
 
         // // let spi_mode = Mode {
         // //     polarity: Polarity::IdleLow,
         // //     phase: Phase::CaptureOnFirstTransition,
         // // };
-        let spi2 = Spi::spi2(
-            device_peripherals.SPI2,
-            (spi2_pins.sck, spi2_pins.miso, spi2_pins.mosi),
-            MODE,
-            1.MHz(),
-            clocks,
-        );
+        // let spi2 = Spi::spi2(
+        //     device_peripherals.SPI2,
+        //     (spi2_pins.sck, spi2_pins.miso, spi2_pins.mosi),
+        //     MODE,
+        //     1.MHz(),
+        //     clocks,
+        // );
         rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);
