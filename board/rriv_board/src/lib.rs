@@ -40,6 +40,10 @@ pub trait RRIVBoard: Send {
     // Modes
     fn set_debug(&mut self, debug: bool);
 
+    // Data Logging
+    fn write_log_file(&mut self, data: &str);
+    fn flush_log_file(&mut self);
+
     // Board Services Used by Control Logic and Drivers
     control_services!();
 

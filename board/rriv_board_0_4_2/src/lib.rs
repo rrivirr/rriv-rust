@@ -103,7 +103,7 @@ impl Board {
         // self.internal_adc.enable(&mut self.delay);
         let timestamp: i64 = rriv_board::RRIVBoard::timestamp(self);
         self.storage.create_file(timestamp);
-        self.storage.write("something");
+        self.storage.write("something".as_bytes());
     }
 }
 
@@ -232,6 +232,14 @@ impl RRIVBoard for Board {
     
     fn set_debug(&mut self, debug: bool) {
        self.debug = debug;
+    }
+
+    fn write_log_file(&mut self, data: &str) {
+        self.storage.write(data.as_bytes());
+    }
+
+    fn flush_log_file(&mut self) {
+        //
     }
 }
 
@@ -401,13 +409,6 @@ pub fn build() -> Board {
     board_builder.setup();
     let board = board_builder.build();
     board
-}
-
-pub struct AtLeastNanoDelay {}
-
-
-impl embedded_hal::delay::DelayNs for AtLeastNanoDelay {
-
 }
 
 pub struct BoardBuilder {
@@ -772,7 +773,7 @@ impl BoardBuilder {
         self.gpio = Some(dynamic_gpio_pins);
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
-        delay2.delay(2);
+        // delay2.delay(2);
         rprintln!("{:?}", clocks);
         
         // let mut storage = storage::build(
