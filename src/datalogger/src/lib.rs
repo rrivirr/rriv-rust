@@ -367,8 +367,8 @@ impl DataLogger {
 
         let interactive_mode_logging = true;
         if interactive_mode_logging {
-            if board.timestamp() > self.last_interactive_log_time + 1 {
-                // notify(F("interactive log"));
+            if board.timestamp() > self.last_interactive_log_time + 1 { // need to separate logic here.
+                // notify(F("interactive log"));  
                 self.measure_sensor_values(board); // measureSensorValues(false);
                 self.write_last_measurement_to_serial(board); //outputLastMeasurement();
                                                               // Serial2.print(F("CMD >> "));

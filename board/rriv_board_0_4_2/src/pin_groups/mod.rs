@@ -7,7 +7,7 @@ pub use battery_level::*;
 mod dynamic_gpio;
 pub use dynamic_gpio::*;
 mod i2c1;
-use embedded_hal::blocking::i2c;
+// use embedded_hal::blocking::i2c;
 pub use i2c1::*;
 mod i2c2;
 pub use i2c2::*;
@@ -105,9 +105,9 @@ pub fn build(
 
     let serial = SerialPins::build(pins.tx, pins.rx, cr);
 
-    let spi1 = Spi1Pins::build(pins.spi1_sck, pins.spi1_miso, pins.spi1_mosi, pins.sd_card_chip_select, cr);
+    let spi1 = Spi1Pins::build(pins.spi1_sck, pins.spi1_miso, pins.spi1_mosi, cr);
 
-    let spi2 = Spi2Pins::build(pins.spi2_sck, pins.spi2_miso, pins.spi2_mosi, cr);
+    let spi2 = Spi2Pins::build(pins.spi2_sck, pins.spi2_miso, pins.spi2_mosi, pins.sd_card_chip_select, cr);
 
     let usb = UsbPins::build(pins.usb_p, pins.usb_n, cr);
 
