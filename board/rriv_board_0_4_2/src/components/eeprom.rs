@@ -1,11 +1,13 @@
 
-use embedded_hal::prelude::{
-    _embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write,
-    _embedded_hal_blocking_i2c_WriteRead,
-};
+// use embedded_hal::prelude::{
+//     _embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write,
+//     _embedded_hal_blocking_i2c_WriteRead,
+// };
 use crate::Board;
 use rriv_board::RRIVBoard;
 use rtt_target::{rprint, rprintln};
+use cortex_m::prelude::_embedded_hal_blocking_i2c_Write;
+use cortex_m::prelude::_embedded_hal_blocking_i2c_WriteRead;
 
 // implementation specific consts
 const EEPROM_I2C_ADDRESS: u8 = 0x50;

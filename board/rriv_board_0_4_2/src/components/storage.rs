@@ -14,7 +14,8 @@ pub const MODE: Mode = Mode {
 
 
 
- pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: Delay<TIM2, 1000000>) -> Storage {
+ pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: AtLeastNanoDelay<TIM2>) -> Storage {
+
 
   let spi2 = Spi::spi2(
     spi_dev,
@@ -35,7 +36,7 @@ pub const MODE: Mode = Mode {
 
 }
 
-type RrivSdCard = SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Delay<TIM2, 1000000>>;
+type RrivSdCard = SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, DelayNs<TIM2>>;
 // SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Pin<'C', 8, Output>>;
 pub struct RrivTimeSource {}
 

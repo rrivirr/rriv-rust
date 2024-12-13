@@ -20,7 +20,7 @@ use cortex_m::{
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
@@ -403,11 +403,33 @@ pub fn build() -> Board {
     board
 }
 
-pub struct AtLeastNanoDelay {}
+pub struct AtLeastNanoDelay<T> {
+    delay: DelayUs<T>
+}
+
+impl<T>  AtLeastNanoDelay<T> {
+    fn new(delay: DelayUs<T>) -> Self {
+        AtLeastNanoDelay {
+            delay
+        }
+    }
+}
 
 
-impl embedded_hal::delay::DelayNs for AtLeastNanoDelay {
+impl embedded_hal::delay::DelayNs for AtLeastNanoDelay<TIM2> {
+    fn delay_ns(&mut self, ns: u32) {
+        let micros = ns.to_f32() / 1000;
+        let micros = micros.to_int() + 1;
+        self.delay.delay(micros);
+    }
 
+    fn delay_us(&mut self, mut us: u32) {
+        self.delay.delay(us);
+    }
+
+    fn delay_ms(&mut self, mut ms: u32) {
+        self.delay.delay(ms * 1000);
+    }
 }
 
 pub struct BoardBuilder {
@@ -772,7 +794,7 @@ impl BoardBuilder {
         self.gpio = Some(dynamic_gpio_pins);
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
-        delay2.delay(2);
+        let nanoDelay = AtLeastNanoDelay::new(delay2);
         rprintln!("{:?}", clocks);
         
         // let mut storage = storage::build(
@@ -787,7 +809,7 @@ impl BoardBuilder {
             spi2_pins,
             device_peripherals.SPI2,
             clocks,
-            delay2,
+            nanoDelay,
         );
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);

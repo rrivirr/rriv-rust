@@ -229,6 +229,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "361a90feb7004eca4019fb28352a9465666b24f840f5c3cddf0ff13920590b89"
 
 [[package]]
+name = "embedded-hal-compat"
+version = "0.13.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "08ecac72f6be75ad2d4809c9f07d45502e2e5c9a4e9579077f28d7135de81df3"
+dependencies = [
+ "embedded-hal 0.2.7",
+ "embedded-hal 1.0.0",
+ "nb 1.1.0",
+]
+
+[[package]]
 name = "embedded-sdmmc"
 version = "0.8.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -383,7 +394,8 @@ dependencies = [
  "cortex-m",
  "cortex-m-rt",
  "ds323x",
- "embedded-hal 1.0.0",
+ "embedded-hal 0.2.7",
+ "embedded-hal-compat",
  "embedded-sdmmc",
  "nb 1.1.0",
  "panic-halt",
