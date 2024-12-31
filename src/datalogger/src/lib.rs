@@ -774,7 +774,7 @@ impl DataLogger {
             CommandPayload::SensorListCommandPayload(_) => {
                 board.serial_send("[");
                 let mut first = true;
-                for i in 0..self.sensor_drivers.len() {todo!(),
+                for i in 0..self.sensor_drivers.len() {
                     // create json and output it
                     if let Some(driver) = &mut self.sensor_drivers[i] {
 
@@ -805,16 +805,23 @@ impl DataLogger {
                         board.serial_send(str);
                     }
                 }
-                board.serial_send("]");todo!(),
+                board.serial_send("]");
                 board.serial_send("\n");
             }
             CommandPayload::BoardRtcSetPayload(payload) => {
                 let epoch = match payload.epoch {
-                    serde_json::Value::Number(epoch)
-                        board.set_epoch(epoch);
+                    serde_json::Value::Number(epoch) => {
+                        let epoch = epoch.as_i64();
+                        if let Some(epoch) = epoch {
+                            board.set_epoch(epoch);
+                        } else {
+                            board.serial_send("Bad epoch in command");
+                            rprintln!("Bad epoch {:?}", epoch);
+                        }
                     }
-                    _ => {
+                    err => {
                         board.serial_send("Bad epoch in command");
+                        rprintln!("Bad epoch {:?}", err);
                         return;
                     }
                 };
