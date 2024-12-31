@@ -45,6 +45,8 @@ pub trait RRIVBoard: Send {
     fn flush_log_file(&mut self);
 
 
+
+    fn set_epoch(&mut self, epoch: i64);
     fn epoch_timestamp(&mut self) -> i64;
 
     // Board Services Used by Control Logic and Drivers

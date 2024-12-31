@@ -200,7 +200,9 @@ fn get_command_payload(
         CommandType::BoardFirmwareWarranty => todo!(),
         CommandType::BoardFirmwareConditions => todo!(),
         CommandType::BoardFirmwareLicense => todo!(),
-        CommandType::BoardRtcSet => todo!(),
+        CommandType::BoardRtcSet => {
+            parse_command_to_payload!(BoardRtcSetPayload, CommandPayload::BoardRtcSetPayload, command_cstr);
+        },
         CommandType::BoardRtcGet => todo!(),
         CommandType::BoardRestart => todo!(),
         CommandType::BoardI2cList => todo!(),

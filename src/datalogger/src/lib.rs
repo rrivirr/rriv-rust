@@ -29,6 +29,9 @@ use core::{ffi::CStr, str::from_utf8};
 
 const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
 
+static mut EPOCH_TIMESTAMP: i64 = 0;
+
+
 #[derive(Debug, Clone, Copy)]
 struct DataloggerSettings {
     deployment_identifier: [u8; 16],
@@ -369,6 +372,9 @@ impl DataLogger {
         if interactive_mode_logging {
             if board.timestamp() > self.last_interactive_log_time + 1 { // need to separate logic here.
                 // notify(F("interactive log"));  
+                unsafe {
+                    EPOCH_TIMESTAMP = board.epoch_timestamp();
+                }
                 self.measure_sensor_values(board); // measureSensorValues(false);
                 self.write_last_measurement_to_serial(board); //outputLastMeasurement();
                                                               // Serial2.print(F("CMD >> "));
@@ -768,7 +774,7 @@ impl DataLogger {
             CommandPayload::SensorListCommandPayload(_) => {
                 board.serial_send("[");
                 let mut first = true;
-                for i in 0..self.sensor_drivers.len() {
+                for i in 0..self.sensor_drivers.len() {todo!(),
                     // create json and output it
                     if let Some(driver) = &mut self.sensor_drivers[i] {
 
@@ -799,8 +805,19 @@ impl DataLogger {
                         board.serial_send(str);
                     }
                 }
-                board.serial_send("]");
+                board.serial_send("]");todo!(),
                 board.serial_send("\n");
+            }
+            CommandPayload::BoardRtcSetPayload(payload) => {
+                let epoch = match payload.epoch {
+                    serde_json::Value::Number(epoch)
+                        board.set_epoch(epoch);
+                    }
+                    _ => {
+                        board.serial_send("Bad epoch in command");
+                        return;
+                    }
+                };
             }
         }
     }
