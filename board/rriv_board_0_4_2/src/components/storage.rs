@@ -29,7 +29,7 @@ pub const MODE: Mode = Mode {
     MODE,
     1.MHz(),
     clocks,
-);
+  );
 
   rprintln!("set up sdcard");
   // let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay).unwrap();

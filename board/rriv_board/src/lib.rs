@@ -49,6 +49,7 @@ pub trait RRIVBoard: Send {
 
 
     // Time
+    fn systick_ms(& self) -> u32;
     fn set_epoch(&mut self, epoch: i64);
     fn epoch_timestamp(&mut self) -> i64;
 

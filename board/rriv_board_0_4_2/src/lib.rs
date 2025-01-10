@@ -4,24 +4,19 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::format;
+use cortex_m_rt::exception;
 
 use core::{
-    cell::RefCell,
-    concat,
-    default::Default,
-    format_args,
-    ops::DerefMut,
-    option::{Option, Option::*},
-    result::Result::*,
+    cell::RefCell, concat, default::Default, format_args, ops::DerefMut, option::Option::{self, *}, panic, result::Result::*
 };
 use core::{mem, result};
 use cortex_m::{
     asm::{delay, dmb, dsb},
     interrupt::{CriticalSection, Mutex},
-    peripheral::NVIC,
+    peripheral::{NVIC,SYST},
 };
 use embedded_hal::digital::v2::OutputPin;
-use stm32f1xx_hal::afio::MAPR;
+use stm32f1xx_hal::{afio::MAPR, pac::{TIM1, TIM3, TIM4}, timer::{counter, CounterMs}};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -70,6 +65,8 @@ static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(Non
 static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
+static mut MILLIS : u64 = 0;
+
 #[repr(C)]
 pub struct Serial {
     tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
@@ -80,7 +77,7 @@ type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
 type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
-    pub delay: SysDelay,
+    pub delay: DelayUs<TIM3>,
     // // pub power_control: PowerControl,
     pub gpio: DynamicGpioPins,
     pub internal_adc: InternalAdc,
@@ -192,6 +189,11 @@ impl RRIVBoard for Board {
         self.delay.delay_ms(ms);
     }
 
+    fn systick_ms(& self) -> u32 {
+        let millis = pac::SYST::get_current();
+        return millis;
+    }
+
     fn set_epoch(&mut self, epoch: i64) {
         let i2c1 = mem::replace(&mut self.i2c1, None);
         let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
@@ -228,7 +230,7 @@ impl RRIVBoard for Board {
         }
     }
 
-    // crystal time, systick
+    // internal rtc
     fn timestamp(&mut self) -> i64 {
         return self.internal_rtc.current_time().into(); // internal RTC
 
@@ -340,6 +342,13 @@ impl TelemetryDriverServices for Board {
     control_services_impl!();
 }
 
+#[exception]
+fn SysTick() {
+    unsafe {
+        MILLIS = MILLIS + 1;
+    }
+}
+
 #[interrupt]
 unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
@@ -430,7 +439,7 @@ pub fn build() -> Board {
 
 pub struct BoardBuilder {
     // chip features
-    pub delay: Option<SysDelay>,
+    pub delay: Option<DelayUs<TIM3>>,
 
     // pins groups
     pub gpio: Option<DynamicGpioPins>,
@@ -659,7 +668,6 @@ impl BoardBuilder {
         let gpioc = device_peripherals.GPIOC.split();
         let gpiod = device_peripherals.GPIOD.split();
 
-        let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
 
         // Set up pins
         let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
@@ -677,17 +685,77 @@ impl BoardBuilder {
             spi1_pins,
             spi2_pins,
             usb_pins,
-        ) = pin_groups::build(pins, &mut gpio_cr, delay);
+        ) = pin_groups::build(pins, &mut gpio_cr);
 
         let clocks =
             BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
 
-        let mut delay: Option<SysDelay> = None;
-        unsafe {
-            let core_peripherals = cortex_m::Peripherals::steal();
-            delay = Some(core_peripherals.SYST.delay(&clocks));
-        }
-        let mut delay = delay.unwrap();
+        
+
+        // let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
+
+        // let mut delay: Option<SysDelay> = None;
+        // unsafe { // unsafely get another delay
+        //     let core_peripherals = cortex_m::Peripherals::steal();
+        //     delay = Some(core_peripherals.SYST.delay(&clocks));
+        // }
+        // let mut delay = delay.unwrap();
+
+
+        // let mut core_peripherals = cortex_m::Peripherals::take().unwrap();
+        // let device_peripherals = pac::Peripherals::take().unwrap();
+
+
+        
+        // cortex_m::SYST::get_current();
+
+        let mut delay: DelayUs<TIM3> = device_peripherals.TIM3.delay(&clocks);
+        let mut delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
+
+        
+        let counter: CounterMs<TIM4> = device_peripherals.TIM4.counter_ms(&clocks);
+
+        rprintln!("ticks per 10ms {}", cortex_m::peripheral::SYST::get_ticks_per_10ms());
+
+        let ticks_per_1ms = 6300; // why this number?  900*7
+        core_peripherals.SYST.set_reload(ticks_per_1ms); // reload each ms
+        core_peripherals.SYST.clear_current();
+        core_peripherals.SYST.enable_interrupt();
+        core_peripherals.SYST.enable_counter();
+
+        rprintln!("ticks per 1ms {}", ticks_per_1ms);
+
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+
+        // let mut delay = core_peripherals.SYST.delay(&clocks);
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        delay2.delay_ms(1u16);
+        // rprintln!("{}",         cortex_m::peripheral::SYST::get_current()    );
+        unsafe { rprintln!("{}", MILLIS); }
+        panic!("quit");
+
+
 
         BoardBuilder::setup_serial(
             serial_pins,
@@ -790,7 +858,6 @@ impl BoardBuilder {
 
         self.gpio = Some(dynamic_gpio_pins);
 
-        let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         // delay2.delay(2);
         rprintln!("{:?}", clocks);
         
@@ -802,7 +869,7 @@ impl BoardBuilder {
         //     delay2,
         // );
 
-        let mut storage = storage::build(
+        let storage = storage::build(
             spi2_pins,
             device_peripherals.SPI2,
             clocks,
@@ -827,6 +894,11 @@ impl BoardBuilder {
         rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);
+
+        // syst has already been consumed by delay
+        // core_peripherals.SYST.set_reload(1);
+        // core_peripherals.SYST.clear_current();
+        // core_peripherals.SYST.enable_counter();
 
         // we can unsafely .steal on device peripherals to get rcc again, or not?
         // unsafe {
