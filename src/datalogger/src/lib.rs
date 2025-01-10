@@ -376,6 +376,8 @@ impl DataLogger {
         let interactive_mode_logging = true;
         if interactive_mode_logging {
             if board.timestamp() > self.last_interactive_log_time + 1 { // need to separate logic here.
+                rprintln!("systick {}", board.systick_ms());
+
                 // notify(F("interactive log"));  
                 unsafe {
                     EPOCH_TIMESTAMP = board.epoch_timestamp();
