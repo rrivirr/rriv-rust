@@ -26,7 +26,10 @@ macro_rules! control_services {
 }
 
 pub trait RRIVBoard: Send {
-    
+
+    // Run loop services
+    fn run_loop_iteration(&mut self);
+
     // Core Services
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>);
     fn critical_section<T, F>(&self, f: F) -> T where F: Fn() -> T;
@@ -45,7 +48,7 @@ pub trait RRIVBoard: Send {
     fn flush_log_file(&mut self);
 
 
-
+    // Time
     fn set_epoch(&mut self, epoch: i64);
     fn epoch_timestamp(&mut self) -> i64;
 

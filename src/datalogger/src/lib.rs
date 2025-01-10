@@ -14,13 +14,16 @@ use rriv_board::{
 extern crate alloc;
 use alloc::boxed::Box;
 use alloc::format;
+use crate::alloc::string::ToString;
 use rtt_target::rprintln;
 
 mod drivers;
-use crate::alloc::string::ToString;
 use drivers::{*,types::*};
 use mcp9808::*;
 use generic_analog::*;
+
+mod protocol;
+use protocol::{*};
 
 use serde::de::value;
 use serde_json::{json, Value};
@@ -341,6 +344,8 @@ impl DataLogger {
             }
         }
         rprintln!("done loading sensors");
+
+        self.write_column_headers_to_storage(board);
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
@@ -395,10 +400,16 @@ impl DataLogger {
         }
     }
 
+    // fn render_column_headers(mut str)
+
+
+
     fn write_column_headers_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
 
-        let mut first = true;
 
+        board.serial_send("timestamp,");
+
+        let mut first = true;
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
 
@@ -435,7 +446,53 @@ impl DataLogger {
 
     }
 
+    fn write_column_headers_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
+        board.write_log_file("timestamp,");
+
+        let mut first = true;
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
+
+                if first {
+                    first = false;
+                } else {
+                    board.write_log_file(",");
+                }
+
+
+                let sensor_name = driver.get_id(); // always output the id for now, later add bit to control append prefix behavior, default to false
+                                                   // let mut prefix: &str = "";
+                                                   // if let Some(sensor_name) = sensor_name {
+                let mut prefix = core::str::from_utf8(&sensor_name.clone())
+                    .unwrap()
+                    .to_string();
+                prefix = (prefix + "_").clone();
+                // }
+                for j in 0..driver.get_measured_parameter_count() {
+                    let identifier = driver.get_measured_parameter_identifier(j);
+                    let identifier_str = core::str::from_utf8(&identifier).unwrap();
+                    board.write_log_file(&prefix);
+                    let end = identifier.iter().position(|&x| x == b'\0').unwrap_or_else(|| 1);
+                    let var = &identifier_str[ 0..end];
+                    board.write_log_file(var);
+                    if j != driver.get_measured_parameter_count() - 1 {
+                        board.write_log_file(",");
+                    }
+                }
+             
+            }
+        }
+        board.write_log_file("\n");
+
+    }
+
     fn write_measured_parameters_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
+        let epoch = board.epoch_timestamp();
+        let output = format!("{},", epoch);
+        board.serial_send(&output);
+
         let mut first = true;
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
@@ -472,6 +529,11 @@ impl DataLogger {
     }
 
     fn write_last_measurement_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
+        let epoch = board.epoch_timestamp();
+        let output = format!("{},", epoch);
+        board.write_log_file(&output);
+
         let mut first = true;
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
@@ -830,31 +892,7 @@ impl DataLogger {
                 };
             }
             CommandPayload::BoardGetPayload(payload) => {
-             
-                if let Some(param) = payload.parameter {
-                    match param {
-                        serde_json::Value::String(param) => {
-                            rprintln!("{:?}", param.as_str());
-                            match param.as_str() {
-                                "epoch" => {
-                                    let epoch = board.epoch_timestamp();
-                                    board.serial_send(format!("{:}\n", epoch).as_str());
-                                }
-                                _ => {
-                                    board.serial_send("Unsupported param in command\n");
-                                }
-                            }
-                        }
-                        err => {
-                            board.serial_send("Bad param in command\n");
-                            rprintln!("Bad epoch {:?}", err);
-                            return;
-                        }
- 
-                    }
-                } else {
-                    let epoch = board.epoch_timestamp();
-                    board.serial_send(format!("{:}", epoch).as_str());                }
+                protocol::commands::get_board(board, payload);
             }
         }
     }
