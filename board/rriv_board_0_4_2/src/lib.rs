@@ -189,12 +189,14 @@ impl RRIVBoard for Board {
     fn set_epoch(&mut self, epoch: i64) {
         let i2c1 = mem::replace(&mut self.i2c1, None);
         let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
-        let micros = epoch * 1000;
-        let datetime = NaiveDateTime::from_timestamp_micros(micros);
+        let millis = epoch * 1000;
+        // DateTime::from_timestamp_millis(micros);
+        let datetime = NaiveDateTime::from_timestamp_millis(millis);
+        rprintln!("{:?}", datetime);
         if let Some(datetime) = datetime {
             match ds3231.set_datetime(&datetime) {
                 Ok(_) => {}
-                Err(err) => rprintln!("{:?}",err),
+                Err(err) => rprintln!("Error {:?}",err),
             }
         }
         let result = ds3231.datetime();
@@ -222,7 +224,7 @@ impl RRIVBoard for Board {
 
         match result {
             Ok(date_time) => {
-                rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
+                // rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
                 date_time.and_utc().timestamp()
             },
             Err(err) => {

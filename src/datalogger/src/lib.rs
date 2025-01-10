@@ -352,8 +352,8 @@ impl DataLogger {
                     self.execute_command(board, command_payload);
                 }
                 Err(error) => {
-                    board.serial_send("Error processing command");
-                    board.serial_send(format!("{:?}", error).as_str()); // TODO how to get the string from the error
+                    board.serial_send("Error processing command\n");
+                    board.serial_send(format!("{:?}\n", error).as_str()); // TODO how to get the string from the error
 
                     // CommandPayload::InvalidPayload() => {
                     //     board.serial_send("invalid payload\n");sensor_type_id
@@ -524,6 +524,7 @@ impl DataLogger {
     }
 
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
+        rprintln!("executing command {:?}", command_payload);
         match command_payload {
             CommandPayload::DataloggerSetCommandPayload(payload) => {
                 self.update_datalogger_settings(board, payload);
@@ -785,7 +786,7 @@ impl DataLogger {
                         }
 
                         let id_bytes = driver.get_id();
-                        // let id = "id";
+                        // let id = "id";string
                         // let id = core::str::from_utf8_unchecked(&id_bytes);
 
                         // let id_cstr = CStr::from_bytes_with_nul(&id_bytes).unwrap_or_default();
@@ -809,22 +810,51 @@ impl DataLogger {
                 board.serial_send("\n");
             }
             CommandPayload::BoardRtcSetPayload(payload) => {
-                let epoch = match payload.epoch {
+                match payload.epoch {
                     serde_json::Value::Number(epoch) => {
                         let epoch = epoch.as_i64();
                         if let Some(epoch) = epoch {
                             board.set_epoch(epoch);
+                            board.serial_send("Epoch set\n");
+
                         } else {
-                            board.serial_send("Bad epoch in command");
+                            board.serial_send("Bad epoch in command\n");
                             rprintln!("Bad epoch {:?}", epoch);
                         }
                     }
                     err => {
-                        board.serial_send("Bad epoch in command");
+                        board.serial_send("Bad epoch in command\n");
                         rprintln!("Bad epoch {:?}", err);
                         return;
                     }
                 };
+            }
+            CommandPayload::BoardGetPayload(payload) => {
+             
+                if let Some(param) = payload.parameter {
+                    match param {
+                        serde_json::Value::String(param) => {
+                            rprintln!("{:?}", param.as_str());
+                            match param.as_str() {
+                                "epoch" => {
+                                    let epoch = board.epoch_timestamp();
+                                    board.serial_send(format!("{:}\n", epoch).as_str());
+                                }
+                                _ => {
+                                    board.serial_send("Unsupported param in command\n");
+                                }
+                            }
+                        }
+                        err => {
+                            board.serial_send("Bad param in command\n");
+                            rprintln!("Bad epoch {:?}", err);
+                            return;
+                        }
+ 
+                    }
+                } else {
+                    let epoch = board.epoch_timestamp();
+                    board.serial_send(format!("{:}", epoch).as_str());                }
             }
         }
     }

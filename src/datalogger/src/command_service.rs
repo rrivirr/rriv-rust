@@ -203,7 +203,9 @@ fn get_command_payload(
         CommandType::BoardRtcSet => {
             parse_command_to_payload!(BoardRtcSetPayload, CommandPayload::BoardRtcSetPayload, command_cstr);
         },
-        CommandType::BoardRtcGet => todo!(),
+        CommandType::BoardGet => {
+            parse_command_to_payload!(BoardGetPayload, CommandPayload::BoardGetPayload, command_cstr);
+        }
         CommandType::BoardRestart => todo!(),
         CommandType::BoardI2cList => todo!(),
         CommandType::BoardMemoryCheck => todo!(),
