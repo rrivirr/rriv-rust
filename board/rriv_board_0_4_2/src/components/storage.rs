@@ -1,9 +1,10 @@
 
 
-use core::ffi::CStr;
+use core::{ffi::CStr, time};
 
 use alloc::format;
 
+use ds323x::{Datelike, Timelike};
 use embedded_hal::spi::{Mode, Phase, Polarity};
 use embedded_sdmmc::{Directory, File, SdCard, TimeSource, Timestamp, Volume, VolumeManager};
 use pac::SPI2;
@@ -53,12 +54,43 @@ impl RrivTimeSource {
   }
 }
 
+
+// the Timesource trait below is a fraught way for us pass timestamps into the sd card library
+// this cloud be refactored in the library to allow the caller to simply pass the timestamp
+// into each write call, from whatever source it wants to use for a timestmap.  
+// for the time being, this static variable provides a way to transmit the timestamp into the library
+// Additinally, in the case of the RRIVBoard, we do not want to query the I2C RTC every time we write
+// therefore, this time should be coming form the internal RTC, which needs to be set to match that I2C RTC
+
+static mut EPOCH_TIMESTAMP: i64 = 0;
+
+pub fn update_time_source(timestamp: i64) {
+  unsafe {
+    EPOCH_TIMESTAMP = timestamp;
+  }
+}
+
 impl TimeSource for RrivTimeSource {
     fn get_timestamp(&self) -> embedded_sdmmc::Timestamp {
-      match Timestamp::from_calendar(2024, 10, 7, 00, 00, 00) {
-          Ok(timestamp) => timestamp,
-          Err(_) => Timestamp::from_calendar(0, 0, 0, 0, 0, 0).unwrap()
-        }
+
+      let mut naive = NaiveDateTime::default();
+      unsafe {
+        naive = NaiveDateTime::from_timestamp(EPOCH_TIMESTAMP, 0);		
+      }
+      let time = naive.time();
+      let timestamp = embedded_sdmmc::Timestamp::from_calendar(
+        naive.year().try_into().unwrap(), 
+        naive.month().try_into().unwrap(), 
+        naive.day().try_into().unwrap(), 
+        time.hour().try_into().unwrap(), 
+        time.minute().try_into().unwrap(), 
+        time.second().try_into().unwrap()
+      );
+      match timestamp {
+        Ok(timestamp) => timestamp,
+        Err(err) => Timestamp::from_calendar(0, 0, 0, 0, 0, 0).unwrap()
+      }
+      
     }
 }
 
@@ -68,45 +100,6 @@ pub trait OutputDevice {
 }
 
 const CACHE_SIZE: usize = 50;
-// pub struct WriteCache<T:OutputDevice> {
-//   cache: [u8; CACHE_SIZE],
-//   next_position: usize,
-//   storage: T
-// }
-
-// impl WriteCache<Storage> {
-//   pub fn new(storage: Storage) -> WriteCache<Storage> {
-//     WriteCache  {
-//       cache: [b'\0'; CACHE_SIZE],
-//       next_position: 0,
-//       storage
-//     }
-//   }
-
-//   // pub fn clear(&mut self) {
-//   //   self.next_position = 0;
-//   // }
-
-//   // pub fn data(&mut self) -> &[u8] {
-//   //   &self.cache[0..self.next_position]
-//   // }
-
-//   pub fn write(&mut self, data: &[u8]){
-//     self.storage.write(data);
-//   }
-// }
-
-
-// pub struct WriteCache2<T> {
-//   cache: [u8; CACHE_SIZE],
-//   next_position: usize
-// }
-
-// impl WriteCache2<Storage> {
-//   pub fn write<Storage>(&mut self, output_device: Storage, data: &[u8] ){
-//     // output_device.write(data);
-//   }
-// }
 
 
 pub struct Storage {
@@ -119,31 +112,29 @@ pub struct Storage {
   next_position: usize,
 }
 
-// impl OutputDevice for Storage {
-//     fn write(data: &[u8]) {
-//         todo!()
-//     }
-// }
 
 impl Storage {
 
-  pub fn new(sd_card: RrivSdCard) -> Self {
+  pub fn new(sd_card: RrivSdCard
+    // , time_source: impl TimeSource //  a timesource passed in here could use unsafe access to internal RTC or i2c bus
+  ) -> Self {
 
-    let time_source = RrivTimeSource::new();
+    let time_source = RrivTimeSource::new(); // unsafe access to the board
+                                                             // or global time var via interrupt
+                                                             // or copy into a global variable at the top of the run loop
     rprintln!("set up sdcard");
   
     let mut volume_manager  = embedded_sdmmc::VolumeManager::new(sd_card, time_source);
     // Try and access Volume 0 (i.e. the first partition).
     // The volume object holds information about the filesystem on that volume.
-  
     rprintln!("set up volume");
-    // let result = volume_mgr.open_volume(embedded_sdmmc::VolumeIdx(0));
-    // match result {
-    //   Ok(volume0) =>   rprintln!("Volume 0 Success: {:?}", volume0),
-    //   Err(error) => rprintln!("Volume 0 error: {:?}", error),
-    // }
+    let result = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0));
+    let volume = match result {
+      Ok(volume0) =>   {rprintln!("Volume 0 Success: {:?}", volume0); volume0 },
+      Err(error) => panic!("Volume 0 error: {:?}", error),
+    };
   
-    let volume = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0)).unwrap();
+    // let volume = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0)).unwrap();
     rprintln!("Volume 0 Success: {:?}", volume);
     // Open the root directory (mutably borrows from the volume).  
     
@@ -238,22 +229,17 @@ impl Storage {
 
   }
 
-  pub fn write(&mut self, data: &[u8]) { //-> Result<Ok, Error<Error>>{
+  pub fn write(&mut self, data: &[u8], timestamp: i64) { //-> Result<Ok, Error<Error>>{
 
+    unsafe {
+      EPOCH_TIMESTAMP = timestamp; // or function set_write_timestamp
+    }
  
     if let Some(file) = self.file {
 
       if self.next_position + data.len() > CACHE_SIZE {
         // flush cache
         self.flush();
-
-        // let cache_data = &self.cache[0..self.next_position];
-        // match self.volume_manager.write(file, cache_data) {
-        //   Ok(ret) => rprintln!("Success: {:?}", ret),
-        //   Err(err) => rprintln!("Err: {:?}", err),
-        // }
-
-        // self.next_position = 0;
       } 
 
       self.cache[self.next_position..self.next_position+data.len()].copy_from_slice(data);

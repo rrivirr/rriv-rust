@@ -60,6 +60,23 @@ pub struct SensorListCommandPayload {
     pub action: Value,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BoardRtcSetPayload {
+    pub object: Value,
+    pub action: Value,
+    pub epoch: Value
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BoardGetPayload {
+    pub object: Value,
+    pub action: Value,
+    pub parameter: Option<Value>
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum CommandPayload {
     DataloggerSetCommandPayload(DataloggerSetCommandPayload),
     DataloggerGetCommandPayload(DataloggerGetCommandPayload),
@@ -67,7 +84,9 @@ pub enum CommandPayload {
     SensorSetCommandPayload(SensorSetCommandPayload, Value),
     SensorGetCommandPayload(SensorGetCommandPayload),
     SensorRemoveCommandPayload(SensorRemoveCommandPayload),
-    SensorListCommandPayload(SensorListCommandPayload)
+    SensorListCommandPayload(SensorListCommandPayload),
+    BoardRtcSetPayload(BoardRtcSetPayload),
+    BoardGetPayload(BoardGetPayload)
 }
 
 

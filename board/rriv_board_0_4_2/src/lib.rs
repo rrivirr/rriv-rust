@@ -93,6 +93,7 @@ pub struct Board {
     pub internal_rtc: Rtc,
     pub storage: Storage,
     pub debug: bool,
+    pub file_epoch: i64
 }
 
 impl Board {
@@ -107,6 +108,10 @@ impl Board {
 }
 
 impl RRIVBoard for Board {
+    fn run_loop_iteration(&mut self){
+        self.file_epoch = self.epoch_timestamp();
+    }
+
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
         cortex_m::interrupt::free(|cs| {
             let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
@@ -153,7 +158,8 @@ impl RRIVBoard for Board {
         eeprom::write_datalogger_settings_to_eeprom(self, bytes);
     }
 
-    fn retrieve_datalogger_settings(
+    fn retrieve_datalogger_settings(        // let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
+
         &mut self,
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
@@ -186,26 +192,33 @@ impl RRIVBoard for Board {
         self.delay.delay_ms(ms);
     }
 
-    fn epoch_timestamp(&mut self) -> i64 {
+    fn set_epoch(&mut self, epoch: i64) {
         let i2c1 = mem::replace(&mut self.i2c1, None);
         let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+        let millis = epoch * 1000;
+        // DateTime::from_timestamp_millis(micros);
+        let datetime = NaiveDateTime::from_timestamp_millis(millis);
+        rprintln!("{:?}", datetime);
+        if let Some(datetime) = datetime {
+            match ds3231.set_datetime(&datetime) {
+                Ok(_) => {}
+                Err(err) => rprintln!("Error {:?}",err),
+            }
+        }
+        let result = ds3231.datetime();
+        self.i2c1 = Some(ds3231.destroy_ds3231());  
+    }
 
-        // let d = NaiveDate::from_ymd_opt(2024, 1, 1).unwrap();
-        // let t = NaiveTime::from_hms_milli_opt(12, 34, 56, 789).unwrap();
-        // let datetime = NaiveDateTime::new(d, t);
-        // match ds3231.set_datetime(&datetime) {
-        //     Ok(_) => {},
-        //     Err(err) => {
-        //         rprintln!("{:?}", err);
-        //         panic!("{:?}", err);
-        //     }
-        // }
+    fn epoch_timestamp(&mut self) -> i64 {
+
+        let i2c1 = mem::replace(&mut self.i2c1, None);
+        let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
         let result = ds3231.datetime();
         self.i2c1 = Some(ds3231.destroy_ds3231());
 
         match result {
             Ok(date_time) => {
-                rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
+                // rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
                 date_time.and_utc().timestamp()
             },
             Err(err) => {
@@ -239,11 +252,11 @@ impl RRIVBoard for Board {
     }
 
     fn write_log_file(&mut self, data: &str) {
-        self.storage.write(data.as_bytes());
+        self.storage.write(data.as_bytes(), self.file_epoch);
     }
 
     fn flush_log_file(&mut self) {
-        //
+        todo!("flush_log_file");
     }
 }
 
@@ -468,7 +481,8 @@ impl BoardBuilder {
             oscillator_control: self.oscillator_control.unwrap(),
             internal_rtc: self.internal_rtc.unwrap(),
             storage: self.storage.unwrap(),
-            debug: true
+            debug: true,
+            file_epoch: 0
         }
     }
 

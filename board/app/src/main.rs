@@ -15,7 +15,7 @@ pub mod prelude;
 extern crate rriv_board;
 
 extern crate rriv_board_0_4_2;
-// use rriv_board_0_4_2::{Board,BoardBuilder};
+use crate::rriv_board::RRIVBoard;
 
 extern crate datalogger;
 use datalogger::DataLogger;
@@ -30,6 +30,7 @@ fn main() -> ! {
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
     loop {
+        board.run_loop_iteration();
         datalogger.run_loop_iteration(&mut board);
     }
 }
