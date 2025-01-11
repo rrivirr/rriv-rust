@@ -5,7 +5,7 @@ use core::{ffi::CStr, time};
 use alloc::format;
 
 use ds323x::{Datelike, Timelike};
-use embedded_hal::spi::{Mode, Phase, Polarity};
+use embedded_hal::{delay::DelayNs, spi::{Mode, Phase, Polarity}};
 use embedded_sdmmc::{BlockDevice, Directory, File, SdCard, TimeSource, Timestamp, Volume, VolumeManager};
 use pac::SPI2;
 use stm32f1xx_hal::spi::Spi2NoRemap;
@@ -21,7 +21,7 @@ pub const MODE: Mode = Mode {
 
 
 
- pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: Delay<TIM2, 1000000>) -> Storage {
+ pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: DelayNs<TIM2>) -> Storage {
 
   let spi2 = Spi::spi2(
     spi_dev,
@@ -35,7 +35,7 @@ pub const MODE: Mode = Mode {
   // let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay).unwrap();
   // only one SPI device on this bus, can we avoid using embedded_hal_bus?
 
-  let sdcard = embedded_sdmmc::SdCard::new(spi2, pins.sd_card_chip_select, delay);
+  let sdcard: SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Delay<TIM2, 1000000>> = embedded_sdmmc::SdCard::new(spi2, delay);
 
   rprintln!("set up sdcard");
   // sdcard.read(blocks, start_block_idx, reason);
@@ -44,9 +44,10 @@ pub const MODE: Mode = Mode {
   return Storage::new(sdcard);
 
 }
+type RrivSdCard = SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, DelayNs<TIM2>>;
 
 // type RrivSdCard = SdCard<Spi<SPI1, Spi1NoRemap, (Pin<'A', 5, Alternate>, Pin<'A', 6>, Pin<'A', 7, Alternate>), u8>, Pin<'C', 8, Output>, SysDelay>;
-type RrivSdCard = SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Pin<'C', 8, Output>, Delay<TIM2, 1000000>>;
+// type RrivSdCard = SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Pin<'C', 8, Output>, Delay<TIM2, 1000000>>;
 // SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Pin<'C', 8, Output>>;
 pub struct RrivTimeSource {}
 
@@ -106,10 +107,10 @@ const CACHE_SIZE: usize = 50;
 
 pub struct Storage {
   volume_manager: VolumeManager<RrivSdCard, RrivTimeSource>,
-  volume: Volume,
+  // volume: Volume,
   filename: [u8; 11],
-  file: Option<File>,
-  root_dir: Directory,
+  // file: Option<File>,
+  // root_dir: Directory,
   cache: [u8; CACHE_SIZE],
   next_position: usize,
 }
@@ -126,12 +127,12 @@ impl Storage {
                                                              // or copy into a global variable at the top of the run loop
     rprintln!("set up sdcard");
   
-    let mut volume_manager  = embedded_sdmmc::VolumeManager::new(sd_card, time_source);
+    let mut volume_manager: VolumeManager<SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, _>, RrivTimeSource>  = embedded_sdmmc::VolumeManager::new(sd_card, time_source);
     // Try and access Volume 0 (i.e. the first partition).
     // The volume object holds information about the filesystem on that volume.
     rprintln!("set up volume");
     let result = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0));
-    let volume = match result {
+    let volume: Volume<'_, _, _, _, _, _> = match result {
       Ok(volume0) =>   {rprintln!("Volume 0 Success: {:?}", volume0); volume0 },
       Err(error) => panic!("Volume 0 error: {:?}", error),
     };
@@ -151,13 +152,12 @@ impl Storage {
     // This mutably borrows the directory.
     rprintln!("Root Dir: {:?}", root_dir);
     
-
     Storage {
       volume_manager,
-      volume,
+      // volume,
       filename: [b'\0'; 11],
-      file: None,
-      root_dir: root_dir,
+      // file: None,
+      // root_dir: root_dir,
       cache: [b'\0'; CACHE_SIZE],
       next_position: 0
     }
