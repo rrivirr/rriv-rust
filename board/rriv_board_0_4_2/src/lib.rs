@@ -6,13 +6,7 @@ use alloc::boxed::Box;
 use alloc::format;
 
 use core::{
-    cell::RefCell,
-    concat,
-    default::Default,
-    format_args,
-    ops::DerefMut,
-    option::{Option, Option::*},
-    result::Result::*,
+    cell::RefCell, concat, default::Default, format_args, mem::MaybeUninit, ops::DerefMut, option::Option::{self, *}, result::Result::*
 };
 use core::{mem, result};
 use cortex_m::{
@@ -20,7 +14,7 @@ use cortex_m::{
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
@@ -42,6 +36,18 @@ use stm32f1xx_hal::{
 use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
+
+use usbd_storage::subclass::ufi::{Ufi, UfiCommand};
+use usbd_storage::subclass::Command;
+use usbd_storage::transport::bbb::{BulkOnly, BulkOnlyError};
+use usbd_storage::transport::TransportError;
+
+
+
+static mut USB_TRANSPORT_BUF: MaybeUninit<[u8; 512]> = MaybeUninit::uninit();
+
+const BLOCK_SIZE: usize = 512;
+const USB_PACKET_SIZE: u16 = 64; // 8,16,32,64
 
 use rriv_board::{
     ActuatorDriverServices, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices,
@@ -565,11 +571,18 @@ impl BoardBuilder {
 
             USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
 
+            let mut ufi = usbd_storage::subclass::ufi::Ufi::new(USB_BUS.as_ref().unwrap(), USB_PACKET_SIZE, unsafe {
+                USB_TRANSPORT_BUF.assume_init_mut().as_mut_slice()
+            })
+            .unwrap();
+
+
             let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
                 .manufacturer("RRIV")
                 .product("RRIV Data Logger")
                 .serial_number("_rriv")
                 .device_class(USB_CLASS_CDC)
+                .self_powered(false)
                 .build();
 
             USB_DEVICE = Some(usb_dev);

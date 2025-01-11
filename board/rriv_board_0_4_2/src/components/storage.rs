@@ -6,7 +6,7 @@ use alloc::format;
 
 use ds323x::{Datelike, Timelike};
 use embedded_hal::spi::{Mode, Phase, Polarity};
-use embedded_sdmmc::{Directory, File, SdCard, TimeSource, Timestamp, Volume, VolumeManager};
+use embedded_sdmmc::{BlockDevice, Directory, File, SdCard, TimeSource, Timestamp, Volume, VolumeManager};
 use pac::SPI2;
 use stm32f1xx_hal::spi::Spi2NoRemap;
 // use embedded_sdmmc::{File, SdCard, TimeSource, Timestamp, Volume, VolumeManager};
@@ -38,6 +38,8 @@ pub const MODE: Mode = Mode {
   let sdcard = embedded_sdmmc::SdCard::new(spi2, pins.sd_card_chip_select, delay);
 
   rprintln!("set up sdcard");
+  // sdcard.read(blocks, start_block_idx, reason);
+  // sdcard.write(blocks, start_block_idx);
 
   return Storage::new(sdcard);
 

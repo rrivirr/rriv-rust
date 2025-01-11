@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-embedded-hal = "0.2.7"
+embedded-hal = "1.0"
 nb = "1"
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.3"
@@ -21,6 +21,4 @@ rriv_board = { path = "../rriv_board" }
 rriv_board_0_4_2 = { path = "../rriv_board_0_4_2" }
 datalogger = { path = "../../src/datalogger" }
 
-[dependencies.stm32f1xx-hal]
-version = "0.10.0"
-features = ["rt", "stm32f103", "high"]
+
