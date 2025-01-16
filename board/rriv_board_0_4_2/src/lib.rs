@@ -105,6 +105,7 @@ impl Board {
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         self.storage.create_file(timestamp);
     }
+
 }
 
 impl RRIVBoard for Board {

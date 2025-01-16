@@ -1,5 +1,5 @@
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 use alloc::fmt::Debug;
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -77,6 +77,43 @@ pub struct BoardGetPayload {
 
 
 #[derive(Serialize, Deserialize, Debug)]
+pub struct SensorCalibratePointPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+    pub subcommand: Value,
+    pub point: Value,
+    pub tag: Option<Value>
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorCalibrateListPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+    pub subcommand: Value,
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorCalibrateRemovePayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+    pub comsubcommandmand: Value,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorCalibrateFitPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+    pub subcommand: Value,
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
 pub enum CommandPayload {
     DataloggerSetCommandPayload(DataloggerSetCommandPayload),
     DataloggerGetCommandPayload(DataloggerGetCommandPayload),
@@ -85,6 +122,7 @@ pub enum CommandPayload {
     SensorGetCommandPayload(SensorGetCommandPayload),
     SensorRemoveCommandPayload(SensorRemoveCommandPayload),
     SensorListCommandPayload(SensorListCommandPayload),
+    SensorCalibratePointPayload(SensorCalibratePointPayload),
     BoardRtcSetPayload(BoardRtcSetPayload),
     BoardGetPayload(BoardGetPayload)
 }

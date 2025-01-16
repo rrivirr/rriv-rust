@@ -894,6 +894,9 @@ impl DataLogger {
             CommandPayload::BoardGetPayload(payload) => {
                 protocol::commands::get_board(board, payload);
             }
+            CommandPayload::SensorCalibratePointPayload(sensor_calibrate_point_payload) => {
+                rprintln!("Sensor calibrate point payload");
+            },
         }
     }
 
