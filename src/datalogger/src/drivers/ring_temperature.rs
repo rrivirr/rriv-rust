@@ -4,6 +4,9 @@ use super::mcp9808::*;
 
 use super::types::*;
 use alloc::format;
+use alloc::boxed::Box;
+
+// TODO: calibration offsets for all 6 sensors need to be stored and loaded into this driver, and written to EEPROM.
 
 
 #[derive(Copy, Clone, Debug)]
@@ -114,6 +117,35 @@ impl SensorDriver for RingTemperatureDriver {
 
         }
         
+    }
+    
+    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>{
+        // validate
+        if pairs.len() != 1 {
+            return Err(());
+        }
+
+        if pairs[0].values.len() < 6 {
+            return Err(());
+        }
+
+        // fit
+        let single = & pairs[0];
+        let point = single.point;
+        let values = & single.values;
+        for i in 0..values.len() {
+            let pairs = CalibrationPair {
+                point: point,
+                values: Box::new([values[i]])
+            };
+            let result = self.sensor_drivers[i].fit(&[pairs]);
+            match result {
+                Ok(_) => return Ok(()),
+                Err(_) => return Err(()),
+            };
+        }
+        Ok(())
+
     }
         
 }

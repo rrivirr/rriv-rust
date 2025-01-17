@@ -202,7 +202,9 @@ fn get_command_payload(
         },
         CommandType::SensorCalibrateList => todo!("SensorCalibrateList not built"),
         CommandType::SensorCalibrateRemove => todo!(),
-        CommandType::SensorCalibrateFit => todo!(),
+        CommandType::SensorCalibrateFit => {
+            parse_command_to_payload!(SensorCalibrateFitPayload, CommandPayload::SensorCalibrateFitPayload, command_cstr);
+        },
         CommandType::SensorReset => todo!(),
         CommandType::ActuatorSet => todo!(),
         CommandType::ActuatorGet => todo!(),

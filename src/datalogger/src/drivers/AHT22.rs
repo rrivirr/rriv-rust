@@ -42,6 +42,12 @@ impl SensorDriver for AHT22 {
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
         todo!()
     }
+
+    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>{
+        let _ = pairs;
+        todo!()
+    }
+       
 }
 
 impl AHT22 {

@@ -1,3 +1,5 @@
+use alloc::boxed::Box;
+
 pub const SENSOR_SETTINGS_PARTITION_SIZE: usize = 32; // partitioning is part of the driver implemention, and not meaningful at the EEPROM level
 pub type SensorGeneralSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
 pub type SensorSpecialSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
@@ -38,6 +40,11 @@ impl SensorDriverGeneralConfiguration {
     }
 }
 
+pub struct CalibrationPair {
+    pub point: f64,        // the reference value
+    pub values: Box<[f64]> // the raw values returned by the sensors
+}
+
 pub trait SensorDriver {
     fn setup(&mut self);
     fn get_id(&mut self) -> [u8; 6];
@@ -48,6 +55,9 @@ pub trait SensorDriver {
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16];
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
+
+    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>;
+
 }
 
 

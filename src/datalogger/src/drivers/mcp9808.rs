@@ -2,24 +2,34 @@ use super::types::*;
 
 #[derive(Copy, Clone, Debug)]
 pub struct MCP9808TemperatureDriverSpecialConfiguration {
-    empty: [u8; 32], // 32
+    calibration_offset: i16, // TODO: This needs to get stored into the EEPROM, and we don't that yet!
+    empty: [u8; 30], // must add to 32
 }
 
 impl MCP9808TemperatureDriverSpecialConfiguration {
     pub fn new_from_values(
         value: serde_json::Value,
     ) -> MCP9808TemperatureDriverSpecialConfiguration {
-        Self { empty: [b'\0'; 32] }
+        Self {
+            calibration_offset: 0,
+            empty: [b'\0'; 30] 
+        }
     }
 
     pub fn new_from_bytes(
         bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE],
     ) -> MCP9808TemperatureDriverSpecialConfiguration {
-        Self { empty: [b'\0'; 32] }
-    }
+        Self {
+            calibration_offset: 0,
+            empty: [b'\0'; 30] 
+        }   
+     }
 
     pub fn empty()  -> MCP9808TemperatureDriverSpecialConfiguration {
-        Self { empty: [b'\0'; 32] }
+        Self {
+            calibration_offset: 0,
+            empty: [b'\0'; 30] 
+        }  
     }
 }
 
@@ -28,11 +38,12 @@ pub struct MCP9808TemperatureDriver {
     special_config: MCP9808TemperatureDriverSpecialConfiguration,
     measured_parameter_values: [f64; 1],
     address: u8,
+    calibration_offset: f64
 }
 
 impl SensorDriver for MCP9808TemperatureDriver {
     fn setup(&mut self) {
-        todo!()
+        self.calibration_offset = (self.special_config.calibration_offset as f64) / 1000_f64;
     }
 
     getters!();
@@ -109,8 +120,25 @@ impl SensorDriver for MCP9808TemperatureDriver {
             //Temperature = Ambient Temperature (°C)
         }
 
-        self.measured_parameter_values[0] = temperature;
+        self.measured_parameter_values[0] = temperature + self.calibration_offset;
     }
+
+    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()> {
+       // validation
+       if pairs.len() != 1 {
+        return Err(());
+       }
+
+       //fit
+       let single = & pairs[0];
+       let point = single.point;
+       let value = single.values[0];
+       let offset = point - value;
+       self.special_config.calibration_offset = (offset * 1000_f64) as i16;
+    
+    Ok(())
+    }
+       
         
 }
 
@@ -125,7 +153,8 @@ impl MCP9808TemperatureDriver {
             general_config,
             special_config,
             measured_parameter_values: [0.0],
-            address: 0b0011000
+            address: 0b0011000,
+            calibration_offset: 0_f64 // default value, can be calculated from special_config
         }
     }
 
@@ -138,7 +167,8 @@ impl MCP9808TemperatureDriver {
             general_config,
             special_config,
             measured_parameter_values: [0.0],
-            address: address
+            address: address,
+            calibration_offset: 0_f64
         }
     }
 

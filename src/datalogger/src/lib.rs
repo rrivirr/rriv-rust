@@ -897,7 +897,14 @@ impl DataLogger {
             CommandPayload::SensorCalibratePointPayload(sensor_calibrate_point_payload) => {
                 rprintln!("Sensor calibrate point payload");
             },
+            CommandPayload::SensorCalibrateListPayload(sensor_calibrate_list_payload) => todo!(),
+            CommandPayload::SensorCalibrateRemovePayload(sensor_calibrate_remove_payload) => todo!(),
+            CommandPayload::SensorCalibrateFitPayload(sensor_calibrate_fit_payload) => {
+                
+            },
+
         }
+        
     }
 
     pub fn update_datalogger_settings(

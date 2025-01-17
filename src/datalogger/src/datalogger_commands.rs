@@ -123,6 +123,9 @@ pub enum CommandPayload {
     SensorRemoveCommandPayload(SensorRemoveCommandPayload),
     SensorListCommandPayload(SensorListCommandPayload),
     SensorCalibratePointPayload(SensorCalibratePointPayload),
+    SensorCalibrateListPayload(SensorCalibrateListPayload),
+    SensorCalibrateRemovePayload(SensorCalibrateRemovePayload),
+    SensorCalibrateFitPayload(SensorCalibrateFitPayload),
     BoardRtcSetPayload(BoardRtcSetPayload),
     BoardGetPayload(BoardGetPayload)
 }

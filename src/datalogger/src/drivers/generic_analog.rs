@@ -66,6 +66,12 @@ impl SensorDriver for GenericAnalog {
     //         1 => todo!("exadc not implemented"),
     //     }
     // }
+
+    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>{
+        let _ = pairs;
+        todo!()
+    }
+       
 }
 
 impl GenericAnalog {
@@ -169,4 +175,6 @@ impl GenericAnalogSpecialConfiguration {
         let settings = bytes.as_ptr().cast::<GenericAnalogSpecialConfiguration>();
         unsafe { *settings }
     }
+
+       
 }
