@@ -247,10 +247,15 @@ pub struct DataLogger {
     log_raw_data: bool, // both raw and summary data writting to storage
 
     mode: DataLoggerMode,
+
+    // naive calibration value book keeping
+    // not memory efficient
+    calibration_point_values: [Option<Box<[CalibrationPair]>>; EEPROM_TOTAL_SENSOR_SLOTS]
 }
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
 const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> = None;
 const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::TelemeterDriver>> = None;
+const CALIBRATION_REPEAT_VALUE: core::option::Option<Box<[types::CalibrationPair]>> = None;
 
 impl DataLogger {
     pub fn new() -> Self {
@@ -262,7 +267,8 @@ impl DataLogger {
             last_interactive_log_time: 0,
             debug_values: true,
             log_raw_data: true,
-            mode: DataLoggerMode::Interactive
+            mode: DataLoggerMode::Interactive,
+            calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS]
         }
     }
 
@@ -894,13 +900,87 @@ impl DataLogger {
             CommandPayload::BoardGetPayload(payload) => {
                 protocol::commands::get_board(board, payload);
             }
-            CommandPayload::SensorCalibratePointPayload(sensor_calibrate_point_payload) => {
+            CommandPayload::SensorCalibratePointPayload(payload) => {
+                // we want to do the book keeping here for point payloads
+                // i guess we use a box again
                 rprintln!("Sensor calibrate point payload");
+
+
+                let id = match payload.id {
+                    serde_json::Value::String(ref payload_id) => {
+                        payload_id
+                    },
+                    _ => {
+                        board.serial_send("bad sensor id\n");
+                        return
+                    }
+                };
+
+                let point = payload.point.as_f64();
+                let point = match point {
+                    Some(point) => {
+                        point
+                    }
+                    None => {
+                        board.serial_send("bad point\n");
+                        return 
+                    },
+                };
+               
+
+                for i in 0..self.sensor_drivers.len() {
+                    // create json and output it
+                    if let Some(driver) = &mut self.sensor_drivers[i] {
+
+                        let id_bytes = driver.get_id();
+                        let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+                    
+                        if id == id_str {
+
+                            // read sensor values
+                            driver.take_measurement(board.get_sensor_driver_services());
+
+                            let count = driver.get_measured_parameter_count();
+                            let mut values = Box::new([0_f64;10]); // TODO: max of 10, should we make this dynamic?
+                            for i in 0..count {
+                                rprintln!("{:?}", i);
+                                let value = match driver.get_measured_parameter_value(i){
+                                    Ok(value) => value,
+                                    Err(_) => {
+                                        board.serial_send("missing parameter value\n");
+                                        0_f64
+                                    }
+                                };
+                                values[i] = value;
+                            }
+
+
+                            // store the point
+                            // TODO: we are only storing one point for now
+                            let calibration_pair = CalibrationPair {
+                                point: point,
+                                values: values
+                            };
+                            let arr = [calibration_pair];
+                            let arr_box = Box::new(arr);
+                            self.calibration_point_values[i] = Some(arr_box);
+                            board.serial_send("stored a single calibration paid\n");
+
+                        }
+                    }
+                }
+
+                board.serial_send("didn't find the sensor\n");
             },
-            CommandPayload::SensorCalibrateListPayload(sensor_calibrate_list_payload) => todo!(),
+            CommandPayload::SensorCalibrateListPayload(sensor_calibrate_list_payload) => {
+
+                board.serial_send("listed values\n");
+            }
+
             CommandPayload::SensorCalibrateRemovePayload(sensor_calibrate_remove_payload) => todo!(),
+
             CommandPayload::SensorCalibrateFitPayload(sensor_calibrate_fit_payload) => {
-                
+
             },
 
         }

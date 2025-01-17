@@ -82,7 +82,7 @@ pub struct SensorCalibratePointPayload {
     pub action: Value,
     pub id: Value,
     pub subcommand: Value,
-    pub point: Value,
+    pub point: Number,
     pub tag: Option<Value>
 }
 
