@@ -118,6 +118,12 @@ impl SensorDriver for RingTemperatureDriver {
         }
         
     }
+
+    fn clear_calibration(&mut self){
+        for i in 0..self.sensor_drivers.len() {
+            self.sensor_drivers[i].clear_calibration();
+        }
+    }
     
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>{
         // validate
@@ -140,7 +146,7 @@ impl SensorDriver for RingTemperatureDriver {
             };
             let result = self.sensor_drivers[i].fit(&[pairs]);
             match result {
-                Ok(_) => return Ok(()),
+                Ok(_) =>  true,
                 Err(_) => return Err(()),
             };
         }

@@ -1,3 +1,5 @@
+use rtt_target::rprint;
+
 use super::types::*;
 
 #[derive(Copy, Clone, Debug)]
@@ -123,8 +125,14 @@ impl SensorDriver for MCP9808TemperatureDriver {
         self.measured_parameter_values[0] = temperature + self.calibration_offset;
     }
 
+    fn clear_calibration(&mut self) {
+        self.calibration_offset = 0_f64;
+        self.special_config.calibration_offset = 0_i16;
+    }
+
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()> {
        // validation
+       rprint!("pairs len {:?}", pairs.len());
        if pairs.len() != 1 {
         return Err(());
        }
@@ -133,10 +141,10 @@ impl SensorDriver for MCP9808TemperatureDriver {
        let single = & pairs[0];
        let point = single.point;
        let value = single.values[0];
-       let offset = point - value;
-       self.special_config.calibration_offset = (offset * 1000_f64) as i16;
-    
-    Ok(())
+       self.calibration_offset = point - value;
+       self.special_config.calibration_offset = (self.calibration_offset  * 1000_f64) as i16;
+       rprint!("fit {}", self.special_config.calibration_offset);    
+       Ok(())
     }
        
         

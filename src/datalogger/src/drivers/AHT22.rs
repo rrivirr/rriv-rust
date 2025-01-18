@@ -47,6 +47,10 @@ impl SensorDriver for AHT22 {
         let _ = pairs;
         todo!()
     }
+    
+    fn clear_calibration(&mut self) {
+        todo!()
+    }
        
 }
 

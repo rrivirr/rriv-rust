@@ -34,7 +34,6 @@ const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
 
 static mut EPOCH_TIMESTAMP: i64 = 0;
 
-
 #[derive(Debug, Clone, Copy)]
 struct DataloggerSettings {
     deployment_identifier: [u8; 16],
@@ -153,6 +152,8 @@ fn sensor_name_from_type_id(id: usize) -> [u8; 16] {
     rval[..name.len()].copy_from_slice(name.as_bytes());
     rval
 }
+
+
 
 #[macro_export]
 macro_rules! driver_create_functions {
@@ -297,6 +298,23 @@ impl DataLogger {
         board.store_datalogger_settings(&bytes_sized);
         rprintln!("stored {:?}", bytes_sized);
     }
+
+    fn get_driver_index_by_id(& self, id: &str) -> Option<usize> {
+        let drivers = & self.sensor_drivers;
+        for i in 0..self.sensor_drivers.len() {
+            // create json and output it
+            if let Some(driver) = &drivers[i] {
+    
+                let id_bytes = driver.get_id();
+                let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+                if id == id_str {
+                    return Some(i);
+                }
+            }
+        }
+        return None;
+    }
+
 
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
         // enable power to the eeprom and bring i2bufferc online
@@ -947,7 +965,7 @@ impl DataLogger {
                                 let value = match driver.get_measured_parameter_value(i){
                                     Ok(value) => value,
                                     Err(_) => {
-                                        board.serial_send("missing parameter value\n");
+                                        // board.serial_send("missing parameter value\n");
                                         0_f64
                                     }
                                 };
@@ -972,17 +990,89 @@ impl DataLogger {
 
                 board.serial_send("didn't find the sensor\n");
             },
-            CommandPayload::SensorCalibrateListPayload(sensor_calibrate_list_payload) => {
+            CommandPayload::SensorCalibrateListPayload(payload) => {
+
+                rprintln!("convert");
+                let payload_values = match payload.convert() {
+                    Ok(payload_values) => payload_values,
+                    Err(message) =>{
+                        board.serial_send(format!("{}", message).as_str());
+                        return;
+                    }
+                };
+                rprintln!("did convert");
+
+                // list the values
+                if let Some(index) =  self.get_driver_index_by_id(payload_values.id) {
+                    rprintln!("driver index{}", index);
+                    let pairs: &Option<Box<[CalibrationPair]>> = &self.calibration_point_values[index];
+                    if let Some(pairs) = pairs {
+                       for i in 0..pairs.len() {
+                            rprintln!("calib pair{:?}", i);
+                            let pair = &pairs[i];
+                            board.serial_send(format!("{} {:#?}", pair.point, pair.values).as_str());
+                       }
+                    }
+                }
 
                 board.serial_send("listed values\n");
             }
 
-            CommandPayload::SensorCalibrateRemovePayload(sensor_calibrate_remove_payload) => todo!(),
+            CommandPayload::SensorCalibrateRemovePayload(payload) => {
 
-            CommandPayload::SensorCalibrateFitPayload(sensor_calibrate_fit_payload) => {
+
+                board.serial_send("not implemented");
+                return;
+
+                // TO DO: implement removal by tag
+
+                let payload_values = match payload.convert() {
+                    Ok(payload_values) => payload_values,
+                    Err(message) =>{
+                        board.serial_send(format!("{}", message).as_str());
+                        return;
+                    }
+                };
+
+                if let Some(index) =  self.get_driver_index_by_id(payload_values.id) {
+                    let pairs: &Option<Box<[CalibrationPair]>> = &self.calibration_point_values[index];
+                    if let Some(pairs) = pairs {
+                        for i in 0..pairs.len() {
+                             let pair: CalibrationPair = pairs[i];
+
+                        }
+                     }
+
+                }
 
             },
 
+            CommandPayload::SensorCalibrateFitPayload(payload) => {
+
+                let payload_values = match payload.convert() {
+                    Ok(payload_values) => payload_values,
+                    Err(message) =>{
+                        board.serial_send(format!("{}", message).as_str());
+                        return;
+                    }
+                };
+
+                if let Some(index) =  self.get_driver_index_by_id(payload_values.id) {
+                    if let Some(driver) = &mut self.sensor_drivers[index] {
+
+                        let pairs = &self.calibration_point_values[index];
+                        if let Some(pairs) = pairs {
+                            driver.clear_calibration();
+                            match driver.fit(&pairs) {
+                                Ok(_) => board.serial_send("fit ok\n"),
+                                Err(_) => todo!(),
+                            }
+                        }
+
+                    }
+                }
+               
+            },
         }
         
     }

@@ -200,8 +200,12 @@ fn get_command_payload(
             rprintln!("parsing SensorCalibratePoint");
             parse_command_to_payload!(SensorCalibratePointPayload, CommandPayload::SensorCalibratePointPayload, command_cstr);
         },
-        CommandType::SensorCalibrateList => todo!("SensorCalibrateList not built"),
-        CommandType::SensorCalibrateRemove => todo!(),
+        CommandType::SensorCalibrateList => {
+            parse_command_to_payload!(SensorCalibrateListPayload, CommandPayload::SensorCalibrateListPayload, command_cstr);
+        }
+        CommandType::SensorCalibrateRemove => {
+            parse_command_to_payload!(SensorCalibrateRemovePayload, CommandPayload::SensorCalibrateRemovePayload, command_cstr);
+        }
         CommandType::SensorCalibrateFit => {
             parse_command_to_payload!(SensorCalibrateFitPayload, CommandPayload::SensorCalibrateFitPayload, command_cstr);
         },

@@ -47,7 +47,7 @@ pub struct CalibrationPair {
 
 pub trait SensorDriver {
     fn setup(&mut self);
-    fn get_id(&mut self) -> [u8; 6];
+    fn get_id(& self) -> [u8; 6];
     fn get_type_id(&mut self) -> u16;
     // fn get_measurement_technology(&mut self) -> usize; // TODO: unnecessary for now, unless we split SensorDriverServices into different types of services collections
     fn get_measured_parameter_count(&mut self) -> usize;
@@ -57,6 +57,7 @@ pub trait SensorDriver {
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
 
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>;
+    fn clear_calibration(&mut self);
 
 }
 
@@ -76,7 +77,7 @@ pub trait TelemeterDriver {
 
 macro_rules! getters {
     () => {
-        fn get_id(&mut self) -> [u8; 6] {
+        fn get_id(& self) -> [u8; 6] {
             self.general_config.id.clone()
         }
 

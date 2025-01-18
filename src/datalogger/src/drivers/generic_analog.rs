@@ -71,6 +71,10 @@ impl SensorDriver for GenericAnalog {
         let _ = pairs;
         todo!()
     }
+    
+    fn clear_calibration(&mut self) {
+        todo!()
+    }
        
 }
 
