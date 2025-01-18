@@ -1065,7 +1065,7 @@ impl DataLogger {
                             driver.clear_calibration();
                             match driver.fit(&pairs) {
                                 Ok(_) => board.serial_send("fit ok\n"),
-                                Err(_) => todo!(),
+                                Err(_) => board.serial_debug("something went wrong"),
                             }
                         }
 
