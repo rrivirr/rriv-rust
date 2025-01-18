@@ -9,5 +9,5 @@ pub mod types;
 pub mod mcp9808;
 pub mod generic_analog;
 pub mod ring_temperature;
-mod AHT22;
+pub mod aht22;
 

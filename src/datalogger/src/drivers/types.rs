@@ -38,6 +38,22 @@ impl SensorDriverGeneralConfiguration {
     }
 }
 
+
+// TODO: can this be a trait?  because the return values will be of different types
+// pub trait SensorSpecialConfiguration {
+//     pub fn new_from_values (
+//         value: serde_json::Value,
+//     ) -> Aht22SpecialConfiguration {
+//         Self {_empty:[b'\0'; EMPTY_SIZE]}
+//     }
+
+//     pub fn new_from_bytes (
+//         bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE]
+//     ) -> Aht22SpecialConfiguration {
+//         Self {_empty:[b'\0'; EMPTY_SIZE]}
+//     }
+// }
+
 pub trait SensorDriver {
     fn setup(&mut self);
     fn get_id(&mut self) -> [u8; 6];
@@ -49,7 +65,6 @@ pub trait SensorDriver {
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
 }
-
 
 // pub trait ADCSensorDriver {
     
