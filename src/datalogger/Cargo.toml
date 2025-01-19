@@ -14,3 +14,4 @@ serde = { version = "1.0", default-features = false, features = ["derive"] }
 rtt-target = "0.4.0"
 bitflags = "2.4.1"
 bitfield-struct = "0.7"
+ds18b20 = "0.1.1"
