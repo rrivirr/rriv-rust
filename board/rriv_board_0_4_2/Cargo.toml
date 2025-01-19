@@ -8,16 +8,19 @@ edition = "2021"
 
 [dependencies]
 rriv_board = { path = "../rriv_board" } 
-embedded-hal = "0.2.7"
+embedded-hal-02 = { package = "embedded-hal", version = "0.2.7", features = ["unproven"], optional = true }
+embedded-hal = { package = "embedded-hal", version = "1.0" }
+embedded-hal-compat = "0.13.0"
+stm32f1xx-hal = { git="https://github.com/stm32-rs/stm32f1xx-hal", features = ["stm32f103", "high"] }
 nb = "1"
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.3"
 # Panic behaviour, see https://crates.io/keywords/panic-impl for alternatives
 panic-halt = "0.2.0"
 unwrap-infallible = "0.1.5"
-stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103", "high"] }
 rtt-target = "0.4.0"
-usb-device = "0.2.9"
-usbd-serial = "0.1.1"
-embedded-sdmmc = "0.6.0"
-ds323x = "0.5.1"
+usb-device = "0.3.2"
+usbd-serial = { git="https://github.com/nakajima/usbd-serial", rev="085c0bb" }
+embedded-sdmmc = "0.8"
+ds323x = "0.6.0"
+usbd-storage = { version = "1.0.0", features = ["bbb", "ufi"] }

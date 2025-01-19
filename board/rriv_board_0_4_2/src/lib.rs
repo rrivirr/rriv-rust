@@ -10,8 +10,9 @@ use core::{
     concat,
     default::Default,
     format_args,
+    mem::MaybeUninit,
     ops::DerefMut,
-    option::{Option, Option::*},
+    option::Option::{self, *},
     result::Result::*,
 };
 use core::{mem, result};
@@ -20,7 +21,7 @@ use cortex_m::{
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::OutputPin;
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
@@ -42,6 +43,16 @@ use stm32f1xx_hal::{
 use stm32f1xx_hal::usb::{Peripheral, UsbBus, UsbBusType};
 use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
+
+use usbd_storage::subclass::ufi::{Ufi, UfiCommand};
+use usbd_storage::subclass::Command;
+use usbd_storage::transport::bbb::{BulkOnly, BulkOnlyError};
+use usbd_storage::transport::TransportError;
+
+static mut USB_TRANSPORT_BUF: MaybeUninit<[u8; 512]> = MaybeUninit::uninit();
+
+const BLOCK_SIZE: usize = 512;
+const USB_PACKET_SIZE: u16 = 64; // 8,16,32,64
 
 use rriv_board::{
     ActuatorDriverServices, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices,
@@ -76,8 +87,10 @@ pub struct Serial {
 }
 
 // type aliases to make things tenable
-type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
-type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
+// type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
+// type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
+type BoardI2c1 = BlockingI2c<I2C1>;
+type BoardI2c2 = BlockingI2c<I2C2>;
 
 pub struct Board {
     pub delay: SysDelay,
@@ -93,7 +106,7 @@ pub struct Board {
     pub internal_rtc: Rtc,
     pub storage: Storage,
     pub debug: bool,
-    pub file_epoch: i64
+    pub file_epoch: i64,
 }
 
 impl Board {
@@ -108,7 +121,7 @@ impl Board {
 }
 
 impl RRIVBoard for Board {
-    fn run_loop_iteration(&mut self){
+    fn run_loop_iteration(&mut self) {
         self.file_epoch = self.epoch_timestamp();
     }
 
@@ -158,8 +171,8 @@ impl RRIVBoard for Board {
         eeprom::write_datalogger_settings_to_eeprom(self, bytes);
     }
 
-    fn retrieve_datalogger_settings(        // let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
-
+    fn retrieve_datalogger_settings(
+        // let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         &mut self,
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
@@ -194,7 +207,7 @@ impl RRIVBoard for Board {
 
     fn set_epoch(&mut self, epoch: i64) {
         let i2c1 = mem::replace(&mut self.i2c1, None);
-        let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+        let mut ds3231 = Ds323x::new_ds3231(i2c1.unwrap());
         let millis = epoch * 1000;
         // DateTime::from_timestamp_millis(micros);
         let datetime = NaiveDateTime::from_timestamp_millis(millis);
@@ -202,17 +215,16 @@ impl RRIVBoard for Board {
         if let Some(datetime) = datetime {
             match ds3231.set_datetime(&datetime) {
                 Ok(_) => {}
-                Err(err) => rprintln!("Error {:?}",err),
+                Err(err) => rprintln!("Error {:?}", err),
             }
         }
         let result = ds3231.datetime();
-        self.i2c1 = Some(ds3231.destroy_ds3231());  
+        self.i2c1 = Some(ds3231.destroy_ds3231());
     }
 
     fn epoch_timestamp(&mut self) -> i64 {
-
         let i2c1 = mem::replace(&mut self.i2c1, None);
-        let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+        let mut ds3231 = Ds323x::new_ds3231(i2c1.unwrap());
         let result = ds3231.datetime();
         self.i2c1 = Some(ds3231.destroy_ds3231());
 
@@ -220,10 +232,10 @@ impl RRIVBoard for Board {
             Ok(date_time) => {
                 // rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
                 date_time.and_utc().timestamp()
-            },
+            }
             Err(err) => {
                 rprintln!("DS3231 error {:?}", err);
-                return 0 // this could fail back to some other clock
+                return 0; // this could fail back to some other clock
             }
         }
     }
@@ -231,8 +243,6 @@ impl RRIVBoard for Board {
     // crystal time, systick
     fn timestamp(&mut self) -> i64 {
         return self.internal_rtc.current_time().into(); // internal RTC
-
-       
     }
 
     fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices {
@@ -246,9 +256,9 @@ impl RRIVBoard for Board {
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices {
         return self;
     }
-    
+
     fn set_debug(&mut self, debug: bool) {
-       self.debug = debug;
+        self.debug = debug;
     }
 
     fn write_log_file(&mut self, data: &str) {
@@ -311,7 +321,10 @@ impl SensorDriverServices for Board {
                 // rprintln!(&format!("Problem reading I2C2 {}\n", addr))
                 // let error_msg  = &format!("Problem reading I2C2 {}\n", addr);
                 // rprintln!(error_msg);
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem reading I2C2 {}\n", addr));
+                rriv_board::RRIVBoard::serial_debug(
+                    self,
+                    &format!("Problem reading I2C2 {}\n", addr),
+                );
                 for i in 0..buffer.len() {
                     buffer[i] = 0b11111111; // error value
                 }
@@ -325,7 +338,10 @@ impl SensorDriverServices for Board {
             Ok(_) => return Ok(()),
             Err(e) => {
                 rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {}", addr));
+                rriv_board::RRIVBoard::serial_debug(
+                    self,
+                    &format!("Problem writing I2C2 {}", addr),
+                );
                 return Err(());
             }
         }
@@ -445,7 +461,7 @@ pub struct BoardBuilder {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
-    pub storage: Option<Storage>
+    pub storage: Option<Storage>,
 }
 
 impl BoardBuilder {
@@ -462,7 +478,7 @@ impl BoardBuilder {
             rgb_led: None,
             oscillator_control: None,
             internal_rtc: None,
-            storage: None
+            storage: None,
         }
     }
 
@@ -482,7 +498,7 @@ impl BoardBuilder {
             internal_rtc: self.internal_rtc.unwrap(),
             storage: self.storage.unwrap(),
             debug: true,
-            file_epoch: 0
+            file_epoch: 0,
         }
     }
 
@@ -517,17 +533,12 @@ impl BoardBuilder {
         clocks: &Clocks,
     ) {
         // rprintln!("initializing serial");
-
-        let mut serial = Hal_Serial::new(
-            usart,
-            (pins.tx, pins.rx),
-            mapr,
-            Config::default().baudrate(57600.bps()),
-            &clocks,
-        );
-
         rprintln!("serial rx.listen()");
-
+        let mut serial = usart.serial(
+            (pins.tx, pins.rx),
+            Config::default().baudrate(115200.bps()),
+            clocks,
+        );
         serial.rx.listen();
 
         cortex_m::interrupt::free(|cs| {
@@ -565,11 +576,21 @@ impl BoardBuilder {
 
             USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
 
+            let mut ufi = usbd_storage::subclass::ufi::Ufi::new(
+                USB_BUS.as_ref().unwrap(),
+                USB_PACKET_SIZE,
+                unsafe { USB_TRANSPORT_BUF.assume_init_mut().as_mut_slice() },
+            )
+            .unwrap();
+
             let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
-                .manufacturer("RRIV")
-                .product("RRIV Data Logger")
-                .serial_number("_rriv")
                 .device_class(USB_CLASS_CDC)
+                .self_powered(false)
+                .strings(&[StringDescriptors::default()
+                    .manufacturer("RRIV")
+                    .product("RRIV Data Logger")
+                    .serial_number("_rriv")])
+                .unwrap()
                 .build();
 
             USB_DEVICE = Some(usb_dev);
@@ -590,14 +611,13 @@ impl BoardBuilder {
     ) -> BoardI2c1 {
         let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
         let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
-        BlockingI2c::i2c1(
+        BlockingI2c::new(
             i2c1,
             (scl1, sda1),
-            mapr,
             Mode::Standard {
-                frequency: 100.kHz(), // slower to same some energy?
+                frequency: 100.kHz(), // slower to save some energy?
             },
-            *clocks,
+            clocks,
             1000,
             10,
             1000,
@@ -613,13 +633,13 @@ impl BoardBuilder {
     ) -> BoardI2c2 {
         let scl2 = pins.i2c2_scl.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
         let sda2 = pins.i2c2_sda.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
-        let mut x = BlockingI2c::i2c2(
+        let mut x = BlockingI2c::new(
             i2c2,
             (scl2, sda2),
             Mode::Standard {
                 frequency: 100.kHz(), // slower to same some energy?
             },
-            *clocks,
+            clocks,
             1000,
             10,
             1000,
@@ -793,7 +813,7 @@ impl BoardBuilder {
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         // delay2.delay(2);
         rprintln!("{:?}", clocks);
-        
+
         // let mut storage = storage::build(
         //     spi1_pins,
         //     device_peripherals.SPI1,
@@ -802,15 +822,10 @@ impl BoardBuilder {
         //     delay2,
         // );
 
-        let mut storage = storage::build(
-            spi2_pins,
-            device_peripherals.SPI2,
-            clocks,
-            delay2,
-        );
+        let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);
-   
+
         self.storage = Some(storage);
 
         // // let spi_mode = Mode {
