@@ -39,7 +39,7 @@ impl Ds18b20 {
         Ds18b20 {
             general_config,
             special_config,
-            measured_parameter_values: [0.0, NUMBER_OF_MEASURED_PARAMETERS]
+            measured_parameter_values: [0.0; NUMBER_OF_MEASURED_PARAMETERS]
         }
     }
 }
@@ -56,11 +56,12 @@ impl SensorDriver for Ds18b20 {
     }
 
     fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
-        if index < NUMBER_OF_MEASURED_PARAMETERS {
-            return Ok(sel.measured_parameter_values[index]);
-        } else {
-            return Err(());
-        }
+        self.measured_parameter_values[index]
+        // if index < NUMBER_OF_MEASURED_PARAMETERS {
+        //     return Ok(sel.measured_parameter_values[index]);
+        // } else {
+        //     return Err(());
+        // }
     }
 
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
@@ -71,13 +72,13 @@ impl SensorDriver for Ds18b20 {
         if index <= NUMBER_OF_MEASURED_PARAMETERS {
             identifier = identifiers[index];
         }
-        for i: usize in 0..identifier.len() {
+        for i in 0..identifier.len() {
             buf[i] = identifier.as_bytes()[i];
         }
         return buf;
     }
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        ds18b20::
+        todo!();
     }
 }
