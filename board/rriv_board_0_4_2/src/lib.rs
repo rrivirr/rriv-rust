@@ -21,7 +21,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::OutputPin;
-use stm32f1xx_hal::afio::MAPR;
+use stm32f1xx_hal::{afio::MAPR, gpio::Dynamic};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -44,12 +44,14 @@ use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use rriv_board::{
-    ActuatorDriverServices, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices,
-    TelemetryDriverServices,
+    ActuatorDriverServices, OneWireBusInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices, TelemetryDriverServices
 };
 
 use ds323x::{DateTimeAccess, Ds323x, NaiveDate};
 use stm32f1xx_hal::rtc::Rtc;
+
+use one_wire_bus::{Address, OneWire};
+
 
 mod components;
 use components::*;
@@ -82,7 +84,7 @@ type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 pub struct Board {
     pub delay: SysDelay,
     // // pub power_control: PowerControl,
-    pub gpio: DynamicGpioPins,
+    // pub gpio: DynamicGpioPins,
     pub internal_adc: InternalAdc,
     pub external_adc: ExternalAdc,
     pub battery_level: BatteryLevel,
@@ -91,6 +93,7 @@ pub struct Board {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
     pub internal_rtc: Rtc,
+    pub one_wire_bus: OneWireBus
 }
 
 impl Board {
@@ -220,6 +223,16 @@ macro_rules! control_services_impl {
     };
 }
 
+type OneWireGpio1 = OneWire<Pin<'B', 8, Dynamic>>;
+
+pub struct OneWireBus {
+    pub one_wire: OneWireGpio1
+}
+
+impl OneWireBusInterface for OneWireBus {
+
+}
+
 impl SensorDriverServices for Board {
     fn query_internal_adc(&mut self, channel: u8) -> u16 {
         match self.internal_adc.read(channel) {
@@ -265,6 +278,21 @@ impl SensorDriverServices for Board {
                 rriv_board::RRIVBoard::serial_send(self, &format!("Problem writing I2C2 {}", addr));
             }
         }
+     }
+     
+    fn borrow_one_wire_bus(&mut self) -> &mut dyn rriv_board::OneWireBusInterface  {
+
+        return &mut self.one_wire_bus;
+
+    }
+    
+    fn one_wire_send_command(&mut self, command: u8, address: u64) {
+        let address = Address(address);
+
+       match self.one_wire_bus.one_wire.send_command(command, Some(&address), &mut self.delay) {
+                Ok(_) => rprintln!("sent command ok"),
+                Err(e) => rprintln!("{:?}", e)
+           }
     }
 }
 
@@ -402,18 +430,35 @@ impl BoardBuilder {
 
     pub fn build(self) -> Board {
         // loop{}
+
+
+        let gpio = self.gpio.unwrap();
+        let gpio1 = gpio.gpio1;
+        let one_wire = match OneWire::new(gpio1) {
+            Ok(one_wire) => one_wire,
+            Err(_) => {
+                rprintln!("bad one wire bus");
+                panic!("bad one wire bus");
+            }
+        };
+
+        let one_wire_bus_rriv = OneWireBus {
+            one_wire
+        };
+
+
         Board {
             i2c1: self.i2c1,
             i2c2: self.i2c2.unwrap(),
             delay: self.delay.unwrap(),
             // // power_control: self.power_control.unwrap(),
-            gpio: self.gpio.unwrap(),
             internal_adc: self.internal_adc.unwrap(),
             external_adc: self.external_adc.unwrap(),
             battery_level: self.battery_level.unwrap(),
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
             internal_rtc: self.internal_rtc.unwrap(),
+            one_wire_bus: one_wire_bus_rriv
         }
     }
 
