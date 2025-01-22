@@ -411,6 +411,10 @@ dependencies = [
 [[package]]
 name = "rriv_board"
 version = "0.1.0"
+dependencies = [
+ "embedded-hal",
+ "one-wire-bus",
+]
 
 [[package]]
 name = "rriv_board_0_4_2"
@@ -422,6 +426,7 @@ dependencies = [
  "embedded-hal",
  "embedded-sdmmc",
  "nb 1.1.0",
+ "one-wire-bus",
  "panic-halt",
  "rriv_board",
  "rtt-target",

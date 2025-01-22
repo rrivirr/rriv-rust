@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::format;
+use one_wire_bus::OneWire;
 
 use core::{
     cell::RefCell,
@@ -20,7 +21,7 @@ use cortex_m::{
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
-use embedded_hal::digital::v2::OutputPin;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
 use stm32f1xx_hal::afio::MAPR;
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
@@ -203,6 +204,17 @@ impl RRIVBoard for Board {
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices {
         return self;
     }
+    
+    fn get_one_wire_bus<T,E>(&mut self) -> &mut one_wire_bus::OneWire<T>
+    where
+        T: InputPin<Error = E>,
+        T: OutputPin<Error = E> {
+
+        let one_wire_pin = &self.gpio.gpio1;
+        let mut one_wire_bus = OneWire::new(one_wire_pin).unwrap();
+        return &mut one_wire_bus;
+
+    }
 }
 
 macro_rules! control_services_impl {
@@ -265,6 +277,10 @@ impl SensorDriverServices for Board {
                 rriv_board::RRIVBoard::serial_send(self, &format!("Problem writing I2C2 {}", addr));
             }
         }
+    }
+    
+    fn get_one_wire_bus(&mut self) {
+        todo!()
     }
 }
 

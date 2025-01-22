@@ -1,6 +1,9 @@
 #![cfg_attr(not(test), no_std)]
 extern crate alloc;
 use alloc::boxed::Box;
+use one_wire_bus::OneWire;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
+
 
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
@@ -39,7 +42,14 @@ pub trait RRIVBoard: Send {
     // Board Services Used by Control Logic and Drivers
     control_services!();
 
-    fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices;
+    fn get_one_wire_bus<T,E>(&mut self) -> &mut OneWire<T>
+    where
+        T: InputPin<Error = E>,
+        T: OutputPin<Error = E>;
+
+
+
+    fn get_sensor_driver_services<T>(&mut self) -> &mut dyn SensorDriverServices;
     fn get_actuator_driver_services(&mut self) -> &mut dyn ActuatorDriverServices;
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices;
 
@@ -72,6 +82,7 @@ pub trait SensorDriverServices {
     fn query_external_adc(&mut self, port: u8) -> u32;
     fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]);
     fn ic2_write(&mut self, addr: u8, message: &[u8]);
+
 
     control_services!();
 
