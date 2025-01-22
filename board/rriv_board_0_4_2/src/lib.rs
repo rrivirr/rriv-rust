@@ -50,7 +50,7 @@ use rriv_board::{
 use ds323x::{DateTimeAccess, Ds323x, NaiveDate};
 use stm32f1xx_hal::rtc::Rtc;
 
-use one_wire_bus::{Address, OneWire};
+use one_wire_bus::{Address, OneWire, SearchState};
 
 
 mod components;
@@ -93,7 +93,8 @@ pub struct Board {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
     pub internal_rtc: Rtc,
-    pub one_wire_bus: OneWireBus
+    pub one_wire_bus: OneWireBus,
+    one_wire_search_state: Option<SearchState>
 }
 
 impl Board {
@@ -294,6 +295,38 @@ impl SensorDriverServices for Board {
                 Err(e) => rprintln!("{:?}", e)
            }
     }
+    
+    fn one_wire_reset(&mut self) {
+        self.one_wire_search_state = None;
+        let _ = self.one_wire_bus.one_wire.reset(&mut self.delay);
+    }
+    
+    fn one_wire_skip_address(&mut self) {
+        let _ = self.one_wire_bus.one_wire.skip_address(&mut self.delay);
+    }
+    
+    fn one_wire_write_byte(&mut self, byte: u8) {
+        let _ = self.one_wire_bus.one_wire.write_byte(byte, &mut self.delay);
+    }
+    
+    fn one_wire_match_address(&mut self, address: u64) {
+        let address = Address(address);
+        self.one_wire_bus.one_wire.match_address(&address, &mut self.delay);
+    }
+    
+    fn one_wire_read_bytes(&mut self, output: &mut [u8] ) {
+        self.one_wire_bus.one_wire.read_bytes(output, &mut self.delay);
+    }
+    
+    fn one_wire_bus_search(&mut self) -> Option<u64> {
+        if let core::prelude::v1::Ok(Some((device_address, state))) = self.one_wire_bus.one_wire.device_search(self.one_wire_search_state.as_ref(), false, &mut self.delay){
+            self.one_wire_search_state = Some(state);
+            return Some(device_address.0);
+        }
+        return None;
+    }
+
+
 }
 
 impl ActuatorDriverServices for Board {
@@ -458,7 +491,8 @@ impl BoardBuilder {
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
             internal_rtc: self.internal_rtc.unwrap(),
-            one_wire_bus: one_wire_bus_rriv
+            one_wire_bus: one_wire_bus_rriv,
+            one_wire_search_state: None
         }
     }
 
