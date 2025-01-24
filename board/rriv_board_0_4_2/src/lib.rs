@@ -20,8 +20,8 @@ use cortex_m::{
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
-use embedded_hal::digital::v2::OutputPin;
-use stm32f1xx_hal::{afio::MAPR, gpio::Dynamic};
+use embedded_hal::digital::v2::{InputPin, OutputPin};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -93,7 +93,7 @@ pub struct Board {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
     pub internal_rtc: Rtc,
-    pub one_wire_bus: OneWireGpio1,
+    pub one_wire_bus: OneWire<OneWirePin>,
     one_wire_search_state: Option<SearchState>
 }
 
@@ -427,12 +427,63 @@ pub fn build() -> Board {
     board
 }
 
+use Dynamic::*;
+
+pub struct OneWirePin {
+    pin:  Pin<'B', 8, Dynamic>,
+    cr: Cr<'B', true>
+}
+
+
+
+impl InputPin for OneWirePin {
+    type Error = PinModeError;
+
+    fn is_high(&self) -> Result<bool, Self::Error> {
+        // TODO: understand how to this with the new HAL
+        // if !self.pin.is_input() {
+            // self.pin.make_pull_up_input(&mut self.cr);
+        // }
+        return self.pin.is_high();
+    }
+
+    fn is_low(&self) -> Result<bool, Self::Error> {
+        // if !self.pin.is_input() {
+            // self.pin.make_pull_up_input(&mut self.cr);
+        // }
+        return self.pin.is_low();
+    }
+}
+
+impl OutputPin for OneWirePin {
+    type Error = PinModeError;
+
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        // if !self.pin.is_output() {
+            self.pin.make_open_drain_output(&mut self.cr);
+        // }
+        let result = self.pin.set_low();
+        self.pin.make_pull_up_input(&mut self.cr);
+        return result;
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        // if !self.pin.is_output() {
+            self.pin.make_open_drain_output(&mut self.cr);
+        // }
+        let result = self.pin.set_high();
+        self.pin.make_pull_up_input(&mut self.cr);
+        return result;
+    }
+}
+
 pub struct BoardBuilder {
     // chip features
     pub delay: Option<SysDelay>,
 
     // pins groups
     pub gpio: Option<DynamicGpioPins>,
+    pub gpio_cr: Option<GpioCr>,
 
     // board features
     pub internal_adc: Option<InternalAdc>,
@@ -453,6 +504,7 @@ impl BoardBuilder {
             i2c2: None,
             delay: None,
             gpio: None,
+            gpio_cr: None,
             internal_adc: None,
             external_adc: None,
             power_control: None,
@@ -469,6 +521,11 @@ impl BoardBuilder {
 
         let gpio = self.gpio.unwrap();
         let gpio1 = gpio.gpio1;
+        let gpio1 = OneWirePin {
+            pin: gpio1,
+            cr: self.gpio_cr.unwrap().gpiob_crh
+        };
+       
         let one_wire = match OneWire::new(gpio1) {
             Ok(one_wire) => one_wire,
             Err(e) => {
@@ -801,6 +858,7 @@ impl BoardBuilder {
         self.oscillator_control = Some(OscillatorControl::new(oscillator_control_pins));
 
         self.gpio = Some(dynamic_gpio_pins);
+        self.gpio_cr = Some(gpio_cr);
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         rprintln!("{:?}", clocks);
