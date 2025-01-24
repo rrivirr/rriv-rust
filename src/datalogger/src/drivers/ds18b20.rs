@@ -1,3 +1,58 @@
+pub const CONVERT_TEMP: u8 = 0x44;
+pub const WRITE_SCRATCHPAD: u8 = 0x4E;
+pub const READ_SCRATCHPAD: u8 = 0xBE;
+pub const COPY_SCRATCHPAD: u8 = 0x48;
+pub const RECALL_EEPROM: u8 = 0xB8;
+
+
+
+//use embedded_hal::blocking::delay::DelayMs;
+
+#[repr(u8)]
+#[derive(Copy, Clone, Debug)]
+pub enum Resolution {
+    Bits9 = 0b00011111,
+    Bits10 = 0b00111111,
+    Bits11 = 0b01011111,
+    Bits12 = 0b01111111,
+}
+
+impl Resolution {
+    pub fn max_measurement_time_millis(&self) -> u16 {
+        match self {
+            Resolution::Bits9 => 94,
+            Resolution::Bits10 => 188,
+            Resolution::Bits11 => 375,
+            Resolution::Bits12 => 750,
+        }
+    }
+
+    /// Blocks for the amount of time required to finished measuring temperature
+    /// using this resolution
+//    pub fn delay_for_measurement_time(&self, delay: &mut impl DelayMs<u16>) {
+//         delay.delay_ms(self.max_measurement_time_millis());
+//         }
+    
+
+    pub(crate) fn from_config_register(config: u8) -> Option<Resolution> {
+        match config {
+            0b00011111 => Some(Resolution::Bits9),
+            0b00111111 => Some(Resolution::Bits10),
+            0b01011111 => Some(Resolution::Bits11),
+            0b01111111 => Some(Resolution::Bits12),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn to_config_register(&self) -> u8 {
+        *self as u8
+    }
+}
+
+
+
+use rtt_target::rprintln;
+
 use super::types::*;
 
 pub const EMPTY_SIZE: usize = 32;
@@ -34,7 +89,7 @@ pub struct Ds18b20 {
 impl Ds18b20 {
     pub fn new (
         general_config: SensorDriverGeneralConfiguration,
-        special_config: Ds18b20SpecialConfiguration
+        special_config : Ds18b20SpecialConfiguration
     ) -> Ds18b20 {
         Ds18b20 {
             general_config,
@@ -56,12 +111,12 @@ impl SensorDriver for Ds18b20 {
     }
 
     fn get_measured_parameter_value(&mut self, index: usize) -> f64 {
-        self.measured_parameter_values[index]
-        // if index < NUMBER_OF_MEASURED_PARAMETERS {
-        //     return Ok(sel.measured_parameter_values[index]);
-        // } else {
-        //     return Err(());
-        // }
+        if index < NUMBER_OF_MEASURED_PARAMETERS {
+            self.measured_parameter_values[index]
+        } else {
+            //return Err(());
+            return -1.0_f64;
+        }
     }
 
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
@@ -79,6 +134,73 @@ impl SensorDriver for Ds18b20 {
     }
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        todo!();
+        
+        //board.one_wire_send_command(CONVERT_TEMP, Some(&self.address), delay)?;
+        //trigger simultaneous measurement
+        board.one_wire_reset();
+        //onewire.reset(delay)?;
+        board.one_wire_skip_address();
+        //onewire.skip_address(delay)?;
+        board.one_wire_write_byte(CONVERT_TEMP);
+        //onewire.write_byte(commands::CONVERT_TEMP, delay)?;
+        //delay.delay_ms(self.max_measurement_time_millis());
+        //Resolution::Bits12.delay_for_measurement_time(delay));
+        let delay_ms = Resolution::Bits12.max_measurement_time_millis();
+        board.delay_ms(delay_ms);
+
+
+    // iterate over all the devices, and report their temperature
+    loop {
+        if let Some(device_address) = board.one_wire_bus_search() {
+            
+            // todo: fix this so that you can check family code
+            // if device_address.family_code() != ds18b20::FAMILY_CODE {
+            //     // skip other devices
+            //     continue;
+            // }
+            // You will generally create the sensor once, and save it for later
+            // let sensor = Ds18b20::new(device_address)?;
+
+            // // contains the read temperature, as well as config info such as the resolution used
+            // let sensor_data = sensor.read_data(one_wire_bus, delay)?;
+            // writeln!(tx, "Device at {:?} is {}°C", device_address, sensor_data.temperature);
+
+            board.one_wire_reset();
+            board.one_wire_match_address(device_address);
+            board.one_wire_write_byte(READ_SCRATCHPAD);
+
+            let mut scratchpad = [0; 9];
+            board.one_wire_read_bytes(&mut scratchpad);
+            
+            
+            
+
+            let resolution = if let Some(resolution) =  Resolution::from_config_register(scratchpad[4]) {
+                resolution
+            } else {
+            //    return Err(OneWireError::CrcMismatch);
+                    rprintln!("Problem reading resolution from scratchpad");
+                    return;
+            };
+            let raw_temp = u16::from_le_bytes([scratchpad[0], scratchpad[1]]);
+            let temperature = match resolution {
+                Resolution::Bits12 => (raw_temp as f32) / 16.0,
+                Resolution::Bits11 => (raw_temp as f32) / 8.0,
+                Resolution::Bits10 => (raw_temp as f32) / 4.0,
+                Resolution::Bits9 => (raw_temp as f32) / 2.0,
+            };
+            rprintln!("Temp C: {}",temperature);
+
+
+        } else {
+            break;
+        }
     }
 }   
+
+    }
+
+
+
+
+

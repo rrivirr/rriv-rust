@@ -6,6 +6,7 @@ mod datalogger_commands;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
+use ds18b20::{Ds18b20, Ds18b20SpecialConfiguration};
 use ring_temperature::{RingTemperatureDriver, RingTemperatureDriverSpecialConfiguration};
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
@@ -123,13 +124,14 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 /* start registry WIP */
 
-const SENSOR_NAMES: [&str; 6] = [
+const SENSOR_NAMES: [&str; 7] = [
     "no_match",
     "generic_analog",
     "atlas_ec",
     "aht22",
     "mcp_9808",
-    "ring_temperature"
+    "ring_temperature",
+    "ds18b20"
 ];
 
 fn sensor_type_id_from_name(name: &str) -> u16 {
@@ -206,7 +208,10 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
         GenericAnalogSpecialConfiguration
     )); //distinct settings? characteristic settings?
     driver_create_functions[2] = None;
-    driver_create_functions[3] = None;
+    driver_create_functions[3] = Some(driver_create_functions!(
+        Ds18b20,
+        Ds18b20SpecialConfiguration
+    ));
     driver_create_functions[4] = Some(driver_create_functions!(
         MCP9808TemperatureDriver,
         MCP9808TemperatureDriverSpecialConfiguration
