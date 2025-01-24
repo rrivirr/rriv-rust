@@ -50,7 +50,7 @@ use rriv_board::{
 use ds323x::{DateTimeAccess, Ds323x, NaiveDate};
 use stm32f1xx_hal::rtc::Rtc;
 
-use one_wire_bus::{Address, OneWire, SearchState};
+use one_wire_bus::{crc::check_crc8, Address, OneWire, SearchState};
 
 
 mod components;
@@ -93,7 +93,7 @@ pub struct Board {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
     pub internal_rtc: Rtc,
-    pub one_wire_bus: OneWireBus,
+    pub one_wire_bus: OneWireGpio1,
     one_wire_search_state: Option<SearchState>
 }
 
@@ -226,13 +226,7 @@ macro_rules! control_services_impl {
 
 type OneWireGpio1 = OneWire<Pin<'B', 8, Dynamic>>;
 
-pub struct OneWireBus {
-    pub one_wire: OneWireGpio1
-}
 
-impl OneWireBusInterface for OneWireBus {
-
-}
 
 impl SensorDriverServices for Board {
     fn query_internal_adc(&mut self, channel: u8) -> u16 {
@@ -281,45 +275,53 @@ impl SensorDriverServices for Board {
         }
      }
      
-    fn borrow_one_wire_bus(&mut self) -> &mut dyn rriv_board::OneWireBusInterface  {
+    // fn borrow_one_wire_bus(&mut self) -> &mut dyn rriv_board::OneWireBusInterface  {
 
-        return &mut self.one_wire_bus;
+    //     return &mut self.one_wire_bus;
 
-    }
+    // }
     
     fn one_wire_send_command(&mut self, command: u8, address: u64) {
         let address = Address(address);
 
-       match self.one_wire_bus.one_wire.send_command(command, Some(&address), &mut self.delay) {
+       match self.one_wire_bus.send_command(command, Some(&address), &mut self.delay) {
                 Ok(_) => rprintln!("sent command ok"),
                 Err(e) => rprintln!("{:?}", e)
            }
     }
     
     fn one_wire_reset(&mut self) {
-        self.one_wire_search_state = None;
-        let _ = self.one_wire_bus.one_wire.reset(&mut self.delay);
+        let _ = self.one_wire_bus.reset(&mut self.delay);
     }
     
     fn one_wire_skip_address(&mut self) {
-        let _ = self.one_wire_bus.one_wire.skip_address(&mut self.delay);
+        let _ = self.one_wire_bus.skip_address(&mut self.delay);
     }
     
     fn one_wire_write_byte(&mut self, byte: u8) {
-        let _ = self.one_wire_bus.one_wire.write_byte(byte, &mut self.delay);
+        let _ = self.one_wire_bus.write_byte(byte, &mut self.delay);
     }
     
     fn one_wire_match_address(&mut self, address: u64) {
         let address = Address(address);
-        self.one_wire_bus.one_wire.match_address(&address, &mut self.delay);
+        self.one_wire_bus.match_address(&address, &mut self.delay);
     }
     
     fn one_wire_read_bytes(&mut self, output: &mut [u8] ) {
-        self.one_wire_bus.one_wire.read_bytes(output, &mut self.delay);
+        self.one_wire_bus.read_bytes(output, &mut self.delay);
+        // TODO
+        match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output){
+            Ok(_) => return,
+            Err(_) => rprintln!("one wire crc error"),
+        }
     }
     
+    fn one_wire_bus_start_search(&mut self) {
+        self.one_wire_search_state = None;
+    }
+
     fn one_wire_bus_search(&mut self) -> Option<u64> {
-        if let core::prelude::v1::Ok(Some((device_address, state))) = self.one_wire_bus.one_wire.device_search(self.one_wire_search_state.as_ref(), false, &mut self.delay){
+        if let core::prelude::v1::Ok(Some((device_address, state))) = self.one_wire_bus.device_search(self.one_wire_search_state.as_ref(), false, &mut self.delay){
             self.one_wire_search_state = Some(state);
             return Some(device_address.0);
         }
@@ -475,9 +477,9 @@ impl BoardBuilder {
             }
         };
 
-        let one_wire_bus_rriv = OneWireBus {
-            one_wire
-        };
+        // let one_wire_bus_rriv = OneWireGpio1 {
+        //     one_wire
+        // };
 
 
         Board {
@@ -491,7 +493,7 @@ impl BoardBuilder {
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
             internal_rtc: self.internal_rtc.unwrap(),
-            one_wire_bus: one_wire_bus_rriv,
+            one_wire_bus: one_wire,
             one_wire_search_state: None
         }
     }

@@ -81,4 +81,4 @@ impl SensorDriver for Ds18b20 {
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         todo!();
     }
-}
+}   

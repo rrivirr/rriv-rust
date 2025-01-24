@@ -82,7 +82,7 @@ pub trait SensorDriverServices {
     fn query_external_adc(&mut self, port: u8) -> u32;
     fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]);
     fn ic2_write(&mut self, addr: u8, message: &[u8]);
-    fn borrow_one_wire_bus(&mut self) -> &mut dyn OneWireBusInterface;
+    // fn borrow_one_wire_bus(&mut self) -> &mut dyn OneWireBusInterface;
 
     fn one_wire_send_command(&mut self, command: u8, address: u64);
     fn one_wire_reset(&mut self);
@@ -90,6 +90,7 @@ pub trait SensorDriverServices {
     fn one_wire_write_byte(&mut self, byte: u8);
     fn one_wire_match_address(&mut self, address: u64);
     fn one_wire_read_bytes(&mut self, output: &mut [u8] );
+    fn one_wire_bus_start_search(&mut self);
     fn one_wire_bus_search(&mut self) -> Option<u64>;
 
     control_services!();
