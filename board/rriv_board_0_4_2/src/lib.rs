@@ -471,8 +471,8 @@ impl BoardBuilder {
         let gpio1 = gpio.gpio1;
         let one_wire = match OneWire::new(gpio1) {
             Ok(one_wire) => one_wire,
-            Err(_) => {
-                rprintln!("bad one wire bus");
+            Err(e) => {
+                rprintln!("{:?} bad one wire bus", e);
                 panic!("bad one wire bus");
             }
         };
