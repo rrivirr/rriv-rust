@@ -1,7 +1,8 @@
+use alloc::boxed::Box;
+
 pub const SENSOR_SETTINGS_PARTITION_SIZE: usize = 32; // partitioning is part of the driver implemention, and not meaningful at the EEPROM level
 pub type SensorGeneralSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
 pub type SensorSpecialSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
-
 
 #[derive(Copy, Clone, Debug)]
 pub struct SensorDriverGeneralConfiguration {
@@ -28,9 +29,9 @@ impl SensorDriverGeneralConfiguration {
         unsafe { *settings }
     }
 
-    pub fn empty()-> SensorDriverGeneralConfiguration {
+    pub fn empty() -> SensorDriverGeneralConfiguration {
         Self {
-            id: [0u8;6],
+            id: [0u8; 6],
             sensor_type_id: 0,
             warmup: 0,
             burst_repetitions: 0,
@@ -38,21 +39,30 @@ impl SensorDriverGeneralConfiguration {
     }
 }
 
+pub struct CalibrationPair {
+    pub point: f64,         // the reference value
+    pub values: Box<[f64]>, // the raw values returned by the sensors
+}
+
 pub trait SensorDriver {
+    fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]); // derivable
+    fn get_configuration_json(&mut self) -> serde_json::Value;
     fn setup(&mut self);
-    fn get_id(&mut self) -> [u8; 6];
+    fn get_id(&self) -> [u8; 6];
     fn get_type_id(&mut self) -> u16;
     // fn get_measurement_technology(&mut self) -> usize; // TODO: unnecessary for now, unless we split SensorDriverServices into different types of services collections
     fn get_measured_parameter_count(&mut self) -> usize;
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()>;
-    fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16];
+    fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8; 16];
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
+
+    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>;
+    fn clear_calibration(&mut self);
 }
 
-
 // pub trait ADCSensorDriver {
-    
+
 // }
 
 pub trait ActuatorDriver {
@@ -63,10 +73,9 @@ pub trait TelemeterDriver {
     fn setup(&mut self);
 }
 
-
 macro_rules! getters {
     () => {
-        fn get_id(&mut self) -> [u8; 6] {
+        fn get_id(&self) -> [u8; 6] {
             self.general_config.id.clone()
         }
 
@@ -78,3 +87,20 @@ macro_rules! getters {
 
 pub(crate) use getters;
 
+pub fn single_raw_or_cal_parameter_identifiers(index: usize, prefix: Option<u8>) -> [u8; 16] {
+    let mut buf = [0u8; 16];
+    let identifiers = ["raw", "cal"];
+    let mut identifier = "invalid";
+    if index <= 1 {
+        identifier = identifiers[index];
+    }
+    let mut start = 0;
+    if let Some(prefix) = prefix {
+        start = 1;
+        buf[0] = prefix;
+    }
+    for i in start..identifier.len() {
+        buf[i] = identifier.as_bytes()[i-start];
+    }
+    return buf;
+}

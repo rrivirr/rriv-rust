@@ -29,6 +29,7 @@ static mut COMMAND_DATA: CommandData = CommandData::default();
 struct CLICommand<'a> {
     object: &'a str,
     action: &'a str,
+    subcommand: Option<Box<str>>
 }
 
 // impl CommandService {
@@ -82,28 +83,40 @@ pub fn get_pending_command(board: &impl RRIVBoard) -> Option<Result<CommandPaylo
         if let Ok(command_bytes) = take_command(board) {
             let command_cstr = CStr::from_bytes_until_nul(&command_bytes).unwrap();
             let command_identification_result = identify_serial_command(command_cstr);
+            rprintln!("{:?}", command_identification_result);
             match command_identification_result {
                 Ok(command_type) => {
                     let result: Result<CommandPayload, _> =
                         get_command_payload(command_type, command_cstr);
+                    rprintln!("{:?}", result);
                     return Some(result);
                 }
-                Err(error) => return Some(Err(error)),
+                Err(error) => {
+                    rprintln!("{:?}", error);
+                    return Some(Err(error))
+                }
             }
         }
     }
     return None;
 }
 
-pub fn get_command_from_parts(object: &str, action: &str) -> CommandType {
-    let command_str = format!("{}_{}", object, action);
-    CommandType::from_str(&command_str)
+pub fn get_command_from_parts(object: &str, action: &str, subcommmand: Option<Box<str>>) -> CommandType {
+    if let Some(subcommand) = subcommmand {
+        let command_str = format!("{}_{}_{}", object, action, subcommand);
+        rprintln!("{:?}", command_str);
+        CommandType::from_str(&command_str)
+    } else {
+        let command_str = format!("{}_{}", object, action);
+        rprintln!("{:?}", command_str);
+        CommandType::from_str(&command_str)
+    }
 }
 
 fn identify_serial_command(command_cstr: &CStr) -> Result<CommandType, CommandError> {
     match parse_command::<CLICommand>(command_cstr) {
         Ok(cli_command) => {
-            let command_type = get_command_from_parts(cli_command.object, cli_command.action);
+            let command_type = get_command_from_parts(cli_command.object, cli_command.action, cli_command.subcommand);
             if command_type == CommandType::Unknown {
                 return Err(CommandError::InvalidCommand);
             }
@@ -183,8 +196,22 @@ fn get_command_payload(
         CommandType::SensorList => {
             parse_command_to_payload!(SensorListCommandPayload, CommandPayload::SensorListCommandPayload, command_cstr);
         },
-        CommandType::SensorCalibratePoint => todo!(),
-        CommandType::SensorCalibrateFit => todo!(),
+        CommandType::SensorCalibratePoint => {
+            rprintln!("parsing SensorCalibratePoint");
+            parse_command_to_payload!(SensorCalibratePointPayload, CommandPayload::SensorCalibratePointPayload, command_cstr);
+        },
+        CommandType::SensorCalibrateList => {
+            parse_command_to_payload!(SensorCalibrateListPayload, CommandPayload::SensorCalibrateListPayload, command_cstr);
+        }
+        CommandType::SensorCalibrateRemove => {
+            parse_command_to_payload!(SensorCalibrateRemovePayload, CommandPayload::SensorCalibrateRemovePayload, command_cstr);
+        }
+        CommandType::SensorCalibrateFit => {
+            parse_command_to_payload!(SensorCalibrateFitPayload, CommandPayload::SensorCalibrateFitPayload, command_cstr);
+        },
+        CommandType::SensorCalibrateClear => {
+            parse_command_to_payload!(SensorCalibrateClearPayload, CommandPayload::SensorCalibrateClearPayload, command_cstr);
+        },
         CommandType::SensorReset => todo!(),
         CommandType::ActuatorSet => todo!(),
         CommandType::ActuatorGet => todo!(),

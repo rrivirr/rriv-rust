@@ -231,6 +231,8 @@ impl Storage {
 
   pub fn write(&mut self, data: &[u8], timestamp: i64) { //-> Result<Ok, Error<Error>>{
 
+    // todo: what is data.len() is greater than the CACHE_SIZE
+
     unsafe {
       EPOCH_TIMESTAMP = timestamp; // or function set_write_timestamp
     }
