@@ -1,5 +1,7 @@
 // use alloc::fmt::format;
 
+use crate::any_as_u8_slice;
+
 use super::mcp9808::*;
 
 use super::types::*;
@@ -38,8 +40,28 @@ pub struct RingTemperatureDriver {
     sensor_drivers: [MCP9808TemperatureDriver; 6],
 }
 
-impl RingTemperatureDriver {
-    pub fn new(
+
+const INDEX_TO_BYTE_CHAR: [u8; 6] = [b'0',b'1',b'2',b'3',b'4',b'5'];
+const NUMBER_OF_SENSORS: u8 = 6;
+
+
+fn copy_config_into_partition(partition: u8, bytes: &[u8], storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]){
+    // let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&self.general_config) };
+    // let mut bytes_sized: [u8; EEPROM_SENSOR_SETTINGS_SIZE] = [0; EEPROM_SENSOR_SETTINGS_SIZE];
+    let copy_size =
+        if bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+            SENSOR_SETTINGS_PARTITION_SIZE
+        } else {
+            bytes.len()
+        };
+        let offset = SENSOR_SETTINGS_PARTITION_SIZE * partition;
+        storage[offset..offset+copy_size].copy_from_slice(&bytes[0..copy_size]); 
+}
+
+
+impl SensorDriver<RingTemperatureDriverSpecialConfiguration> for RingTemperatureDriver {
+
+    fn new(
         general_config: SensorDriverGeneralConfiguration,
         special_config: RingTemperatureDriverSpecialConfiguration,
     ) -> Self {
@@ -76,13 +98,40 @@ impl RingTemperatureDriver {
             ],
         }
     }
-}
 
+  
+    fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
 
-const INDEX_TO_BYTE_CHAR: [u8; 6] = [b'0',b'1',b'2',b'3',b'4',b'5'];
-const NUMBER_OF_SENSORS: u8 = 6;
+        // right now this just gets the bytes
+        // but the special settings probably should be consisted as member variables and copied back to the storage struct
 
-impl SensorDriver for RingTemperatureDriver {
+        let generic_settings_bytes: &[u8] = unsafe {  };
+        let special_settings_bytes: &[u8] =  unsafe { any_as_u8_slice(&self.special_config) };
+
+        copy_config_into_partition(0, generic_settings_bytes, storage);
+        copy_config_into_partition(1, special_settings_bytes, storage);
+
+        // let mut bytes_sized: [u8; EEPROM_SENSOR_SETTINGS_SIZE] = [0; EEPROM_SENSOR_SETTINGS_SIZE];
+        // let copy_size =
+        //     if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+        //         SENSOR_SETTINGS_PARTITION_SIZE
+        //     } else {
+        //         generic_settings_bytes.len()
+        //     };
+        // bytes[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
+
+        // // get the special settings as bytes
+        // let copy_size =
+        //     if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+        //         SENSOR_SETTINGS_PARTITION_SIZE
+        //     } else {
+        //         special_settings_bytes.len()
+        //     };
+        // bytes[SENSOR_SETTINGS_PARTITION_SIZE
+        //     ..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
+        //     .copy_from_slice(&self.special_config[0..copy_size]);
+    }
+
     fn setup(&mut self) {
         
     }
@@ -157,6 +206,8 @@ impl SensorDriver for RingTemperatureDriver {
         Ok(())
 
     }
+    
+    
         
 }
 

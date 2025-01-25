@@ -7,7 +7,7 @@ pub struct GenericAnalog {
     measured_parameter_values: [f64; 2],
 }
 
-impl SensorDriver for GenericAnalog {
+impl SensorDriver<GenericAnalogSpecialConfiguration> for GenericAnalog {
     fn setup(&mut self) {
         todo!()
     }
@@ -73,6 +73,17 @@ impl SensorDriver for GenericAnalog {
     }
     
     fn clear_calibration(&mut self) {
+        todo!()
+    }
+    
+    fn new(
+        general_config: SensorDriverGeneralConfiguration,
+        special_config: T,
+    ) -> Self {
+        todo!()
+    }
+    
+    fn get_configuration_bytes(&self, bytes: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
         todo!()
     }
        

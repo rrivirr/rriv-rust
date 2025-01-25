@@ -38,6 +38,10 @@ impl SensorDriverGeneralConfiguration {
             burst_repetitions: 0,
         }
     }
+
+    pub fn as_bytes(&self) -> &[u8] {
+        unsafe { return any_as_u8_slice(self) }
+    }
 }
 
 pub struct CalibrationPair {
@@ -45,7 +49,15 @@ pub struct CalibrationPair {
     pub values: Box<[f64]> // the raw values returned by the sensors
 }
 
-pub trait SensorDriver {
+pub trait SensorDriver<T> {
+
+    fn new(
+        general_config: SensorDriverGeneralConfiguration,
+        special_config: T,
+    ) -> Self;
+
+    fn get_configuration_bytes(&self, bytes: &mut [u8; EEPROM_SENSOR_SETTINGS_SIZE]);
+
     fn setup(&mut self);
     fn get_id(& self) -> [u8; 6];
     fn get_type_id(&mut self) -> u16;
@@ -88,4 +100,7 @@ macro_rules! getters {
 }
 
 pub(crate) use getters;
+use rriv_board::EEPROM_SENSOR_SETTINGS_SIZE;
+
+use crate::any_as_u8_slice;
 

@@ -43,7 +43,20 @@ pub struct MCP9808TemperatureDriver {
     calibration_offset: f64
 }
 
-impl SensorDriver for MCP9808TemperatureDriver {
+impl SensorDriver<MCP9808TemperatureDriverSpecialConfiguration> for MCP9808TemperatureDriver {
+
+    fn new(
+        general_config: SensorDriverGeneralConfiguration,
+        special_config: MCP9808TemperatureDriverSpecialConfiguration,
+    ) -> Self {
+        todo!()
+    }
+    
+    fn get_configuration_bytes(&self, bytes: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
+        todo!()
+    }
+       
+
     fn setup(&mut self) {
         self.calibration_offset = (self.special_config.calibration_offset as f64) / 1000_f64;
     }
@@ -146,7 +159,8 @@ impl SensorDriver for MCP9808TemperatureDriver {
        rprint!("fit {}", self.special_config.calibration_offset);    
        Ok(())
     }
-       
+    
+  
         
 }
 

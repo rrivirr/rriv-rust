@@ -1040,11 +1040,21 @@ impl DataLogger {
                             driver.clear_calibration();
                             match driver.fit(&pairs) {
                                 Ok(_) => board.serial_send("fit ok\n"),
-                                Err(_) => board.serial_send("something went wrong\n"),
+                                Err(_) => {
+                                     board.serial_send("something went wrong\n");
+                                     return;
+                                }
                             }
+                            let bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] = [0; EEPROM_DATALOGGER_SETTINGS_SIZE];
+                            driver.
+                            
+                            board.store_sensor_settings(index as u8, &bytes);
+                            
+                            
                         }
                     }
                 }
+                
             }
 
             CommandPayload::SensorCalibrateClearPayload(payload) => {
@@ -1055,7 +1065,7 @@ impl DataLogger {
                         return;
                     }
                 };
-                
+
                 if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         driver.clear_calibration();

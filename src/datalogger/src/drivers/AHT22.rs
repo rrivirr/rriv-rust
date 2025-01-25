@@ -20,7 +20,7 @@ pub struct AHT22 {
     special_config: AHT22SpecialConfiguration,
 }
 
-impl SensorDriver for AHT22 {
+impl SensorDriver<AHT22SpecialConfiguration> for AHT22 {
     fn setup(&mut self) {
         todo!()
     }
@@ -49,6 +49,17 @@ impl SensorDriver for AHT22 {
     }
     
     fn clear_calibration(&mut self) {
+        todo!()
+    }
+    
+    fn new(
+        general_config: SensorDriverGeneralConfiguration,
+        special_config: AHT22SpecialConfiguration,
+    ) -> Self {
+        todo!()
+    }
+    
+    fn get_configuration_bytes(&self, bytes: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
         todo!()
     }
        
