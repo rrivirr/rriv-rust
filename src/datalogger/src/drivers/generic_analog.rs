@@ -1,5 +1,10 @@
+use crate::sensor_name_from_type_id;
+
 use super::types::*;
 use bitfield_struct::bitfield;
+use alloc::boxed::Box;
+use serde_json::json;
+
 
 pub struct GenericAnalog {
     general_config: SensorDriverGeneralConfiguration,
@@ -7,7 +12,30 @@ pub struct GenericAnalog {
     measured_parameter_values: [f64; 2],
 }
 
+
 impl SensorDriver for GenericAnalog {
+
+    fn get_configuration_json(&mut self) -> serde_json::Value  {
+
+        let sensor_name_bytes = sensor_name_from_type_id(self.get_type_id().into());
+        let sensor_name_str = core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+
+        let adc_select = match self.special_config.settings.adc_select() {
+            0 => "internal",
+            1 => "external",
+            _ => "invalid"
+        };
+
+        json!({ 
+            "id" : self.get_id(),
+            "type" : sensor_name_str,
+            "m": self.special_config.m, 
+            "b" : self.special_config.b,
+            "sensor_port": self.special_config.sensor_port,
+            "adc_select": adc_select
+         })
+    }
+
     fn setup(&mut self) {
         todo!()
     }
@@ -45,16 +73,7 @@ impl SensorDriver for GenericAnalog {
     }
 
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8;16] {
-        let mut buf = [0u8;16];
-        let identifiers = ["raw", "cal"];
-        let mut identifier = "invalid";
-        if index <= 1 {
-            identifier = identifiers[index];
-        }
-        for i in 0..identifier.len() {
-            buf[i] = identifier.as_bytes()[i];
-        }
-        return buf
+        return single_raw_or_cal_parameter_identifiers(index, None);
     }
 
     // fn take_measurement(&mut self, board: Box<&mut impl rriv_board::RRIVBoard>) {
@@ -75,6 +94,12 @@ impl SensorDriver for GenericAnalog {
     fn clear_calibration(&mut self) {
         todo!()
     }
+    
+    fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
+        todo!()
+    }
+    
+  
        
 }
 

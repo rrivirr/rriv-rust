@@ -202,6 +202,7 @@ type DriverCreateFunctions = Option<(
     ) -> (Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE]),
     fn(SensorDriverGeneralConfiguration, &[u8]) -> Box<dyn SensorDriver>,
 )>;
+
 fn get_registry() -> [DriverCreateFunctions; 256] {
     const ARRAY_INIT_VALUE: DriverCreateFunctions = None;
     let mut driver_create_functions: [DriverCreateFunctions; 256] = [ARRAY_INIT_VALUE; 256];
@@ -209,7 +210,7 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
     driver_create_functions[1] = Some(driver_create_functions!(
         GenericAnalog,
         GenericAnalogSpecialConfiguration
-    )); //distinct settings? characteristic settings?
+        )); //distinct settings? characteristic settings?
     driver_create_functions[2] = None;
     driver_create_functions[3] = None;
     driver_create_functions[4] = Some(driver_create_functions!(
@@ -360,13 +361,15 @@ impl DataLogger {
                 let mut s: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
                     [0; SENSOR_SETTINGS_PARTITION_SIZE];
                 s.clone_from_slice(special_settings_slice); // explicitly define the size of the arra
-                let driver = functions.1(settings, &s);
+                let mut driver = functions.1(settings, &s);
+                driver.setup();
                 self.sensor_drivers[i] = Some(driver);
             }
         }
         rprintln!("done loading sensors");
 
         self.write_column_headers_to_storage(board);
+        rprintln!("done with setup");
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
@@ -773,17 +776,15 @@ impl DataLogger {
                             serde_json::Value::String(ref payload_id) => {
                                 if payload_id == id_str {
                                     //echo the details and return
-                                    let sensor_name_bytes =
-                                        sensor_name_from_type_id(driver.get_type_id().into());
-                                    let sensor_name_str = core::str::from_utf8(&sensor_name_bytes)
-                                        .unwrap_or_default();
+                                
+
+                                
+                                    let configuration_payload = driver.get_configuration_json();
+                                    
 
                                     // TODO: get the other sensor values
-                                    let json = json!({
-                                        "id": id_str,
-                                        "type": sensor_name_str
-                                    });
-                                    let string = json.to_string();
+                                    
+                                    let string = configuration_payload.to_string();
                                     let str = string.as_str();
                                     board.serial_send(str);
                                     board.serial_send("\n");
@@ -925,11 +926,11 @@ impl DataLogger {
                             // read sensor values
                             driver.take_measurement(board.get_sensor_driver_services());
 
-                            let count = driver.get_measured_parameter_count();
+                            let count = driver.get_measured_parameter_count() / 2; // TODO: get_measured_parameter_count, vs get_output_parameter_count
                             let mut values = Box::new([0_f64; 10]); // TODO: max of 10, should we make this dynamic?
                             for i in 0..count {
                                 rprintln!("{:?}", i);
-                                let value = match driver.get_measured_parameter_value(i) {
+                                let value = match driver.get_measured_parameter_value(i*2) {
                                     Ok(value) => value,
                                     Err(_) => {
                                         // board.serial_send("missing parameter value\n");
@@ -948,12 +949,13 @@ impl DataLogger {
                             let arr = [calibration_pair];
                             let arr_box = Box::new(arr);
                             self.calibration_point_values[i] = Some(arr_box);
-                            board.serial_send("stored a single calibration paid\n");
+                            board.serial_send("stored a single calibration point\n");
                         }
+                    } else {
+                        board.serial_send("didn't find the sensor\n");
                     }
                 }
 
-                board.serial_send("didn't find the sensor\n");
             }
             CommandPayload::SensorCalibrateListPayload(payload) => {
                 board.serial_send("[");
@@ -1039,12 +1041,20 @@ impl DataLogger {
                         if let Some(pairs) = pairs {
                             driver.clear_calibration();
                             match driver.fit(&pairs) {
-                                Ok(_) => board.serial_send("fit ok\n"),
+                                Ok(_) => {
+                                    let mut storage = [0u8; EEPROM_SENSOR_SETTINGS_SIZE];
+                                    driver.get_configuration_bytes(&mut storage);
+
+                                    
+                                    board.store_sensor_settings(index as u8, &storage);
+                                    board.serial_send("fit ok\n")
+                                },
                                 Err(_) => board.serial_send("something went wrong\n"),
                             }
                         }
                     }
                 }
+
             }
 
             CommandPayload::SensorCalibrateClearPayload(payload) => {

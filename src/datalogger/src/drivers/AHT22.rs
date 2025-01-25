@@ -1,3 +1,7 @@
+use serde_json::json;
+
+use crate::sensor_name_from_type_id;
+
 use super::types::*;
 
 #[derive(Copy, Clone, Debug)]
@@ -20,7 +24,24 @@ pub struct AHT22 {
     special_config: AHT22SpecialConfiguration,
 }
 
+pub struct ConfigurationPayload {}
+
 impl SensorDriver for AHT22 {
+
+    fn get_configuration_json(&mut self) -> serde_json::Value  {
+
+        let sensor_name_bytes = sensor_name_from_type_id(self.get_type_id().into());
+        let sensor_name_str = core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+
+        json!({ 
+            "id" : self.get_id(),
+            "type" : sensor_name_str,
+            "wait_time": self.special_config.wait_time
+        })
+    }
+
+       
+
     fn setup(&mut self) {
         todo!()
     }
@@ -49,6 +70,10 @@ impl SensorDriver for AHT22 {
     }
     
     fn clear_calibration(&mut self) {
+        todo!()
+    }
+    
+    fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
         todo!()
     }
        
