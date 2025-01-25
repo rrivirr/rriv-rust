@@ -21,7 +21,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -82,7 +82,7 @@ type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
 type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
-    pub delay: SysDelay,
+    pub delay: DelayUs<TIM3>,
     // // pub power_control: PowerControl,
     // pub gpio: DynamicGpioPins,
     pub internal_adc: InternalAdc,
@@ -473,7 +473,7 @@ impl OutputPin for OneWirePin {
 
 pub struct BoardBuilder {
     // chip features
-    pub delay: Option<SysDelay>,
+    pub delay: Option<DelayUs<TIM3>>,
 
     // pins groups
     pub gpio: Option<DynamicGpioPins>,
@@ -725,6 +725,7 @@ impl BoardBuilder {
 
         let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
 
+
         // Set up pins
         let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
         let (
@@ -746,12 +747,15 @@ impl BoardBuilder {
         let clocks =
             BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
 
-        let mut delay: Option<SysDelay> = None;
-        unsafe {
-            let core_peripherals = cortex_m::Peripherals::steal();
-            delay = Some(core_peripherals.SYST.delay(&clocks));
-        }
-        let mut delay = delay.unwrap();
+        // let mut delay: Option<SysDelay> = None;
+        // unsafe {
+        //     let core_peripherals = cortex_m::Peripherals::steal();
+        //     delay = Some(core_peripherals.SYST.delay(&clocks));
+        // }
+        // let mut delay = delay.unwrap();
+
+        let mut delay: DelayUs<TIM3> = device_peripherals.TIM3.delay(&clocks);
+
 
         BoardBuilder::setup_serial(
             serial_pins,
