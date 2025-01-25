@@ -437,7 +437,7 @@ pub fn build() -> Board {
 }
 
 pub struct OneWirePin {
-    pin:  Pin<'B', 8, Dynamic>
+    pin:  Pin<'D', 2, Dynamic>
 }
 
 
@@ -453,7 +453,7 @@ impl InputPin for OneWirePin {
         // because the hal doesn't currently implement a IO pin type later change to that
         // this is safe because this is a one wire protocol 
         // and we don't need the mode of the pin to be checked.
-        unsafe { Ok((*crate::pac::GPIOB::ptr()).idr.read().bits() & (1 << 8) == 0) }
+        unsafe { Ok((*crate::pac::GPIOD::ptr()).idr.read().bits() & (1 << 2) == 0) }
     }
 }
 
@@ -515,13 +515,13 @@ impl BoardBuilder {
 
         let gpio = self.gpio.unwrap();
         let mut gpio_cr = self.gpio_cr.unwrap();
-        let mut gpio1 = gpio.gpio1;
-        gpio1.make_open_drain_output(&mut gpio_cr.gpiob_crh);
-        let gpio1 = OneWirePin {
-            pin: gpio1
+        let mut gpio5 = gpio.gpio5;
+        gpio5.make_open_drain_output(&mut gpio_cr.gpiod_crl);
+        let gpio5 = OneWirePin {
+            pin: gpio5
         };
        
-        let one_wire = match OneWire::new(gpio1) {
+        let one_wire = match OneWire::new(gpio5) {
             Ok(one_wire) => one_wire,
             Err(e) => {
                 rprintln!("{:?} bad one wire bus", e);

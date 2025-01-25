@@ -387,7 +387,7 @@ impl DataLogger {
 
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
-            if let Some(ref mut driver) = self.sensor_drivers[i] {;
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
                 driver.take_measurement(board.get_sensor_driver_services());
             }
         }
@@ -416,9 +416,10 @@ impl DataLogger {
                         board.serial_send(",");
                     }
                 }
-                board.serial_send("\n");
             }
         }
+        board.serial_send("\n");
+
 
     }
 
@@ -434,9 +435,9 @@ impl DataLogger {
                         board.serial_send(",");
                     }
                 }
-                board.serial_send("\n");
             }
         }
+        board.serial_send("\n");
     }
 
 
@@ -615,7 +616,7 @@ impl DataLogger {
 
                     board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
                     board.serial_send("updated sensor configuration\n");
-                }
+                } 
             }
             CommandPayload::SensorGetCommandPayload(payload) => {
                 board.serial_send("get sensor settings not implemented\n");
@@ -681,10 +682,11 @@ impl DataLogger {
                         let string = json.to_string();
                         let str = string.as_str();
                         board.serial_send(str);
-                        board.serial_send("\n");
                     }
                 }
                 board.serial_send("}");
+                board.serial_send("\n");
+
             }
         }
     }
