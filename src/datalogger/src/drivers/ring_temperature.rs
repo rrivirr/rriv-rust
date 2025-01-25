@@ -5,6 +5,7 @@ use super::mcp9808::*;
 use super::types::*;
 use alloc::format;
 use alloc::boxed::Box;
+use rtt_target::rprint;
 
 // TODO: calibration offsets for all 6 sensors need to be stored and loaded into this driver, and written to EEPROM.
 
@@ -79,6 +80,7 @@ impl RingTemperatureDriver {
 
 
 const INDEX_TO_BYTE_CHAR: [u8; 6] = [b'0',b'1',b'2',b'3',b'4',b'5'];
+const NUMBER_OF_SENSORS: u8 = 6;
 
 impl SensorDriver for RingTemperatureDriver {
     fn setup(&mut self) {
@@ -132,6 +134,8 @@ impl SensorDriver for RingTemperatureDriver {
         }
 
         if pairs[0].values.len() < 6 {
+            // TODO: check for zeros, not for len().  len is constant
+            rprint!("not enough values to calibrate");
             return Err(());
         }
 
@@ -139,7 +143,7 @@ impl SensorDriver for RingTemperatureDriver {
         let single = & pairs[0];
         let point = single.point;
         let values = & single.values;
-        for i in 0..values.len() {
+        for i in 0..NUMBER_OF_SENSORS as usize {
             let pairs = CalibrationPair {
                 point: point,
                 values: Box::new([values[i]])

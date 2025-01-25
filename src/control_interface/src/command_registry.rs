@@ -22,6 +22,7 @@ pub enum CommandType {
     SensorCalibrateList = 36,
     SensorCalibrateRemove = 37,
     SensorCalibrateFit = 9,
+    SensorCalibrateClear = 38,
     SensorReset = 10,
     ActuatorSet = 11,
     ActuatorGet = 12,
@@ -48,7 +49,7 @@ pub enum CommandType {
     BoardSignalExAdcLow = 33,
     BoardSignal3v3BoostHigh = 34,
     BoardSignal3v3BoostLow = 35,
-    Unknown = 38, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
+    Unknown = 39, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
 }
 
 impl CommandType {
@@ -66,6 +67,7 @@ impl CommandType {
             "sensor_calibrate_list" => CommandType::SensorCalibrateList,
             "sensor_calibrate_remove" => CommandType::SensorCalibrateRemove,
             "sensor_calibrate_fit" => CommandType::SensorCalibrateFit,
+            "sensor_calibrate_clear" => CommandType::SensorCalibrateClear,
             "sensor_reset" => CommandType::SensorReset,
             "actuator_set" => CommandType::ActuatorSet,
             "actuator_get" => CommandType::ActuatorGet,

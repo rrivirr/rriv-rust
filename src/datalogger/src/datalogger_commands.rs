@@ -113,6 +113,14 @@ pub struct SensorCalibrateFitPayload {
     pub subcommand: Value,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct SensorCalibrateClearPayload {
+    pub object: Value,
+    pub action: Value,
+    pub id: Value,
+    pub subcommand: Value,
+}
+
 pub struct SensorCalibrateSubcommand<'a> {
     pub object: &'a str,
     pub action: &'a str,
@@ -142,6 +150,28 @@ impl SensorCalibrateFitPayload {
         })
     }
 }
+
+impl SensorCalibrateClearPayload {
+    pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> {
+        let id = match self.id {
+            serde_json::Value::String(ref payload_id) => {
+                payload_id
+            },
+            _ => {
+                // board.serial_send("bad sensor id\n");
+                return Err("bad sensor id");
+            }
+        };
+
+        return Ok(SensorCalibrateSubcommand {
+            object: "sensor", // TODO: what's the most ideal way to handle these?  no real reason to convert them again
+            action: "calibrate",
+            id,
+            subcommand: "clear"
+        })
+    }
+}
+
 
 
 impl SensorCalibrateListPayload {
@@ -220,6 +250,7 @@ pub enum CommandPayload {
     SensorCalibrateListPayload(SensorCalibrateListPayload),
     SensorCalibrateRemovePayload(SensorCalibrateRemovePayload),
     SensorCalibrateFitPayload(SensorCalibrateFitPayload),
+    SensorCalibrateClearPayload(SensorCalibrateClearPayload),
     BoardRtcSetPayload(BoardRtcSetPayload),
     BoardGetPayload(BoardGetPayload)
 }

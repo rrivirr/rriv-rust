@@ -209,6 +209,9 @@ fn get_command_payload(
         CommandType::SensorCalibrateFit => {
             parse_command_to_payload!(SensorCalibrateFitPayload, CommandPayload::SensorCalibrateFitPayload, command_cstr);
         },
+        CommandType::SensorCalibrateClear => {
+            parse_command_to_payload!(SensorCalibrateClearPayload, CommandPayload::SensorCalibrateClearPayload, command_cstr);
+        },
         CommandType::SensorReset => todo!(),
         CommandType::ActuatorSet => todo!(),
         CommandType::ActuatorGet => todo!(),
