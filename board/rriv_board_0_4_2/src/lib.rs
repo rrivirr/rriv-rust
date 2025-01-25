@@ -427,31 +427,24 @@ pub fn build() -> Board {
     board
 }
 
-use Dynamic::*;
-
 pub struct OneWirePin {
-    pin:  Pin<'B', 8, Dynamic>,
-    cr: Cr<'B', true>
+    pin:  Pin<'B', 8, Dynamic>
 }
-
 
 
 impl InputPin for OneWirePin {
     type Error = PinModeError;
 
     fn is_high(&self) -> Result<bool, Self::Error> {
-        // TODO: understand how to this with the new HAL
-        // if !self.pin.is_input() {
-            // self.pin.make_pull_up_input(&mut self.cr);
-        // }
-        return self.pin.is_high();
+        self.is_low().map(|b| !b)
     }
 
     fn is_low(&self) -> Result<bool, Self::Error> {
-        // if !self.pin.is_input() {
-            // self.pin.make_pull_up_input(&mut self.cr);
-        // }
-        return self.pin.is_low();
+        // unsafely access the pin state of GPIO B8
+        // because the hal doesn't currently implement a IO pin type later change to that
+        // this is safe because this is a one wire protocol 
+        // and we don't need the mode of the pin to be checked.
+        unsafe { Ok((*crate::pac::GPIOB::ptr()).idr.read().bits() & (1 << 8) == 0) }
     }
 }
 
@@ -459,20 +452,12 @@ impl OutputPin for OneWirePin {
     type Error = PinModeError;
 
     fn set_low(&mut self) -> Result<(), Self::Error> {
-        // if !self.pin.is_output() {
-            self.pin.make_open_drain_output(&mut self.cr);
-        // }
         let result = self.pin.set_low();
-        self.pin.make_pull_up_input(&mut self.cr);
         return result;
     }
 
     fn set_high(&mut self) -> Result<(), Self::Error> {
-        // if !self.pin.is_output() {
-            self.pin.make_open_drain_output(&mut self.cr);
-        // }
         let result = self.pin.set_high();
-        self.pin.make_pull_up_input(&mut self.cr);
         return result;
     }
 }
@@ -522,8 +507,7 @@ impl BoardBuilder {
         let gpio = self.gpio.unwrap();
         let gpio1 = gpio.gpio1;
         let gpio1 = OneWirePin {
-            pin: gpio1,
-            cr: self.gpio_cr.unwrap().gpiob_crh
+            pin: gpio1
         };
        
         let one_wire = match OneWire::new(gpio1) {
