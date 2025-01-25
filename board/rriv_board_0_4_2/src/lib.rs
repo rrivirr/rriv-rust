@@ -321,11 +321,20 @@ impl SensorDriverServices for Board {
     }
 
     fn one_wire_bus_search(&mut self) -> Option<u64> {
-        if let core::prelude::v1::Ok(Some((device_address, state))) = self.one_wire_bus.device_search(self.one_wire_search_state.as_ref(), false, &mut self.delay){
-            self.one_wire_search_state = Some(state);
-            return Some(device_address.0);
-        }
-        return None;
+        match self.one_wire_bus.device_search(self.one_wire_search_state.as_ref(), false, &mut self.delay){
+            Ok(Some((device_address, state))) => {
+                self.one_wire_search_state = Some(state);
+                return Some(device_address.0);    
+            },
+            Ok(None) => {
+                rprintln!("no devices found on onewire");
+                return None;              
+            },
+            Err(e) => {
+                rprintln!("one wire error{:?}", e);          
+                return None;  
+            },
+        } 
     }
 
 
@@ -505,7 +514,9 @@ impl BoardBuilder {
 
 
         let gpio = self.gpio.unwrap();
-        let gpio1 = gpio.gpio1;
+        let mut gpio_cr = self.gpio_cr.unwrap();
+        let mut gpio1 = gpio.gpio1;
+        gpio1.make_open_drain_output(&mut gpio_cr.gpiob_crh);
         let gpio1 = OneWirePin {
             pin: gpio1
         };

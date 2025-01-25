@@ -208,10 +208,7 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
         GenericAnalogSpecialConfiguration
     )); //distinct settings? characteristic settings?
     driver_create_functions[2] = None;
-    driver_create_functions[3] = Some(driver_create_functions!(
-        Ds18b20,
-        Ds18b20SpecialConfiguration
-    ));
+    driver_create_functions[3] = None;
     driver_create_functions[4] = Some(driver_create_functions!(
         MCP9808TemperatureDriver,
         MCP9808TemperatureDriverSpecialConfiguration
@@ -219,6 +216,10 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
     driver_create_functions[5] = Some(driver_create_functions!(
         RingTemperatureDriver,
         RingTemperatureDriverSpecialConfiguration
+    ));
+    driver_create_functions[6] = Some(driver_create_functions!(
+        Ds18b20,
+        Ds18b20SpecialConfiguration
     ));
     // driver_create_functions[2] = Some(driver_create_function!(AHT22));
 

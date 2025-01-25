@@ -134,22 +134,25 @@ impl SensorDriver for Ds18b20 {
     }
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        
-        //board.one_wire_send_command(CONVERT_TEMP, Some(&self.address), delay)?;
-        //trigger simultaneous measurement
-        board.one_wire_reset();
-        //onewire.reset(delay)?;
-        board.one_wire_skip_address();
-        //onewire.skip_address(delay)?;
-        board.one_wire_write_byte(CONVERT_TEMP);
-        //onewire.write_byte(commands::CONVERT_TEMP, delay)?;
-        //delay.delay_ms(self.max_measurement_time_millis());
-        //Resolution::Bits12.delay_for_measurement_time(delay));
-        let delay_ms = Resolution::Bits12.max_measurement_time_millis();
-        board.delay_ms(delay_ms);
+        // rprintln!("starting take measurement");
+        // //board.one_wire_send_command(CONVERT_TEMP, Some(&self.address), delay)?;
+        // //trigger simultaneous measurement
+        // board.one_wire_reset();
+        // //onewire.reset(delay)?;
+        // board.one_wire_skip_address();
+        // //onewire.skip_address(delay)?;
+        // board.one_wire_write_byte(CONVERT_TEMP);
+        // //onewire.write_byte(commands::CONVERT_TEMP, delay)?;
+        // //delay.delay_ms(self.max_measurement_time_millis());
+        // //Resolution::Bits12.delay_for_measurement_time(delay));
+        // let delay_ms = Resolution::Bits12.max_measurement_time_millis();
+        // board.delay_ms(delay_ms);
+
+        rprintln!("start bus search take measurement");
 
 
     // iterate over all the devices, and report their temperature
+    board.one_wire_bus_start_search();
     loop {
         if let Some(device_address) = board.one_wire_bus_search() {
             
