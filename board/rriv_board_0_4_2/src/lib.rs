@@ -78,7 +78,8 @@ type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 pub struct Board {
     pub delay: DelayUs<TIM3>,
     // // pub power_control: PowerControl,
-    // pub gpio: DynamicGpioPins,
+    pub gpio: DynamicGpioPins,
+    pub gpio_cr: GpioCr,
     pub internal_adc: InternalAdc,
     pub external_adc: ExternalAdc,
     pub battery_level: BatteryLevel,
@@ -351,19 +352,37 @@ impl SensorDriverServices for Board {
 
 
     fn write_gpio_pin(&mut self, pin: u8, value: bool){
-        // let gpio = match pin {
-        //     0 => {
-        //         self.gpio.gpio1.make_push_pull_output(self.);
-        //     }
-        //     1 => &mut self.gpio.gpio2,
-        //     2 => &mut self.gpio.gpio3,
-        //     3 => &mut self.gpio.gpio4,
-        //     4 => &mut self.gpio.gpio5,
-        //     5 => &mut self.gpio.gpio6,
-        //     6 => &mut self.gpio.gpio7,
-        //     7 => &mut self.gpio.gpio8,
-        //     _ => &mut self.gpio.gpio8
-        // };
+        let gpio = match pin {
+            0 => {
+                // self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
+                if(value){
+                    self.gpio.gpio1.set_high();
+                } else {
+                    self.gpio.gpio1.set_low();
+                }
+            }
+            // 1 => &mut self.gpio.gpio2,
+            // 2 => &mut self.gpio.gpio3,
+            // 3 => &mut self.gpio.gpio4,
+            // 4 => &mut self.gpio.gpio5,
+            // 5 => &mut self.gpio.gpio6,
+            // 6 => &mut self.gpio.gpio7,
+            // 7 => {
+            //     self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
+            //     if(value){
+            //         self.gpio.gpio1.set_high();
+            //     } else {
+            //         self.gpio.gpio1.set_low();
+            //     }
+            // }
+            _ => {
+                if value {
+                    self.gpio.gpio6.set_high();
+                } else {
+                    self.gpio.gpio6.set_low();
+                }
+            }
+        };
         
     }
 
@@ -590,24 +609,48 @@ impl BoardBuilder {
     }
 
     pub fn build(self) -> Board {
-        // loop{}
 
 
-        let gpio = self.gpio.unwrap();
+        let mut one_wire_option = None;
         let mut gpio_cr = self.gpio_cr.unwrap();
-        let mut gpio5 = gpio.gpio5;
-        gpio5.make_open_drain_output(&mut gpio_cr.gpiod_crl);
-        let gpio5 = OneWirePin {
-            pin: gpio5
-        };
+        // steal the gpio5 pin to build a one wire
+        // this is probably how we want to build a one wire in general
+        // we don't need to worry about the unsafeness, just get the pin we want
+        // the board logic can ensure the safeness, or it can be the operators responsibility
+        unsafe {
+            let device_peripherals = pac::Peripherals::steal();
+            let gpiod = device_peripherals.GPIOD.split();
+
+            let mut gpio5 = gpiod.pd2;
+            let mut gpio5 = gpio5.into_dynamic(&mut gpio_cr.gpiod_crl);
+            gpio5.make_open_drain_output(&mut gpio_cr.gpiod_crl);
+
+            let gpio5 = OneWirePin {
+                pin: gpio5
+            };
+
+            one_wire_option = match OneWire::new(gpio5) {
+                Ok(one_wire) => Some(one_wire),
+                Err(e) => {
+                    rprintln!("{:?} bad one wire bus", e);
+                    panic!("bad one wire bus");
+                }
+            };
+        }
+
+        if(one_wire_option.is_none()){
+            rprintln!("bad one wire creation");
+        }
+        let one_wire = one_wire_option.unwrap();
+
+        // mcu device registers
        
-        let one_wire = match OneWire::new(gpio5) {
-            Ok(one_wire) => one_wire,
-            Err(e) => {
-                rprintln!("{:?} bad one wire bus", e);
-                panic!("bad one wire bus");
-            }
-        };
+
+        // TODO: just one GPIO pin for the moment
+        let mut gpio = self.gpio.unwrap();        
+        gpio.gpio6.make_push_pull_output(&mut gpio_cr.gpioc_crh);
+
+        
 
         // let one_wire_bus_rriv = OneWireGpio1 {
         //     one_wire
@@ -618,6 +661,8 @@ impl BoardBuilder {
             i2c1: self.i2c1,
             i2c2: self.i2c2.unwrap(),
             delay: self.delay.unwrap(),
+            gpio: gpio,
+            gpio_cr: gpio_cr,
             // // power_control: self.power_control.unwrap(),
             internal_adc: self.internal_adc.unwrap(),
             external_adc: self.external_adc.unwrap(),

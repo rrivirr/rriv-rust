@@ -36,7 +36,7 @@ impl HeaterSpecialConfiguration {
         }
 
         let mut off_time_s: usize = 10;
-        match &value["on_time_s"] {
+        match &value["off_time_s"] {
             serde_json::Value::Number(number) => {
                 if let Some(number) = number.as_u64() {
                     let number: Result<usize, _> = number.try_into();
@@ -125,7 +125,7 @@ impl SensorDriver for Heater {
         if self.state == 0 {
             // heater is off
             if timestamp - self.special_config.off_time_s as i64 > self.last_state_updated_at {
-                toggle_state = false;
+                toggle_state = true;
             }
         } else if self.state == 1 {
             // heater is on
@@ -136,7 +136,12 @@ impl SensorDriver for Heater {
         }
         if toggle_state {
             
-            self.state = ! self.state;
+            board.write_gpio_pin(8, self.state != 0);
+            self.state = match self.state {
+                0 => 1,
+                1 => 0,
+                _ => 0,
+            };
             self.last_state_updated_at = timestamp;
         }
 

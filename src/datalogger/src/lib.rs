@@ -409,6 +409,7 @@ impl DataLogger {
         // do the measurement cycle stuff
         // implement interactive mode logging first
 
+        self.update_actuators(board);
         let interactive_mode_logging = true;
         if interactive_mode_logging {
             if board.timestamp() > self.last_interactive_log_time + 1 {
@@ -417,7 +418,6 @@ impl DataLogger {
                 unsafe {
                     EPOCH_TIMESTAMP = board.epoch_timestamp();
                 }
-                self.update_actuators(board);
                 self.measure_sensor_values(board); // measureSensorValues(false);
                 self.write_last_measurement_to_serial(board); //outputLastMeasurement();
                                                               // Serial2.print(F("CMD >> "));
