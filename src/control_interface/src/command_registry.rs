@@ -48,8 +48,10 @@ pub enum CommandType {
     BoardSignalExAdcHigh = 32,
     BoardSignalExAdcLow = 33,
     BoardSignal3v3BoostHigh = 34,
+    BoardSerialSend = 39,
     BoardSignal3v3BoostLow = 35,
-    Unknown = 39, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
+    
+    Unknown = 40, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
 }
 
 impl CommandType {

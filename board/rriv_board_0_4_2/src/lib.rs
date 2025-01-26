@@ -127,6 +127,22 @@ impl RRIVBoard for Board {
         cortex_m::interrupt::free(|cs| f())
     }
 
+
+    // use this to talk out on serial to other UART modules, RS 485, etc
+    fn serial_output_send($self, string: &str){
+        cortex_m::interrupt::free(|cs| {
+            // USART
+            let bytes = string.as_bytes();
+            for char in bytes.iter() {
+                let t = TX.borrow(cs);
+                if let Some(tx) = t.borrow_mut().deref_mut() {
+                    _ = nb::block!(tx.write(char.clone()));
+                }
+            }
+
+        });
+    }
+
     fn serial_send(&self, string: &str) {
         cortex_m::interrupt::free(|cs| {
             // USART

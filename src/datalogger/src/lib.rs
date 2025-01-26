@@ -1073,6 +1073,15 @@ impl DataLogger {
                     }
                 }
             }
+            CommandPayload::BoardSerialSendPayload(payload) => {
+                let payload_values = match payload.convert() {
+                    Ok(payload_values) => payload_values,
+                    Err(message) => {
+                        board.serial_send(format!("{}", message).as_str());
+                        return;
+                    }
+                };
+            }
         }
     }
 

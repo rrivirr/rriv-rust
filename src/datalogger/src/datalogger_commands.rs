@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 use alloc::fmt::Debug;
+use alloc::boxed::Box;
+
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct DataloggerSetCommandPayload {
@@ -76,6 +78,44 @@ pub struct BoardGetPayload {
 }
 
 
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct BoardSerialSendPayload {
+    pub object: Value,
+    pub action: Value,
+    pub message: Value
+}
+
+pub struct BoardSerialSendCommandPayload {
+    pub message: [u8;10],
+    pub message_len: u8, 
+}
+
+impl BoardSerialSendPayload {
+    pub fn convert(&self) -> Result<BoardSerialSendCommandPayload, &'static str> { // TODO: this static lifetime is not good.  Need to pass in some storage or use a box.
+        let message = match self.message {
+            serde_json::Value::String(ref message) => {
+                message
+            },
+            _ => {
+                // board.serial_send("bad sensor id\n");
+                return Err("bad message");
+            }
+        };
+
+        let mut message_bytes = [0u8;10];
+        message_bytes.clone_from_slice(&message.as_bytes()[0..message.len()]);
+        
+        Ok(
+        BoardSerialSendCommandPayload {
+            message: message_bytes,
+            message_len: message.len() as u8,
+        }
+        )
+    }
+}
+
+
 #[derive(Serialize, Deserialize, Debug)]
 pub struct SensorCalibratePointPayload {
     pub object: Value,
@@ -131,7 +171,7 @@ pub struct SensorCalibrateSubcommand<'a> {
 // TODO: these impls should be derived or ??
 
 impl SensorCalibrateFitPayload {
-    pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> {
+    pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> { // TODO: this static lifetime is not good.  Need to pass in some storage or use a box.
         let id = match self.id {
             serde_json::Value::String(ref payload_id) => {
                 payload_id
@@ -252,7 +292,8 @@ pub enum CommandPayload {
     SensorCalibrateFitPayload(SensorCalibrateFitPayload),
     SensorCalibrateClearPayload(SensorCalibrateClearPayload),
     BoardRtcSetPayload(BoardRtcSetPayload),
-    BoardGetPayload(BoardGetPayload)
+    BoardGetPayload(BoardGetPayload),
+    BoardSerialSendPayload(BoardSerialSendPayload)
 }
 
 
