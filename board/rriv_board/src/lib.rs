@@ -89,6 +89,8 @@ pub trait SensorDriverServices {
     fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), ()>;
     fn ic2_write(&mut self, addr: u8, message: &[u8]) -> Result<(), ()>;
 
+    fn write_gpio_pin(&mut self, pin: u8, value: bool);
+
     control_services!();
 
 }

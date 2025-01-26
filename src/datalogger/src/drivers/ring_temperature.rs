@@ -112,21 +112,7 @@ impl RingTemperatureDriver {
     }
 }
 
-fn copy_config_into_partition(
-    partition: usize,
-    bytes: &[u8],
-    storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE],
-) {
-    // let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&self.general_config) };
-    // let mut bytes_sized: [u8; EEPROM_SENSOR_SETTINGS_SIZE] = [0; EEPROM_SENSOR_SETTINGS_SIZE];
-    let copy_size = if bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-        SENSOR_SETTINGS_PARTITION_SIZE
-    } else {
-        bytes.len()
-    };
-    let offset = SENSOR_SETTINGS_PARTITION_SIZE * partition;
-    storage[offset..offset + copy_size].copy_from_slice(&bytes[0..copy_size]);
-}
+
 
 const INDEX_TO_BYTE_CHAR: [u8; TEMPERATURE_SENSORS_ON_RING] = [b'0', b'1', b'2', b'3', b'4', b'5'];
 
@@ -214,6 +200,9 @@ impl SensorDriver for RingTemperatureDriver {
         for i in 0..self.sensor_drivers.len() {
             self.sensor_drivers[i].clear_calibration();
         }
+    }
+    
+    fn update_actuators(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
     }
 
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()> {

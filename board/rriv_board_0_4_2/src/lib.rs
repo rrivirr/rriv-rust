@@ -6,13 +6,7 @@ use alloc::boxed::Box;
 use alloc::format;
 
 use core::{
-    cell::RefCell,
-    concat,
-    default::Default,
-    format_args,
-    ops::DerefMut,
-    option::{Option, Option::*},
-    result::Result::*,
+    any::Any, cell::RefCell, concat, default::Default, format_args, ops::DerefMut, option::Option::{self, *}, result::Result::*
 };
 use core::{mem, result};
 use cortex_m::{
@@ -331,6 +325,25 @@ impl SensorDriverServices for Board {
             }
         }
     }
+
+
+    fn write_gpio_pin(&mut self, pin: u8, value: bool){
+        // let gpio = match pin {
+        //     0 => {
+        //         self.gpio.gpio1.make_push_pull_output(self.);
+        //     }
+        //     1 => &mut self.gpio.gpio2,
+        //     2 => &mut self.gpio.gpio3,
+        //     3 => &mut self.gpio.gpio4,
+        //     4 => &mut self.gpio.gpio5,
+        //     5 => &mut self.gpio.gpio6,
+        //     6 => &mut self.gpio.gpio7,
+        //     7 => &mut self.gpio.gpio8,
+        //     _ => &mut self.gpio.gpio8
+        // };
+        
+    }
+
 }
 
 impl ActuatorDriverServices for Board {

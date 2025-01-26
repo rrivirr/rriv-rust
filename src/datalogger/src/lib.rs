@@ -6,6 +6,7 @@ mod datalogger_commands;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
+use heater::{Heater, HeaterSpecialConfiguration};
 use ring_temperature::{RingTemperatureDriver, RingTemperatureDriverSpecialConfiguration};
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
@@ -128,13 +129,14 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 /* start registry WIP */
 
-const SENSOR_NAMES: [&str; 6] = [
+const SENSOR_NAMES: [&str; 7] = [
     "no_match",
     "generic_analog",
     "atlas_ec",
     "aht22",
     "mcp_9808",
     "ring_temperature",
+    "heater"
 ];
 
 fn sensor_type_id_from_name(name: &str) -> u16 {
@@ -220,6 +222,10 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
     driver_create_functions[5] = Some(driver_create_functions!(
         RingTemperatureDriver,
         RingTemperatureDriverSpecialConfiguration
+    ));
+    driver_create_functions[6] = Some(driver_create_functions!(
+        Heater,
+        HeaterSpecialConfiguration
     ));
     // driver_create_functions[2] = Some(driver_create_function!(AHT22));
 
@@ -405,6 +411,7 @@ impl DataLogger {
                 unsafe {
                     EPOCH_TIMESTAMP = board.epoch_timestamp();
                 }
+                self.update_actuators(board);
                 self.measure_sensor_values(board); // measureSensorValues(false);
                 self.write_last_measurement_to_serial(board); //outputLastMeasurement();
                                                               // Serial2.print(F("CMD >> "));
@@ -425,7 +432,14 @@ impl DataLogger {
         }
     }
 
-    // fn render_column_headers(mut str)
+    fn update_actuators(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(ref mut driver) = self.sensor_drivers[i] {;
+                driver.update_actuators(board.get_sensor_driver_services());
+            }
+        }
+    }
+
 
     fn write_column_headers_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         board.serial_send("timestamp,");
