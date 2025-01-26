@@ -10,5 +10,6 @@ pub mod mcp9808;
 pub mod generic_analog;
 pub mod ring_temperature;
 pub mod heater;
+pub mod ds18b20;
 mod AHT22;
 

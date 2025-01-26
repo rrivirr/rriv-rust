@@ -77,6 +77,16 @@ pub trait RRIVBoard: Send {
 //     spi
 // }
 
+pub trait OneWireBusInterface {
+    // fn send_command(
+    //     &mut self,
+    //     command: u8,
+    //     address: Option<&Address>,
+    //     delay: &mut impl DelayUs<u16>,
+    // ) -> OneWireResult<(), E>
+}
+
+
 pub trait SensorDriverServices {
     // future functions for ADC interface
     // fn get_adc_capabilities(&mut self); // minimum functionality return of adcs
@@ -90,6 +100,18 @@ pub trait SensorDriverServices {
     fn ic2_write(&mut self, addr: u8, message: &[u8]) -> Result<(), ()>;
 
     fn write_gpio_pin(&mut self, pin: u8, value: bool);
+    // fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]);
+    // fn ic2_write(&mut self, addr: u8, message: &[u8]);
+    // fn borrow_one_wire_bus(&mut self) -> &mut dyn OneWireBusInterface;
+
+    fn one_wire_send_command(&mut self, command: u8, address: u64);
+    fn one_wire_reset(&mut self);
+    fn one_wire_skip_address(&mut self);
+    fn one_wire_write_byte(&mut self, byte: u8);
+    fn one_wire_match_address(&mut self, address: u64);
+    fn one_wire_read_bytes(&mut self, output: &mut [u8] );
+    fn one_wire_bus_start_search(&mut self);
+    fn one_wire_bus_search(&mut self) -> Option<u64>;
 
     control_services!();
 

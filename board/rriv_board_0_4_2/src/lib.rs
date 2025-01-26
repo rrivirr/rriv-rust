@@ -14,8 +14,8 @@ use cortex_m::{
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
-use embedded_hal::digital::v2::OutputPin;
-use stm32f1xx_hal::afio::MAPR;
+use embedded_hal::digital::v2::{InputPin, OutputPin};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -38,12 +38,14 @@ use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use rriv_board::{
-    ActuatorDriverServices, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices,
-    TelemetryDriverServices,
+    ActuatorDriverServices, OneWireBusInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices, TelemetryDriverServices
 };
 
 use ds323x::{DateTimeAccess, Ds323x, NaiveDate, NaiveDateTime, NaiveTime};
 use stm32f1xx_hal::rtc::Rtc;
+
+use one_wire_bus::{crc::check_crc8, Address, OneWire, SearchState};
+
 
 mod components;
 use components::*;
@@ -74,9 +76,9 @@ type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
 type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
-    pub delay: SysDelay,
+    pub delay: DelayUs<TIM3>,
     // // pub power_control: PowerControl,
-    pub gpio: DynamicGpioPins,
+    // pub gpio: DynamicGpioPins,
     pub internal_adc: InternalAdc,
     pub external_adc: ExternalAdc,
     pub battery_level: BatteryLevel,
@@ -87,7 +89,9 @@ pub struct Board {
     pub internal_rtc: Rtc,
     pub storage: Storage,
     pub debug: bool,
-    pub file_epoch: i64
+    pub file_epoch: i64,
+    pub one_wire_bus: OneWire<OneWirePin>,
+    one_wire_search_state: Option<SearchState>
 }
 
 impl Board {
@@ -274,6 +278,10 @@ macro_rules! control_services_impl {
     };
 }
 
+type OneWireGpio1 = OneWire<Pin<'B', 8, Dynamic>>;
+
+
+
 impl SensorDriverServices for Board {
     fn query_internal_adc(&mut self, channel: u8) -> u16 {
         match self.internal_adc.read(channel) {
@@ -324,6 +332,21 @@ impl SensorDriverServices for Board {
                 return Err(());
             }
         }
+     }
+     
+    // fn borrow_one_wire_bus(&mut self) -> &mut dyn rriv_board::OneWireBusInterface  {
+
+    //     return &mut self.one_wire_bus;
+
+    // }
+    
+    fn one_wire_send_command(&mut self, command: u8, address: u64) {
+        let address = Address(address);
+
+       match self.one_wire_bus.send_command(command, Some(&address), &mut self.delay) {
+                Ok(_) => rprintln!("sent command ok"),
+                Err(e) => rprintln!("{:?}", e)
+           }
     }
 
 
@@ -343,6 +366,55 @@ impl SensorDriverServices for Board {
         // };
         
     }
+
+    
+    fn one_wire_reset(&mut self) {
+        let _ = self.one_wire_bus.reset(&mut self.delay);
+    }
+    
+    fn one_wire_skip_address(&mut self) {
+        let _ = self.one_wire_bus.skip_address(&mut self.delay);
+    }
+    
+    fn one_wire_write_byte(&mut self, byte: u8) {
+        let _ = self.one_wire_bus.write_byte(byte, &mut self.delay);
+    }
+    
+    fn one_wire_match_address(&mut self, address: u64) {
+        let address = Address(address);
+        self.one_wire_bus.match_address(&address, &mut self.delay);
+    }
+    
+    fn one_wire_read_bytes(&mut self, output: &mut [u8] ) {
+        self.one_wire_bus.read_bytes(output, &mut self.delay);
+        // TODO
+        match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output){
+            Ok(_) => return,
+            Err(_) => rprintln!("one wire crc error"),
+        }
+    }
+    
+    fn one_wire_bus_start_search(&mut self) {
+        self.one_wire_search_state = None;
+    }
+
+    fn one_wire_bus_search(&mut self) -> Option<u64> {
+        match self.one_wire_bus.device_search(self.one_wire_search_state.as_ref(), false, &mut self.delay){
+            Ok(Some((device_address, state))) => {
+                self.one_wire_search_state = Some(state);
+                return Some(device_address.0);    
+            },
+            Ok(None) => {
+                rprintln!("no devices found on onewire");
+                return None;              
+            },
+            Err(e) => {
+                rprintln!("one wire error{:?}", e);          
+                return None;  
+            },
+        } 
+    }
+
 
 }
 
@@ -442,12 +514,48 @@ pub fn build() -> Board {
     board
 }
 
+pub struct OneWirePin {
+    pin:  Pin<'D', 2, Dynamic>
+}
+
+
+impl InputPin for OneWirePin {
+    type Error = PinModeError;
+
+    fn is_high(&self) -> Result<bool, Self::Error> {
+        self.is_low().map(|b| !b)
+    }
+
+    fn is_low(&self) -> Result<bool, Self::Error> {
+        // unsafely access the pin state of GPIO B8
+        // because the hal doesn't currently implement a IO pin type later change to that
+        // this is safe because this is a one wire protocol 
+        // and we don't need the mode of the pin to be checked.
+        unsafe { Ok((*crate::pac::GPIOD::ptr()).idr.read().bits() & (1 << 2) == 0) }
+    }
+}
+
+impl OutputPin for OneWirePin {
+    type Error = PinModeError;
+
+    fn set_low(&mut self) -> Result<(), Self::Error> {
+        let result = self.pin.set_low();
+        return result;
+    }
+
+    fn set_high(&mut self) -> Result<(), Self::Error> {
+        let result = self.pin.set_high();
+        return result;
+    }
+}
+
 pub struct BoardBuilder {
     // chip features
-    pub delay: Option<SysDelay>,
+    pub delay: Option<DelayUs<TIM3>>,
 
     // pins groups
     pub gpio: Option<DynamicGpioPins>,
+    pub gpio_cr: Option<GpioCr>,
 
     // board features
     pub internal_adc: Option<InternalAdc>,
@@ -469,6 +577,7 @@ impl BoardBuilder {
             i2c2: None,
             delay: None,
             gpio: None,
+            gpio_cr: None,
             internal_adc: None,
             external_adc: None,
             power_control: None,
@@ -482,12 +591,34 @@ impl BoardBuilder {
 
     pub fn build(self) -> Board {
         // loop{}
+
+
+        let gpio = self.gpio.unwrap();
+        let mut gpio_cr = self.gpio_cr.unwrap();
+        let mut gpio5 = gpio.gpio5;
+        gpio5.make_open_drain_output(&mut gpio_cr.gpiod_crl);
+        let gpio5 = OneWirePin {
+            pin: gpio5
+        };
+       
+        let one_wire = match OneWire::new(gpio5) {
+            Ok(one_wire) => one_wire,
+            Err(e) => {
+                rprintln!("{:?} bad one wire bus", e);
+                panic!("bad one wire bus");
+            }
+        };
+
+        // let one_wire_bus_rriv = OneWireGpio1 {
+        //     one_wire
+        // };
+
+
         Board {
             i2c1: self.i2c1,
             i2c2: self.i2c2.unwrap(),
             delay: self.delay.unwrap(),
             // // power_control: self.power_control.unwrap(),
-            gpio: self.gpio.unwrap(),
             internal_adc: self.internal_adc.unwrap(),
             external_adc: self.external_adc.unwrap(),
             battery_level: self.battery_level.unwrap(),
@@ -496,7 +627,9 @@ impl BoardBuilder {
             internal_rtc: self.internal_rtc.unwrap(),
             storage: self.storage.unwrap(),
             debug: true,
-            file_epoch: 0
+            file_epoch: 0,
+            one_wire_bus: one_wire,
+            one_wire_search_state: None
         }
     }
 
@@ -675,6 +808,7 @@ impl BoardBuilder {
 
         let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
 
+
         // Set up pins
         let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
         let (
@@ -696,12 +830,15 @@ impl BoardBuilder {
         let clocks =
             BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
 
-        let mut delay: Option<SysDelay> = None;
-        unsafe {
-            let core_peripherals = cortex_m::Peripherals::steal();
-            delay = Some(core_peripherals.SYST.delay(&clocks));
-        }
-        let mut delay = delay.unwrap();
+        // let mut delay: Option<SysDelay> = None;
+        // unsafe {
+        //     let core_peripherals = cortex_m::Peripherals::steal();
+        //     delay = Some(core_peripherals.SYST.delay(&clocks));
+        // }
+        // let mut delay = delay.unwrap();
+
+        let mut delay: DelayUs<TIM3> = device_peripherals.TIM3.delay(&clocks);
+
 
         BoardBuilder::setup_serial(
             serial_pins,
@@ -803,6 +940,7 @@ impl BoardBuilder {
         self.oscillator_control = Some(OscillatorControl::new(oscillator_control_pins));
 
         self.gpio = Some(dynamic_gpio_pins);
+        self.gpio_cr = Some(gpio_cr);
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         // delay2.delay(2);
