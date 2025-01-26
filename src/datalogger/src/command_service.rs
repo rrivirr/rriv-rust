@@ -242,6 +242,9 @@ fn get_command_payload(
         CommandType::BoardSignalExAdcLow => todo!(),
         CommandType::BoardSignal3v3BoostHigh => todo!(),
         CommandType::BoardSignal3v3BoostLow => todo!(),
+        CommandType::BoardSerialSend => {
+            parse_command_to_payload!(BoardSerialSendPayload, CommandPayload::BoardSerialSendPayload, command_cstr);
+        }
         // todo: refactor these to be an errors enumerationget_command_payload
         CommandType::Unknown => todo!(),
     }
