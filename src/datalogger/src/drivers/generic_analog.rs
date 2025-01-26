@@ -76,6 +76,10 @@ impl SensorDriver for GenericAnalog {
         return single_raw_or_cal_parameter_identifiers(index, None);
     }
 
+    fn update_actuators(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
+        // not actuators
+    }
+    
     // fn take_measurement(&mut self, board: Box<&mut impl rriv_board::RRIVBoard>) {
     //     // implement exadc and intadc
     //     match self.special_config.settings.adc_select {

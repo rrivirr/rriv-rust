@@ -6,6 +6,8 @@ mod datalogger_commands;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
+use heater::{Heater, HeaterSpecialConfiguration};
+use ds18b20::{Ds18b20, Ds18b20SpecialConfiguration};
 use ring_temperature::{RingTemperatureDriver, RingTemperatureDriverSpecialConfiguration};
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
@@ -128,13 +130,15 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 
 /* start registry WIP */
 
-const SENSOR_NAMES: [&str; 6] = [
+const SENSOR_NAMES: [&str; 8] = [
     "no_match",
     "generic_analog",
     "atlas_ec",
     "aht22",
     "mcp_9808",
     "ring_temperature",
+    "heater",
+    "ds18b20"
 ];
 
 fn sensor_type_id_from_name(name: &str) -> u16 {
@@ -220,6 +224,14 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
     driver_create_functions[5] = Some(driver_create_functions!(
         RingTemperatureDriver,
         RingTemperatureDriverSpecialConfiguration
+    ));
+    driver_create_functions[6] = Some(driver_create_functions!(
+        Heater,
+        HeaterSpecialConfiguration
+    ));
+    driver_create_functions[7] = Some(driver_create_functions!(
+        Ds18b20,
+        Ds18b20SpecialConfiguration
     ));
     // driver_create_functions[2] = Some(driver_create_function!(AHT22));
 
@@ -397,6 +409,7 @@ impl DataLogger {
         // do the measurement cycle stuff
         // implement interactive mode logging first
 
+        self.update_actuators(board);
         let interactive_mode_logging = true;
         if interactive_mode_logging {
             if board.timestamp() > self.last_interactive_log_time + 1 {
@@ -425,7 +438,14 @@ impl DataLogger {
         }
     }
 
-    // fn render_column_headers(mut str)
+    fn update_actuators(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(ref mut driver) = self.sensor_drivers[i] {;
+                driver.update_actuators(board.get_sensor_driver_services());
+            }
+        }
+    }
+
 
     fn write_column_headers_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         board.serial_send("timestamp,");
@@ -465,6 +485,7 @@ impl DataLogger {
         }
         board.serial_send("\n");
     }
+
 
     fn write_column_headers_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         board.write_log_file("timestamp,");
@@ -763,7 +784,7 @@ impl DataLogger {
 
                     board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
                     board.serial_send("updated sensor configuration\n");
-                }
+                } 
             }
             CommandPayload::SensorGetCommandPayload(payload) => {
                 for i in 0..self.sensor_drivers.len() {
@@ -1072,6 +1093,9 @@ impl DataLogger {
                         board.serial_send("cleared payload\n");
                     }
                 }
+                board.serial_send("}");
+                board.serial_send("\n");
+
             }
         }
     }

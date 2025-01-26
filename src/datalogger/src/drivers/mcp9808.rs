@@ -176,6 +176,9 @@ impl SensorDriver for MCP9808TemperatureDriver {
     }
     
    
+    
+    fn update_actuators(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
+    }
         
 }
 
