@@ -15,7 +15,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::OutputPin;
-use stm32f1xx_hal::afio::MAPR;
+use stm32f1xx_hal::{afio::MAPR, serial::StopBits};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -82,6 +82,7 @@ pub struct Board {
     pub delay: SysDelay,
     // // pub power_control: PowerControl,
     pub gpio: DynamicGpioPins,
+    pub gpio_cr: GpioCr,
     pub internal_adc: InternalAdc,
     pub external_adc: ExternalAdc,
     pub battery_level: BatteryLevel,
@@ -103,6 +104,11 @@ impl Board {
         // self.internal_adc.enable(&mut self.delay);
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         self.storage.create_file(timestamp);
+
+
+        // TODO: this is for the NOX sensor, needs to be configured by drivers
+        self.gpio.gpio6.make_push_pull_output(&mut self.gpio_cr.gpioc_crh);
+
     }
 
 }
@@ -128,7 +134,12 @@ impl RRIVBoard for Board {
 
 
     // // use this to talk out on serial to other UART modules, RS 485, etc
-    fn usart_send(&self, string: &str){
+    fn usart_send(&mut self, string: &str){
+
+        // set control bit for sending
+        self.gpio.gpio6.set_high();
+        rriv_board::RRIVBoard::delay_ms(self, 200);
+
         cortex_m::interrupt::free(|cs| {
             // clear the receive buffer
             unsafe { 
@@ -146,6 +157,11 @@ impl RRIVBoard for Board {
             }
 
         });
+
+        self.gpio.gpio6.set_low();
+
+        // set control bit for receiving
+        rriv_board::RRIVBoard::delay_ms(self, 70);
     }
 
     fn get_usart_response(&self, message: &mut [u8;20]) -> usize {
@@ -288,7 +304,7 @@ macro_rules! control_services_impl {
             rriv_board::RRIVBoard::usb_serial_send(self, string);
         }
 
-        fn usart_send(&self, string: &str) {
+        fn usart_send(&mut self, string: &str) {
             rriv_board::RRIVBoard::usart_send(self, string);
         }
 
@@ -470,6 +486,7 @@ pub struct BoardBuilder {
 
     // pins groups
     pub gpio: Option<DynamicGpioPins>,
+    pub gpio_cr: Option<GpioCr>,
 
     // board features
     pub internal_adc: Option<InternalAdc>,
@@ -491,6 +508,7 @@ impl BoardBuilder {
             i2c2: None,
             delay: None,
             gpio: None,
+            gpio_cr: None,
             internal_adc: None,
             external_adc: None,
             power_control: None,
@@ -510,6 +528,7 @@ impl BoardBuilder {
             delay: self.delay.unwrap(),
             // // power_control: self.power_control.unwrap(),
             gpio: self.gpio.unwrap(),
+            gpio_cr: self.gpio_cr.unwrap(),
             internal_adc: self.internal_adc.unwrap(),
             external_adc: self.external_adc.unwrap(),
             battery_level: self.battery_level.unwrap(),
@@ -558,7 +577,7 @@ impl BoardBuilder {
             usart,
             (pins.tx, pins.rx),
             mapr,
-            Config::default().baudrate(57600.bps()),
+            Config::default().baudrate(9600.bps()).wordlength_8bits().parity_even().stopbits(StopBits::STOP1),
             &clocks,
         );
 
@@ -805,7 +824,8 @@ impl BoardBuilder {
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
 
         // build the power control
-        // self.power_control = Some(PowerControl::new(power_pins));
+        let mut power_control = Some(PowerControl::new(power_pins)).unwrap();
+        power_control.cycle_5v(&mut delay);
 
         // build the internal adc
         let internal_adc_configuration =
@@ -825,6 +845,7 @@ impl BoardBuilder {
         self.oscillator_control = Some(OscillatorControl::new(oscillator_control_pins));
 
         self.gpio = Some(dynamic_gpio_pins);
+        self.gpio_cr = Some(gpio_cr);
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         // delay2.delay(2);

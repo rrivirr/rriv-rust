@@ -87,7 +87,7 @@ pub struct BoardSerialSendPayload {
 }
 
 pub struct BoardSerialSendCommandPayload {
-    pub message: [u8;10],
+    pub message: [u8;20],
     pub message_len: u8, 
 }
 
@@ -103,7 +103,7 @@ impl BoardSerialSendPayload {
             }
         };
 
-        let mut message_bytes = [0u8;10];
+        let mut message_bytes = [0u8;20];
         message_bytes[0..message.len()].clone_from_slice(&message.as_bytes()[0..message.len()]);
         
         Ok(

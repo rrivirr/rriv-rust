@@ -1091,7 +1091,10 @@ impl DataLogger {
                     }
                 };
 
-                board.usart_send(format!("{}\r\n", message).as_str());
+                let message = format!("{}\r\n", message);
+                let message = message.as_str();
+                rprintln!("{}", message);
+                board.usart_send(message);
                 board.delay_ms(500);
 
                 let mut response = [0u8; 20];
