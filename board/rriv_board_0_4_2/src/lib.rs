@@ -291,24 +291,51 @@ impl SensorDriverServices for Board {
     }
     
     fn one_wire_reset(&mut self) {
-        let _ = self.one_wire_bus.reset(&mut self.delay);
+        match self.one_wire_bus.reset(&mut self.delay) {
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("one wire reset error{:?}", e);            
+            },
+        }
     }
     
     fn one_wire_skip_address(&mut self) {
-        let _ = self.one_wire_bus.skip_address(&mut self.delay);
+        match self.one_wire_bus.skip_address(&mut self.delay) {
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("one wire skip address error{:?}", e);            
+            }, 
+        }
     }
     
     fn one_wire_write_byte(&mut self, byte: u8) {
-        let _ = self.one_wire_bus.write_byte(byte, &mut self.delay);
+        match self.one_wire_bus.write_byte(byte, &mut self.delay) {
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("one wire write error{:?}", e);            
+            }, 
+        }
     }
     
     fn one_wire_match_address(&mut self, address: u64) {
         let address = Address(address);
-        self.one_wire_bus.match_address(&address, &mut self.delay);
+        match self.one_wire_bus.match_address(&address, &mut self.delay) {
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("one wire match addr error{:?}", e);            
+            },   
+        }
     }
     
     fn one_wire_read_bytes(&mut self, output: &mut [u8] ) {
-        self.one_wire_bus.read_bytes(output, &mut self.delay);
+        match self.one_wire_bus.read_bytes(output, &mut self.delay) {
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("one wire read error{:?}", e);    
+                return;        
+            },  
+
+        }
         // TODO
         match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output){
             Ok(_) => return,
@@ -437,7 +464,7 @@ pub fn build() -> Board {
 }
 
 pub struct OneWirePin {
-    pin:  Pin<'D', 2, Dynamic>
+    pin:  Pin<'C', 12, Dynamic>
 }
 
 
@@ -515,13 +542,13 @@ impl BoardBuilder {
 
         let gpio = self.gpio.unwrap();
         let mut gpio_cr = self.gpio_cr.unwrap();
-        let mut gpio5 = gpio.gpio5;
-        gpio5.make_open_drain_output(&mut gpio_cr.gpiod_crl);
-        let gpio5 = OneWirePin {
-            pin: gpio5
+        let mut gpio6 = gpio.gpio6;
+        gpio6.make_open_drain_output(&mut gpio_cr.gpioc_crh);
+        let gpio6 = OneWirePin {
+            pin: gpio6
         };
        
-        let one_wire = match OneWire::new(gpio5) {
+        let one_wire = match OneWire::new(gpio6) {
             Ok(one_wire) => one_wire,
             Err(e) => {
                 rprintln!("{:?} bad one wire bus", e);
