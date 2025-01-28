@@ -19,15 +19,15 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
                 match param.as_str() {
                     "epoch" => {
                         let epoch = board.epoch_timestamp();
-                        board.serial_send(format!("{:}\n", epoch).as_str());
+                        board.usb_serial_send(format!("{:}\n", epoch).as_str());
                     }
                     _ => {
-                        board.serial_send("Unsupported param in command\n");
+                        board.usb_serial_send("Unsupported param in command\n");
                     }
                 }
             }
             err => {
-                board.serial_send("Bad param in command\n");
+                board.usb_serial_send("Bad param in command\n");
                 rprintln!("Bad epoch {:?}", err);
                 return;
             }
@@ -35,7 +35,7 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
         }
     } else {
         let epoch = board.epoch_timestamp();
-        board.serial_send(format!("{:}", epoch).as_str());                
+        board.usb_serial_send(format!("{:}", epoch).as_str());                
     }
 
 }

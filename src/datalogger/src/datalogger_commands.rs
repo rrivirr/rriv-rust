@@ -98,13 +98,13 @@ impl BoardSerialSendPayload {
                 message
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad message");
             }
         };
 
         let mut message_bytes = [0u8;10];
-        message_bytes.clone_from_slice(&message.as_bytes()[0..message.len()]);
+        message_bytes[0..message.len()].clone_from_slice(&message.as_bytes()[0..message.len()]);
         
         Ok(
         BoardSerialSendCommandPayload {
@@ -177,7 +177,7 @@ impl SensorCalibrateFitPayload {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -198,7 +198,7 @@ impl SensorCalibrateClearPayload {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -221,7 +221,7 @@ impl SensorCalibrateListPayload {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -251,7 +251,7 @@ impl SensorCalibrateRemovePayload {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -261,7 +261,7 @@ impl SensorCalibrateRemovePayload {
                 tag
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad calibration point tag");
             }
         };
@@ -320,7 +320,7 @@ pub fn get_id(id: &serde_json::Value) -> Result<(&alloc::string::String), (&str)
             return Ok(payload_id)
         },
         _ => {
-            // board.serial_send("bad sensor id\n");
+            // board.usb_serial_send("bad sensor id\n");
             return Err("bad sensor id")
         }
     };

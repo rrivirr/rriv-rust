@@ -96,6 +96,7 @@ impl CommandType {
             "board_signal_ex_adc_low" => CommandType::BoardSignalExAdcLow,
             "board_signal_3v3_boost_high" => CommandType::BoardSignal3v3BoostHigh,
             "board_signal_3v3_boost_low" => CommandType::BoardSignal3v3BoostLow,
+            "serial_send" => CommandType::BoardSerialSend,
             _ => CommandType::Unknown,
         }
     }
