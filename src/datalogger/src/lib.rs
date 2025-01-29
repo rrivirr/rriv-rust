@@ -1097,7 +1097,7 @@ impl DataLogger {
                 board.usart_send(message);
                 board.delay_ms(500);
 
-                let mut response = [0u8; 20];
+                let mut response = [0u8; 30];
                 let length = board.get_usart_response(&mut response);
                 if length == 0 {
                     board.usb_serial_send(json!({message:"no response received"}).to_string().as_str());
@@ -1105,15 +1105,21 @@ impl DataLogger {
                     return;
                 }
 
-                match core::str::from_utf8(&response){
-                    Ok(response) => {
-                        board.usb_serial_send(response);
-                        board.usb_serial_send("\n");
-                    }
-                    Err(message) => {
-                        board.usb_serial_send(format!("problem receiving message {} \n", message).as_str());
-                    }
-                };
+                
+                for b in &response[0..length] {
+                    let c = *b as char;
+                    rprintln!("{}", c);
+                }
+                board.usb_serial_send("\n");
+                // match core::str::from_utf8(&response){
+                //     Ok(response) => {
+                //         board.usb_serial_send(response);
+                //         board.usb_serial_send("\n");
+                //     }
+                //     Err(message) => {
+                //         board.usb_serial_send(format!("problem receiving message {} \n", message).as_str());
+                //     }
+                // };
                 
                 return;
             }

@@ -63,7 +63,7 @@ static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
 static USART_RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static USART_TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 
-const USART_RECEIVE_SIZE: usize = 20;
+const USART_RECEIVE_SIZE: usize = 30;
 static mut USART_RECEIVE: [u8; USART_RECEIVE_SIZE] = [0u8; USART_RECEIVE_SIZE];
 static mut USART_RECEIVE_INDEX: usize = 0;
 
@@ -137,8 +137,9 @@ impl RRIVBoard for Board {
     fn usart_send(&mut self, string: &str){
 
         // set control bit for sending
-        self.gpio.gpio6.set_high();
-        rriv_board::RRIVBoard::delay_ms(self, 200);
+        self.gpio.gpio6.set_high(); // origi
+        // self.gpio.gpio6.set_low();
+        // rriv_board::RRIVBoard::delay_ms(self, 100);
 
         cortex_m::interrupt::free(|cs| {
             // clear the receive buffer
@@ -158,13 +159,16 @@ impl RRIVBoard for Board {
 
         });
 
-        self.gpio.gpio6.set_low();
+        rriv_board::RRIVBoard::delay_ms(self, 2);
+        self.gpio.gpio6.set_low(); // origi
+        // self.gpio.gpio6.set_high();
+
 
         // set control bit for receiving
-        rriv_board::RRIVBoard::delay_ms(self, 70);
+        // rriv_board::RRIVBoard::delay_ms(self, 70);
     }
 
-    fn get_usart_response(&self, message: &mut [u8;20]) -> usize {
+    fn get_usart_response(&self, message: &mut [u8;30]) -> usize {
         return cortex_m::interrupt::free(|cs| {
             message.clone_from_slice( unsafe { &USART_RECEIVE }); // TODO: this isn't very safe
             let length = unsafe { USART_RECEIVE_INDEX };
@@ -308,7 +312,7 @@ macro_rules! control_services_impl {
             rriv_board::RRIVBoard::usart_send(self, string);
         }
 
-        fn get_usart_response(&self, message: &mut [u8;20]) -> usize {
+        fn get_usart_response(&self, message: &mut [u8;30]) -> usize {
             return rriv_board::RRIVBoard::get_usart_response(self, message);
         }
 
@@ -577,7 +581,7 @@ impl BoardBuilder {
             usart,
             (pins.tx, pins.rx),
             mapr,
-            Config::default().baudrate(9600.bps()).wordlength_8bits().parity_even().stopbits(StopBits::STOP1),
+            Config::default().baudrate(38400.bps()).wordlength_8bits().parity_even().stopbits(StopBits::STOP1), // 19200
             &clocks,
         );
 
