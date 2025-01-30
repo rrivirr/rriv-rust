@@ -7,6 +7,7 @@ use embedded_hal::{
     delay::DelayNs,
     spi::{Mode, Phase, Polarity},
 };
+
 use embedded_sdmmc::{
     BlockDevice, Directory, File, SdCard, TimeSource, Timestamp, Volume, VolumeManager,
 };
@@ -15,36 +16,23 @@ use pac::SPI2;
 use crate::*;
 
 pub const MODE: Mode = Mode {
-    phase: Phase::CaptureOnSecondTransition,
     polarity: Polarity::IdleHigh,
+    phase: Phase::CaptureOnSecondTransition,
 };
 
-pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: DelayNs<TIM2>) -> Storage {
-    let spi2 = SPI2::spi(
-        spi_dev,
-        (pins.sck, pins.miso, pins.mosi),
+pub fn build<D: DelayNs>(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: D) -> Storage {
+    let spi2 = spi_dev.spi(
+        (Some(pins.sck), Some(pins.miso), Some(pins.mosi)),
         MODE,
         1.MHz(),
-        clocks,
+        &clocks,
     );
 
     rprintln!("set up sdcard");
     // let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay).unwrap();
     // only one SPI device on this bus, can we avoid using embedded_hal_bus?
 
-    let sdcard: SdCard<
-        Spi<
-            SPI2,
-            Spi2NoRemap,
-            (
-                Pin<'B', 13, Alternate>,
-                Pin<'B', 14>,
-                Pin<'B', 15, Alternate>,
-            ),
-            u8,
-        >,
-        Delay<TIM2, 1000000>,
-    > = embedded_sdmmc::SdCard::new(spi2, delay);
+    let sdcard = embedded_sdmmc::SdCard::new(spi2, delay);
 
     rprintln!("set up sdcard");
     // sdcard.read(blocks, start_block_idx, reason);
@@ -52,6 +40,7 @@ pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: DelayNs<TIM2>
 
     return Storage::new(sdcard);
 }
+
 type RrivSdCard = SdCard<
     Spi<
         SPI2,
