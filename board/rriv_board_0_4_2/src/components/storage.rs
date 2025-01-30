@@ -15,49 +15,6 @@ use pac::SPI2;
 
 use crate::*;
 
-pub const MODE: Mode = Mode {
-    polarity: Polarity::IdleHigh,
-    phase: Phase::CaptureOnSecondTransition,
-};
-
-pub fn build<D: DelayNs>(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: D) -> Storage {
-    let spi2 = spi_dev.spi(
-        (Some(pins.sck), Some(pins.miso), Some(pins.mosi)),
-        MODE,
-        1.MHz(),
-        &clocks,
-    );
-
-    rprintln!("set up sdcard");
-    // let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay).unwrap();
-    // only one SPI device on this bus, can we avoid using embedded_hal_bus?
-
-    let sdcard = embedded_sdmmc::SdCard::new(spi2, delay);
-
-    rprintln!("set up sdcard");
-    // sdcard.read(blocks, start_block_idx, reason);
-    // sdcard.write(blocks, start_block_idx);
-
-    return Storage::new(sdcard);
-}
-
-type RrivSdCard = SdCard<
-    Spi<
-        SPI2,
-        Spi2NoRemap,
-        (
-            Pin<'B', 13, Alternate>,
-            Pin<'B', 14>,
-            Pin<'B', 15, Alternate>,
-        ),
-        u8,
-    >,
-    DelayNs<TIM2>,
->;
-
-// type RrivSdCard = SdCard<Spi<SPI1, Spi1NoRemap, (Pin<'A', 5, Alternate>, Pin<'A', 6>, Pin<'A', 7, Alternate>), u8>, Pin<'C', 8, Output>, SysDelay>;
-// type RrivSdCard = SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Pin<'C', 8, Output>, Delay<TIM2, 1000000>>;
-// SdCard<Spi<SPI2, Spi2NoRemap, (Pin<'B', 13, Alternate>, Pin<'B', 14>, Pin<'B', 15, Alternate>), u8>, Pin<'C', 8, Output>>;
 pub struct RrivTimeSource {}
 
 impl RrivTimeSource {
@@ -103,6 +60,35 @@ impl TimeSource for RrivTimeSource {
     }
 }
 
+
+pub const MODE: Mode = Mode {
+    polarity: Polarity::IdleHigh,
+    phase: Phase::CaptureOnSecondTransition,
+};
+
+pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: DelayUs<TIM2> ) -> Storage {
+    let spi2 = spi_dev.spi(
+        (Some(pins.sck), Some(pins.miso), Some(pins.mosi)),
+        MODE,
+        1.MHz(),
+        &clocks,
+    );
+
+    rprintln!("set up sdcard");
+    // let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay).unwrap();
+    // only one SPI device on this bus, can we avoid using embedded_hal_bus?
+
+    let sdcard = embedded_sdmmc::SdCard::new(spi2, delay);
+
+    rprintln!("set up sdcard");
+    // sdcard.read(blocks, start_block_idx, reason);
+    // sdcard.write(blocks, start_block_idx);
+
+    return Storage::new(sdcard);
+}
+
+
+
 pub trait OutputDevice {
     fn write(data: &[u8]);
 }
@@ -110,7 +96,7 @@ pub trait OutputDevice {
 const CACHE_SIZE: usize = 50;
 
 pub struct Storage {
-    volume_manager: VolumeManager<RrivSdCard, RrivTimeSource>,
+    volume_manager: VolumeManager<SdCard<Spi<SPI2, u8>, D>, RrivTimeSource>,
     // volume: Volume,
     filename: [u8; 11],
     // file: Option<File>,
@@ -120,8 +106,8 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(
-        sd_card: RrivSdCard, // , time_source: impl TimeSource //  a timesource passed in here could use unsafe access to internal RTC or i2c bus
+    pub fn new<StorageDelay>(
+        sd_card: SdCard<Spi<SPI2, u8>, StorageDelay>, // , time_source: impl TimeSource //  a timesource passed in here could use unsafe access to internal RTC or i2c bus
     ) -> Self {
         let time_source = RrivTimeSource::new(); // unsafe access to the board
                                                  // or global time var via interrupt
@@ -129,19 +115,7 @@ impl Storage {
         rprintln!("set up sdcard");
 
         let mut volume_manager: VolumeManager<
-            SdCard<
-                Spi<
-                    SPI2,
-                    Spi2NoRemap,
-                    (
-                        Pin<'B', 13, Alternate>,
-                        Pin<'B', 14>,
-                        Pin<'B', 15, Alternate>,
-                    ),
-                    u8,
-                >,
-                _,
-            >,
+            SdCard,
             RrivTimeSource,
         > = embedded_sdmmc::VolumeManager::new(sd_card, time_source);
         // Try and access Volume 0 (i.e. the first partition).
