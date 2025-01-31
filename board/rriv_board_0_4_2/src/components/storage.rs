@@ -4,10 +4,10 @@ use alloc::format;
 
 use ds323x::{Datelike, Timelike};
 use embedded_hal::{
-    delay::DelayNs, spi::SpiDevice,
+    delay::DelayNs, spi::{self, ErrorType, SpiBus, SpiDevice},
 };
 
-use stm32f1xx_hal::spi::{Mode, Phase, Polarity, Spi};
+use stm32f1xx_hal::spi::{Mode, Phase, Polarity, Spi, SpiReadWrite};
 
 // use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
 // use embassy_stm32::spi::Spi;
@@ -74,9 +74,13 @@ pub const MODE: Mode = Mode {
 struct MySpi {
    spi: Spi<SPI2, u8>
 }
+//     type Error = PinModeError;
+
+impl ErrorType for MySpi {
+    type Error = Error<Error>
+}
 
 impl SpiDevice for MySpi {
-    type Error: Error;
 
     fn transaction(&mut self, operations: &mut [embedded_hal::spi::Operation<'_, u8>]) -> Result<(), Self::Error> {
         // assert chip select pin
@@ -87,8 +91,26 @@ impl SpiDevice for MySpi {
 
 
         let op_res = operations.iter_mut().try_for_each(|op| match op {
-            embedded_hal::spi::Operation::Read(buf) => self.spi.read(buf),
-            embedded_hal::spi::Operation::Write(buf) => bus.write(buf),
+            embedded_hal::spi::Operation::Read(buf) => {
+
+                self.spi.read(buf)
+
+
+                // SpiDevice::read(&mut self.spi, buf)
+
+             
+            //   buf.len();
+
+            //   match self.spi.read_nonblocking() {
+            //     Ok(result) => todo!(), // this is a loop!
+            //     Err(e) => e,
+            //   }
+              // self.spi.read(buf)
+            },
+            embedded_hal::spi::Operation::Write(buf) => {
+                self.spi.spi_write(buf);
+                self.spi.write(buf)
+            }
             embedded_hal::spi::Operation::Transfer(read, write) => bus.transfer(read, write),
             embedded_hal::spi::Operation::TransferInPlace(buf) => bus.transfer_in_place(buf),
             #[cfg(not(feature = "time"))]
@@ -147,6 +169,11 @@ pub fn build(pins: Spi2Pins, spi_peripheral: SPI2, clocks: Clocks, delay: DelayU
         1.MHz(),
         &clocks,
     );
+
+
+
+
+    // Spi::new(SPI2, pins, mode, freq, &clocks);
 
     let myspi = MySpi { spi: spi2 };
     
