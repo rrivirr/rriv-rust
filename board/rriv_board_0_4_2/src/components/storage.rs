@@ -108,10 +108,30 @@ impl SpiDevice for MySpi {
               // self.spi.read(buf)
             },
             embedded_hal::spi::Operation::Write(buf) => {
-                self.spi.spi_write(buf);
-                self.spi.write(buf)
+                self.spi.spi_write(buf)
+                // self.spi.write(buf)
             }
-            embedded_hal::spi::Operation::Transfer(read, write) => bus.transfer(read, write),
+            embedded_hal::spi::Operation::Transfer(read, write) => {
+                 bus.transfer(read, write),
+
+                //  fn transfer_word<W: Word>(regs: Regs, tx_word: W) -> Result<W, Error> {
+                //     spin_until_tx_ready(regs, true)?;
+                
+                //     unsafe {
+                //         ptr::write_volatile(regs.tx_ptr(), tx_word);
+                
+                //         #[cfg(any(spi_v3, spi_v4, spi_v5))]
+                //         regs.cr1().modify(|reg| reg.set_cstart(true));
+                //     }
+                
+                //     spin_until_rx_ready(regs)?;
+                
+                //     let rx_word = unsafe { ptr::read_volatile(regs.rx_ptr()) };
+                //     Ok(rx_word)
+                // }
+
+            }
+            // Look at the embassy version of transfer?
             embedded_hal::spi::Operation::TransferInPlace(buf) => bus.transfer_in_place(buf),
             #[cfg(not(feature = "time"))]
             embedded_hal::spi::Operation::DelayNs(_) => unreachable!(),
