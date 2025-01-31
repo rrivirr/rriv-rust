@@ -4,9 +4,13 @@ use alloc::format;
 
 use ds323x::{Datelike, Timelike};
 use embedded_hal::{
-    delay::DelayNs,
-    spi::{Mode, Phase, Polarity},
+    delay::DelayNs, spi::SpiDevice,
 };
+
+use stm32f1xx_hal::spi::{Mode, Phase, Polarity, Spi};
+
+// use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
+// use embassy_stm32::spi::Spi;
 
 use embedded_sdmmc::{
     BlockDevice, Directory, File, SdCard, TimeSource, Timestamp, Volume, VolumeManager,
@@ -66,25 +70,110 @@ pub const MODE: Mode = Mode {
     phase: Phase::CaptureOnSecondTransition,
 };
 
-pub fn build(pins: Spi2Pins, spi_dev: SPI2, clocks: Clocks, delay: DelayUs<TIM2> ) -> Storage {
-    let spi2 = spi_dev.spi(
+
+struct MySpi {
+   spi: Spi<SPI2, u8>
+}
+
+impl SpiDevice for MySpi {
+    type Error: Error;
+
+    fn transaction(&mut self, operations: &mut [embedded_hal::spi::Operation<'_, u8>]) -> Result<(), Self::Error> {
+        // assert chip select pin
+        // do the operations
+        // assert chip select pin
+
+        // self.cs.set_low().map_err(SpiDeviceError::Cs)?;
+
+
+        let op_res = operations.iter_mut().try_for_each(|op| match op {
+            embedded_hal::spi::Operation::Read(buf) => self.spi.read(buf),
+            embedded_hal::spi::Operation::Write(buf) => bus.write(buf),
+            embedded_hal::spi::Operation::Transfer(read, write) => bus.transfer(read, write),
+            embedded_hal::spi::Operation::TransferInPlace(buf) => bus.transfer_in_place(buf),
+            #[cfg(not(feature = "time"))]
+            embedded_hal::spi::Operation::DelayNs(_) => unreachable!(),
+            #[cfg(feature = "time")]
+            Operation::DelayNs(ns) => {
+                embassy_time::block_for(embassy_time::Duration::from_nanos(*ns as _));
+                Ok(())
+            }
+        });
+
+        // On failure, it's important to still flush and deassert CS.
+        //  let flush_res = bus.flush();
+        //  let cs_res = self.cs.set_high();
+
+        // let op_res = op_res.map_err(SpiDeviceError::Spi)?;
+        // flush_res.map_err(SpiDeviceError::Spi)?;
+        // cs_res.map_err(SpiDeviceError::Cs)?;
+
+
+        Err(())
+    }
+    
+    fn read(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+        self.transaction(&mut [embedded_hal::spi::Operation::Read(buf)])
+    }
+    
+    fn write(&mut self, buf: &[u8]) -> Result<(), Self::Error> {
+        self.transaction(&mut [embedded_hal::spi::Operation::Write(buf)])
+    }
+    
+    fn transfer(&mut self, read: &mut [u8], write: &[u8]) -> Result<(), Self::Error> {
+        self.transaction(&mut [embedded_hal::spi::Operation::Transfer(read, core::write)])
+    }
+    
+    fn transfer_in_place(&mut self, buf: &mut [u8]) -> Result<(), Self::Error> {
+        self.transaction(&mut [embedded_hal::spi::Operation::TransferInPlace(buf)])
+    }
+}
+
+
+struct StorageDelay {
+  delay: DelayUs<TIM2>
+}
+
+impl DelayNs for StorageDelay {
+    fn delay_ns(&mut self, ns: u32) {
+        self.delay_us(ns * 1000);
+    }
+}
+
+pub fn build(pins: Spi2Pins, spi_peripheral: SPI2, clocks: Clocks, delay: DelayUs<TIM2> ) {
+    let spi2 = spi_peripheral.spi(
         (Some(pins.sck), Some(pins.miso), Some(pins.mosi)),
         MODE,
         1.MHz(),
         &clocks,
     );
 
+    let myspi = MySpi { spi: spi2 };
+    
+    // spi2.
+    
+    // let spi2 = Spi::new_blocking(peri, pins.sck, pins.mosi, miso, embassy_stm32::spi::Config::default());
+    // let spi2 = Spi::new_blocking(SPI2, pins.sck, pins.mosi, pins.miso, Config::default());
+    // let spi = SpiDevice::new(&spi2, cs);
+
+  
+  
+    // ExclusiveDevice::new(spi2, DummyCsPin, delay);
+
+
     rprintln!("set up sdcard");
     // let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay).unwrap();
     // only one SPI device on this bus, can we avoid using embedded_hal_bus?
 
-    let sdcard = embedded_sdmmc::SdCard::new(spi2, delay);
+    let storage_delay = StorageDelay{ delay };
+    
+    let sdcard = embedded_sdmmc::SdCard::new(myspi, storage_delay);
 
     rprintln!("set up sdcard");
     // sdcard.read(blocks, start_block_idx, reason);
     // sdcard.write(blocks, start_block_idx);
 
-    return Storage::new(sdcard);
+    // return Storage::new(sdcard);
 }
 
 
@@ -96,7 +185,7 @@ pub trait OutputDevice {
 const CACHE_SIZE: usize = 50;
 
 pub struct Storage {
-    volume_manager: VolumeManager<SdCard<Spi<SPI2, u8>, D>, RrivTimeSource>,
+    volume_manager: VolumeManager<SdCard<Spi<SPI2, u8>, StorageDelay>, RrivTimeSource>,
     // volume: Volume,
     filename: [u8; 11],
     // file: Option<File>,
@@ -106,7 +195,7 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new<StorageDelay>(
+    pub fn new (
         sd_card: SdCard<Spi<SPI2, u8>, StorageDelay>, // , time_source: impl TimeSource //  a timesource passed in here could use unsafe access to internal RTC or i2c bus
     ) -> Self {
         let time_source = RrivTimeSource::new(); // unsafe access to the board

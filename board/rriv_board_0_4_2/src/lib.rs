@@ -822,6 +822,8 @@ impl BoardBuilder {
         //     delay2,
         // );
 
+        
+
         let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);
