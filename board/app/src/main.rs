@@ -1,7 +1,7 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(clippy::empty_loop)]
 #![feature(alloc_error_handler)]
-#![feature(prelude_2024)]
+// #![feature(prelude_2024)]
 #![no_main]
 
 extern crate panic_abort;
