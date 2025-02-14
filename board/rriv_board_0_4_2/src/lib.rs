@@ -28,7 +28,7 @@ use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
 use stm32f1xx_hal::spi::Spi;
 
-use rtt_target::rprintln;
+use rtt_target::{rprint, rprintln};
 use stm32f1xx_hal::rcc::{Clocks, CFGR};
 use stm32f1xx_hal::{
     gpio::{self, OpenDrain, Output},
@@ -110,6 +110,32 @@ pub struct Board {
     pub file_epoch: i64,
 }
 
+static mut STATE: State = State {
+    storage_offset: 0,
+    sense_key: None,
+    sense_key_code: None,
+    sense_qualifier: None,
+};
+
+static FAT: &[u8] = include_bytes!("../hello.world"); // part of fat12 fs with some data
+
+#[derive(Default)]
+struct State {
+    storage_offset: usize,
+    sense_key: Option<u8>,
+    sense_key_code: Option<u8>,
+    sense_qualifier: Option<u8>,
+}
+
+impl State {
+    fn reset(&mut self) {
+        self.storage_offset = 0;
+        self.sense_key = None;
+        self.sense_key_code = None;
+        self.sense_qualifier = None;
+    }
+}
+
 impl Board {
     pub fn start(&mut self) {
         rprintln!("starting board");
@@ -120,119 +146,134 @@ impl Board {
         self.storage.create_file(timestamp);
     }
 
-    // fn process_ufi_command(
-    //     mut command: Command<UfiCommand, Ufi<BulkOnly<UsbBus<USB>, &mut [u8]>>>,
-    // ) -> Result<(), TransportError<BulkOnlyError>> {
-    //     rprintln!("Handling: {}", command.kind);
-    
-    //     match command.kind {
-    //         UfiCommand::Inquiry { .. } => {
-    //             command.try_write_data_all(&[
-    //                 0x00, 0b10000000, 0, 0x01, 0x1F, 0, 0, 0, b'F', b'o', b'o', b' ', b'B', b'a', b'r',
-    //                 b'0', b'F', b'o', b'o', b' ', b'B', b'a', b'r', b'0', b'F', b'o', b'o', b' ', b'B',
-    //                 b'a', b'r', b'0', b'1', b'.', b'2', b'3',
-    //             ])?;
-    //             command.pass();
-    //         }
-    //         UfiCommand::StartStop { .. }
-    //         | UfiCommand::TestUnitReady
-    //         | UfiCommand::PreventAllowMediumRemoval { .. } => {
-    //             command.pass();
-    //         }
-    //         UfiCommand::ReadCapacity => {
-    //             command.try_write_data_all(&[0x00, 0x00, 0x0b, 0x3f, 0x00, 0x00, 0x02, 0x00])?;
-    //             command.pass();
-    //         }
-    //         UfiCommand::RequestSense { .. } => unsafe {
-    //             command.try_write_data_all(&[
-    //                 0x70, // error code
-    //                 0x00,
-    //                 STATE.sense_key.unwrap_or(0),
-    //                 0x00,
-    //                 0x00,
-    //                 0x00,
-    //                 0x00,
-    //                 0x0A, // additional length
-    //                 0x00,
-    //                 0x00,
-    //                 0x00,
-    //                 0x00,
-    //                 STATE.sense_key_code.unwrap_or(0),
-    //                 STATE.sense_qualifier.unwrap_or(0),
-    //                 0x00,
-    //                 0x00,
-    //                 0x00,
-    //                 0x00,
-    //             ])?;
-    //             STATE.reset();
-    //             command.pass();
-    //         },
-    //         UfiCommand::ModeSense { .. } => {
-    //             /* Read Only */
-    //             command.try_write_data_all(&[0x00, 0x46, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00])?;
-    
-    //             /* Read Write */
-    //             // command.try_write_data_all(&[0x00, 0x46, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00])?;
-    
-    //             command.pass();
-    //         }
-    //         UfiCommand::Write { .. } => {
-    //             command.pass();
-    //         }
-    //         UfiCommand::Read { lba, len } => unsafe {
-    //             let lba = lba as u32;
-    //             let len = len as u32;
-    //             if STATE.storage_offset != len as usize * BLOCK_SIZE {
-    //                 const DUMP_MAX_LBA: u32 = 0xCE;
-    //                 if lba < DUMP_MAX_LBA {
-    //                     /* requested data from dump */
-    //                     let start = (BLOCK_SIZE * lba as usize) + STATE.storage_offset;
-    //                     let end = (BLOCK_SIZE * lba as usize) + (BLOCK_SIZE as usize * len as usize);
-    //                     defmt::info!("Data transfer >>>>>>>> [{}..{}]", start, end);
-    //                     let count = command.write_data(&FAT[start..end])?;
-    //                     STATE.storage_offset += count;
-    //                 } else {
-    //                     /* fill with 0xF6 */
-    //                     loop {
-    //                         let count = command.write_data(&[0xF6; BLOCK_SIZE as usize])?;
-    //                         STATE.storage_offset += count;
-    //                         if count == 0 {
-    //                             break;
-    //                         }
-    //                     }
-    //                 }
-    //             } else {
-    //                 command.pass();
-    //                 STATE.storage_offset = 0;
-    //             }
-    //         },
-    //         ref unknown_ufi_kind => {
-    //             defmt::error!("Unknown UFI command: {}", unknown_ufi_kind);
-    //             unsafe {
-    //                 STATE.sense_key.replace(0x05); // illegal request
-    //                 STATE.sense_key_code.replace(0x20); // Invalid command operation
-    //                 STATE.sense_qualifier.replace(0x00); // Invalid command operation
-    //             }
-    //             command.fail();
-    //         }
-    //     }
-    // }
+    fn process_ufi_command(
+        mut command: Command<'_, UfiCommand, Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>>,
+    ) {
+        match command.kind {
+            UfiCommand::Inquiry { .. } => {
+                let restult = command.try_write_data_all(&[
+                    0x00, 0b10000000, 0, 0x01, 0x1F, 0, 0, 0, b'F', b'o', b'o', b' ', b'B', b'a',
+                    b'r', b'0', b'F', b'o', b'o', b' ', b'B', b'a', b'r', b'0', b'F', b'o', b'o',
+                    b' ', b'B', b'a', b'r', b'0', b'1', b'.', b'2', b'3',
+                ]);
+                command.pass();
+            }
+            UfiCommand::StartStop { .. }
+            | UfiCommand::TestUnitReady
+            | UfiCommand::PreventAllowMediumRemoval { .. } => {
+                command.pass();
+            }
+            UfiCommand::ReadCapacity => {
+                let _ =
+                    command.try_write_data_all(&[0x00, 0x00, 0x0b, 0x3f, 0x00, 0x00, 0x02, 0x00]);
+                command.pass();
+            }
+            UfiCommand::RequestSense { .. } => unsafe {
+                let result = command.try_write_data_all(&[
+                    0x70, // error code
+                    0x00,
+                    STATE.sense_key.unwrap_or(0),
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x0A, // additional length
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                    STATE.sense_key_code.unwrap_or(0),
+                    STATE.sense_qualifier.unwrap_or(0),
+                    0x00,
+                    0x00,
+                    0x00,
+                    0x00,
+                ]);
+                STATE.reset();
+                command.pass();
+            },
+            UfiCommand::ModeSense { .. } => {
+                /* Read Only */
+                let _ =
+                    command.try_write_data_all(&[0x00, 0x46, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00]);
+
+                /* Read Write */
+                // command.try_write_data_all(&[0x00, 0x46, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00])?;
+
+                command.pass();
+            }
+            UfiCommand::Write { .. } => {
+                command.pass();
+            }
+            UfiCommand::Read { lba, len } => unsafe {
+                let lba = lba as u32;
+                let len = len as u32;
+                if STATE.storage_offset != len as usize * BLOCK_SIZE {
+                    const DUMP_MAX_LBA: u32 = 0xCE;
+                    if lba < DUMP_MAX_LBA {
+                        /* requested data from dump */
+                        let start = (BLOCK_SIZE * lba as usize) + STATE.storage_offset;
+                        let end =
+                            (BLOCK_SIZE * lba as usize) + (BLOCK_SIZE as usize * len as usize);
+                        rprintln!("Data transfer >>>>>>>> [{}..{}]", start, end);
+                        let count = command.write_data(&FAT[start..end]).unwrap(); // TODO unwrap
+                        STATE.storage_offset += count;
+                    } else {
+                        /* fill with 0xF6 */
+                        loop {
+                            let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
+                            STATE.storage_offset += count;
+                            if count == 0 {
+                                break;
+                            }
+                        }
+                    }
+                } else {
+                    command.pass();
+                    STATE.storage_offset = 0;
+                }
+            },
+            ref unknown_ufi_kind => {
+                rprintln!("Unknown UFI command: {:?}", unknown_ufi_kind);
+                unsafe {
+                    STATE.sense_key.replace(0x05); // illegal request
+                    STATE.sense_key_code.replace(0x20); // Invalid command operation
+                    STATE.sense_qualifier.replace(0x00); // Invalid command operation
+                }
+                command.fail();
+            }
+        }
+    }
 }
 
 impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self) {
         self.file_epoch = self.epoch_timestamp();
-        // unsafe {
-        //     if let Some(ufi) = &mut UFI {
-        //         let _ = ufi.poll(|command| {
-        //             // led.set_low();
-        //             // if let Err(err) = process_ufi_command(command) {
-        //             //     // defmt::error!("{}", err);
-        //             //     rprintln!("{:?}", err);
-        //             // }
-        //         });
-        //     }
-        // }
+        // UFI should only get set up when the CLI sends a command to put the board into mass storage mode.
+
+        unsafe {
+        if let Some(usb_device) = &mut USB_DEVICE {
+            if matches!(usb_device.state(), UsbDeviceState::Default) {
+                unsafe {
+                    STATE.reset();
+                };
+            }
+        }
+        }
+
+        unsafe {
+            if let Some(ufi) = &mut UFI {
+                let _ = ufi.poll(|command| {
+                    // led.set_low();
+
+                    Board::process_ufi_command(command);
+                    // if let Err(err) = Board::process_ufi_command(command) {
+                    //     // defmt::error!("{}", err);
+                    //     rprintln!("{:?}", err);
+                    // }
+                });
+            }
+        }
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -686,13 +727,13 @@ impl BoardBuilder {
 
             USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
 
-            // let ufi = usbd_storage::subclass::ufi::Ufi::new(
-            //     USB_BUS.as_ref().unwrap(),
-            //     USB_PACKET_SIZE,
-            //     unsafe { USB_TRANSPORT_BUF.assume_init_mut().as_mut_slice() },
-            // )
-            // .unwrap();
-            // UFI = Some(ufi);
+            let ufi = usbd_storage::subclass::ufi::Ufi::new(
+                USB_BUS.as_ref().unwrap(),
+                USB_PACKET_SIZE,
+                unsafe { USB_TRANSPORT_BUF.assume_init_mut().as_mut_slice() },
+            )
+            .unwrap();
+            UFI = Some(ufi);
 
             let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
                 .device_class(USB_CLASS_CDC)
@@ -932,8 +973,6 @@ impl BoardBuilder {
         //     clocks,
         //     delay2,
         // );
-
-        
 
         let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
         storage.setup();

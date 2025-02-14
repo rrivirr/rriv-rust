@@ -20,8 +20,8 @@ debug =  true      #
 lto = false          # link-time optimizations
 panic = "unwind"
 
-[profile.dev.package.embedded-sdmmc]
-opt-level = 0 
+#[profile.dev.package.embedded-sdmmc]
+#opt-level = 0
 
 # Optimize all dependencies
 [profile.release.package."*"]
