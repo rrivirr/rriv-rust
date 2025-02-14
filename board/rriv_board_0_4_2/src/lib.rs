@@ -76,6 +76,7 @@ static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None))
 static mut USB_BUS: Option<UsbBusAllocator<UsbBusType>> = None;
 static mut USB_SERIAL: Option<usbd_serial::SerialPort<UsbBusType>> = None;
 static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
+static mut UFI: Option<Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>> = None;
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
@@ -118,11 +119,120 @@ impl Board {
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         self.storage.create_file(timestamp);
     }
+
+    // fn process_ufi_command(
+    //     mut command: Command<UfiCommand, Ufi<BulkOnly<UsbBus<USB>, &mut [u8]>>>,
+    // ) -> Result<(), TransportError<BulkOnlyError>> {
+    //     rprintln!("Handling: {}", command.kind);
+    
+    //     match command.kind {
+    //         UfiCommand::Inquiry { .. } => {
+    //             command.try_write_data_all(&[
+    //                 0x00, 0b10000000, 0, 0x01, 0x1F, 0, 0, 0, b'F', b'o', b'o', b' ', b'B', b'a', b'r',
+    //                 b'0', b'F', b'o', b'o', b' ', b'B', b'a', b'r', b'0', b'F', b'o', b'o', b' ', b'B',
+    //                 b'a', b'r', b'0', b'1', b'.', b'2', b'3',
+    //             ])?;
+    //             command.pass();
+    //         }
+    //         UfiCommand::StartStop { .. }
+    //         | UfiCommand::TestUnitReady
+    //         | UfiCommand::PreventAllowMediumRemoval { .. } => {
+    //             command.pass();
+    //         }
+    //         UfiCommand::ReadCapacity => {
+    //             command.try_write_data_all(&[0x00, 0x00, 0x0b, 0x3f, 0x00, 0x00, 0x02, 0x00])?;
+    //             command.pass();
+    //         }
+    //         UfiCommand::RequestSense { .. } => unsafe {
+    //             command.try_write_data_all(&[
+    //                 0x70, // error code
+    //                 0x00,
+    //                 STATE.sense_key.unwrap_or(0),
+    //                 0x00,
+    //                 0x00,
+    //                 0x00,
+    //                 0x00,
+    //                 0x0A, // additional length
+    //                 0x00,
+    //                 0x00,
+    //                 0x00,
+    //                 0x00,
+    //                 STATE.sense_key_code.unwrap_or(0),
+    //                 STATE.sense_qualifier.unwrap_or(0),
+    //                 0x00,
+    //                 0x00,
+    //                 0x00,
+    //                 0x00,
+    //             ])?;
+    //             STATE.reset();
+    //             command.pass();
+    //         },
+    //         UfiCommand::ModeSense { .. } => {
+    //             /* Read Only */
+    //             command.try_write_data_all(&[0x00, 0x46, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00])?;
+    
+    //             /* Read Write */
+    //             // command.try_write_data_all(&[0x00, 0x46, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00])?;
+    
+    //             command.pass();
+    //         }
+    //         UfiCommand::Write { .. } => {
+    //             command.pass();
+    //         }
+    //         UfiCommand::Read { lba, len } => unsafe {
+    //             let lba = lba as u32;
+    //             let len = len as u32;
+    //             if STATE.storage_offset != len as usize * BLOCK_SIZE {
+    //                 const DUMP_MAX_LBA: u32 = 0xCE;
+    //                 if lba < DUMP_MAX_LBA {
+    //                     /* requested data from dump */
+    //                     let start = (BLOCK_SIZE * lba as usize) + STATE.storage_offset;
+    //                     let end = (BLOCK_SIZE * lba as usize) + (BLOCK_SIZE as usize * len as usize);
+    //                     defmt::info!("Data transfer >>>>>>>> [{}..{}]", start, end);
+    //                     let count = command.write_data(&FAT[start..end])?;
+    //                     STATE.storage_offset += count;
+    //                 } else {
+    //                     /* fill with 0xF6 */
+    //                     loop {
+    //                         let count = command.write_data(&[0xF6; BLOCK_SIZE as usize])?;
+    //                         STATE.storage_offset += count;
+    //                         if count == 0 {
+    //                             break;
+    //                         }
+    //                     }
+    //                 }
+    //             } else {
+    //                 command.pass();
+    //                 STATE.storage_offset = 0;
+    //             }
+    //         },
+    //         ref unknown_ufi_kind => {
+    //             defmt::error!("Unknown UFI command: {}", unknown_ufi_kind);
+    //             unsafe {
+    //                 STATE.sense_key.replace(0x05); // illegal request
+    //                 STATE.sense_key_code.replace(0x20); // Invalid command operation
+    //                 STATE.sense_qualifier.replace(0x00); // Invalid command operation
+    //             }
+    //             command.fail();
+    //         }
+    //     }
+    // }
 }
 
 impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self) {
         self.file_epoch = self.epoch_timestamp();
+        // unsafe {
+        //     if let Some(ufi) = &mut UFI {
+        //         let _ = ufi.poll(|command| {
+        //             // led.set_low();
+        //             // if let Err(err) = process_ufi_command(command) {
+        //             //     // defmt::error!("{}", err);
+        //             //     rprintln!("{:?}", err);
+        //             // }
+        //         });
+        //     }
+        // }
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -576,12 +686,13 @@ impl BoardBuilder {
 
             USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
 
-            let mut ufi = usbd_storage::subclass::ufi::Ufi::new(
-                USB_BUS.as_ref().unwrap(),
-                USB_PACKET_SIZE,
-                unsafe { USB_TRANSPORT_BUF.assume_init_mut().as_mut_slice() },
-            )
-            .unwrap();
+            // let ufi = usbd_storage::subclass::ufi::Ufi::new(
+            //     USB_BUS.as_ref().unwrap(),
+            //     USB_PACKET_SIZE,
+            //     unsafe { USB_TRANSPORT_BUF.assume_init_mut().as_mut_slice() },
+            // )
+            // .unwrap();
+            // UFI = Some(ufi);
 
             let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
                 .device_class(USB_CLASS_CDC)
@@ -825,6 +936,7 @@ impl BoardBuilder {
         
 
         let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
+        storage.setup();
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);
 

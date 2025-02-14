@@ -17,9 +17,11 @@ lto = true          # link-time optimizations
 #opt-level = 'z'     # optimize for size and don't unroll loops
 codegen-units = 1 # setting this to 1 causes better optimizations, but slower code. setting it higher makes compiling parallelizable
 debug =  true      # 
-lto = true          # link-time optimizations
+lto = false          # link-time optimizations
 panic = "unwind"
 
+[profile.dev.package.embedded-sdmmc]
+opt-level = 0 
 
 # Optimize all dependencies
 [profile.release.package."*"]
@@ -27,5 +29,8 @@ opt-level = "z"
 
 [profile.dev.package."*"]
 opt-level = "z"
+
+
+
 
 

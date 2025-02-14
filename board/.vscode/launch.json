@@ -13,7 +13,7 @@
             //           "probe": "1366:0101:000801023227", // Modify to match yours if needed, or keep commented
             "flashingConfig": {
                 "flashingEnabled": true,
-                "resetAfterFlashing": true,
+                // "resetAfterFlashing": true,
                 "haltAfterReset": false
             },
             "coreConfigs": [

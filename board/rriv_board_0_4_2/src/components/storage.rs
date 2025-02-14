@@ -10,9 +10,6 @@ use embedded_hal::{
 
 use stm32f1xx_hal::spi::{Mode, Phase, Polarity, Spi, SpiReadWrite};
 
-// use embassy_embedded_hal::shared_bus::blocking::spi::SpiDevice;
-// use embassy_stm32::spi::Spi;
-
 use embedded_sdmmc::{
     BlockDevice, Directory, File, RawDirectory, RawFile, SdCard, SdCardError, TimeSource,
     Timestamp, Volume, VolumeManager,
@@ -91,8 +88,45 @@ impl MainSpi {
                         break;
                     }
                     Err(error) => match error {
-                        nb::Error::Other(other_error) => return Err(other_error),
-                        nb::Error::WouldBlock => continue,
+                        nb::Error::Other(other_error) => {
+                            rprintln!("{:?}", other_error);
+                            return Err(other_error);
+                        }
+                        nb::Error::WouldBlock => {
+                            rprintln!("{:?}", error);
+                            continue;
+                        }
+                    },
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn write_spi(&mut self, buf: &[u8], ignore: bool) -> Result<(), stm32f1xx_hal::spi::Error> {
+        for i in 0..buf.len() {
+            loop {
+                match self.spi.write_nonblocking(buf[i]) {
+                    Ok(_) => {
+                        while !self.spi.is_tx_empty() {}
+                        if ignore {
+                            while self.spi.is_rx_not_empty() {
+                                let _ = self.spi.read_data_reg(); // ignore what comes back and clear the rx register to prevent an overrun
+                            }
+                        }
+                        break;
+                    }
+
+                    Err(error) => match error {
+                        nb::Error::Other(other_error) => {
+                            rprintln!("{:?}", other_error);
+                            return Err(other_error);
+                        }
+                        nb::Error::WouldBlock => {
+                            rprintln!("{:?}", error);
+                            continue;
+                        }
                     },
                 }
             }
@@ -113,40 +147,69 @@ impl SpiDevice for MainSpi {
 
         // self.cs.set_low().map_err(SpiDeviceError::Cs)?;
 
-        self.cs.set_low();
+        // self.cs.set_low();
 
         let op_res = operations.iter_mut().try_for_each(|op| match op {
             embedded_hal::spi::Operation::Read(buf) => {
+                // while self.spi.is_busy() {}
+                rprintln!("{:?}", "spi read");
+
                 return match self.read_spi(buf) {
                     Ok(_) => Ok(()),
                     Err(error) => Err(error),
-                }
+                };
             }
             embedded_hal::spi::Operation::Write(buf) => {
-                self.spi.spi_write(buf);
-                return Ok(());
+                // while self.spi.is_busy() {}
+                // while self.spi.is_rx_not_empty() {
+                //     self.spi.read_data_reg();
+                // }
+                rprintln!("{:?}", "spi write");
+
+                return match self.write_spi(buf, true) {
+                    Ok(_) => Ok(()),
+                    Err(error) => {
+                        rprintln!("{:?}", error);
+                        Err(error)
+                    }
+                };
             }
             embedded_hal::spi::Operation::Transfer(read, write) => {
-                match self.spi.spi_write(write) {
+
+                rprintln!("{:?}", "spi transfer");
+
+                // while self.spi.is_busy() {}
+                match self.write_spi(write, false) {
                     Ok(_) => {}
                     Err(error) => return Err(error),
                 }
 
-                return match self.read_spi(read) {
+                // while self.spi.is_busy() {}
+                let returnval = match self.read_spi(read) {
                     Ok(_) => Ok(()),
                     Err(error) => Err(error),
                 };
+
+                return returnval;
             }
             embedded_hal::spi::Operation::TransferInPlace(buf) => {
-                match self.spi.spi_write(buf) {
-                    Ok(_) => {}
-                    Err(error) => return Err(error),
-                }
+                rprintln!("{:?}", "spi transfer in place");
 
-                return match self.read_spi(buf) {
-                    Ok(_) => Ok(()),
-                    Err(error) => Err(error),
-                };
+                for i in 0..buf.len() {
+                    let mut place : [u8; 1] = [buf[i]; 1];
+                    match self.write_spi(&place, false) {
+                        Ok(_) => {}
+                        Err(error) => return Err(error),
+                    }
+
+                    match self.read_spi(&mut place) {
+                        Ok(_) => {
+                            buf[i] = place[0];
+                        },
+                        Err(error) => return Err(error),
+                    };
+                }
+                Ok(())
             }
 
             #[cfg(not(feature = "time"))]
@@ -159,7 +222,10 @@ impl SpiDevice for MainSpi {
             }
         });
 
-        self.cs.set_high();
+
+        rprintln!("{:?}", "spi op complete");
+
+        // self.cs.set_high();
 
         // On failure, it's important to still flush and deassert CS.
         //  let flush_res = bus.flush();
@@ -195,7 +261,7 @@ struct StorageDelay {
 
 impl DelayNs for StorageDelay {
     fn delay_ns(&mut self, ns: u32) {
-        self.delay_us(ns * 1000);
+        embedded_hal::delay::DelayNs::delay_us(&mut self.delay, 10);
     }
 }
 
@@ -203,7 +269,7 @@ pub fn build(
     pins: Spi2Pins,
     spi_peripheral: SPI2,
     clocks: Clocks,
-    delay: DelayUs<TIM2>,
+    mut delay: DelayUs<TIM2>,
 ) -> components::storage::Storage {
     let spi2 = spi_peripheral.spi(
         (Some(pins.sck), Some(pins.miso), Some(pins.mosi)),
@@ -214,15 +280,13 @@ pub fn build(
 
     // Spi::new(SPI2, pins, mode, freq, &clocks);
 
-    // pins.sd_card_chip_select.into_open_drain_output(cr)
-    let myspi = MainSpi {
-        spi: spi2,
-        cs: pins.sd_card_chip_select,
-    };
+    let mut cs = pins.sd_card_chip_select;
+    cs.set_low();
+
+    let mut myspi = MainSpi { spi: spi2, cs: cs };
 
     // spi2.
 
-    // let spi2 = Spi::new_blocking(peri, pins.sck, pins.mosi, miso, embassy_stm32::spi::Config::default());
     // let spi2 = Spi::new_blocking(SPI2, pins.sck, pins.mosi, pins.miso, Config::default());
     // let spi = SpiDevice::new(&spi2, cs);
 
@@ -232,7 +296,12 @@ pub fn build(
     // let sdmmc_spi = embedded_hal_bus::spi::RefCellDevice::new(&spi_bus, DummyCsPin, delay).unwrap();
     // only one SPI device on this bus, can we avoid using embedded_hal_bus?
 
+    embedded_hal::delay::DelayNs::delay_us(&mut delay, 10);
     let storage_delay = StorageDelay { delay };
+
+    while myspi.spi.is_rx_not_empty() {
+        myspi.spi.read_data_reg();
+    }
 
     let sdcard = embedded_sdmmc::SdCard::new(myspi, storage_delay);
 
@@ -288,11 +357,12 @@ pub struct Storage {
 }
 
 impl Storage {
-    pub fn new(// , time_source: impl TimeSource //  a timesource passed in here could use unsafe access to internal RTC or i2c bus
-        sd_card: SdCard<MainSpi, StorageDelay>
+    pub fn new(
+        // , time_source: impl TimeSource //  a timesource passed in here could use unsafe access to internal RTC or i2c bus
+        sd_card: SdCard<MainSpi, StorageDelay>,
     ) -> Self {
         let time_source = RrivTimeSource::new(); // unsafe access to the board
-                                                //  or global time var via interrupt
+                                                 //  or global time var via interrupt
                                                  // or copy into a global variable at the top of the run loop
         rprintln!("set up sdcard");
 
@@ -341,7 +411,6 @@ impl Storage {
         // let root_dir = root_dir.to_raw_directory();
         // root_dir.to_raw_directory()
 
-
         let mut volume_manager = embedded_sdmmc::VolumeManager::new(sd_card, time_source);
 
         // rprintln!("set up volume");
@@ -355,7 +424,6 @@ impl Storage {
         //         }
         //         Err(error) => panic!("Volume 0 error: {:?}", error),
         //     };
-
 
         Storage {
             volume_manager: volume_manager,
@@ -377,19 +445,15 @@ impl Storage {
 
     // }
 
-    pub fn setup<'a>(&'a mut  self, sd_card: SdCard<MainSpi, StorageDelay>) {
-        let time_source = RrivTimeSource::new(); // unsafe access to the board
-                                                 // or global time var via interrupt
-                                                 // or copy into a global variable at the top of the run loop
+    pub fn setup<'a>(&'a mut self) {
+        // let time_source = RrivTimeSource::new(); // unsafe access to the board
+        // or global time var via interrupt
+        // or copy into a global variable at the top of the run loop
         rprintln!("set up sdcard");
-
 
         let v = &mut self.volume_manager;
 
-       
         // self.volume_manager = Some(volume_manager);
-
-
 
         rprintln!("set up volume");
 
@@ -400,11 +464,13 @@ impl Storage {
                     rprintln!("Volume 0 Success: {:?}", volume0);
                     volume0
                 }
-                Err(error) => panic!("Volume 0 error: {:?}", error),
+                Err(error) => {
+                    rprintln!("Volume 0 error: {:?}", error);
+                    panic!("Volume 0 error: {:?}", error);
+                }
             };
 
         // self.volume = Some(volume);
-
 
         let mut root_dir: Directory<'_, SdCard<MainSpi, StorageDelay>, RrivTimeSource, 4, 4, 1> =
             match volume.open_root_dir() {
@@ -413,8 +479,6 @@ impl Storage {
             };
 
         self.root_dir = Some(root_dir.to_raw_directory());
-
-        
     }
 
     pub fn reopen_file(&mut self) {
@@ -437,16 +501,19 @@ impl Storage {
         rprintln!("Filename: {:?}", filename);
 
         let root_dir = self.root_dir.unwrap();
-        let file = self.volume_manager.open_file_in_dir(root_dir, filename, embedded_sdmmc::Mode::ReadWriteCreateOrAppend);
-        
+        let file = self.volume_manager.open_file_in_dir(
+            root_dir,
+            filename,
+            embedded_sdmmc::Mode::ReadWriteCreateOrAppend,
+        );
 
         let my_file = match file {
-                Ok(file) => file,
-                Err(error) => {
-                    rprintln!("{:?}", error);
-                    panic!();
-                }
-            };
+            Ok(file) => file,
+            Err(error) => {
+                rprintln!("{:?}", error);
+                panic!();
+            }
+        };
         self.file = Some(my_file);
         self.root_dir = Some(root_dir);
 
@@ -515,17 +582,17 @@ impl Storage {
     }
 
     pub fn flush(&mut self) {
-        // if let Some(file) = self.file {
-        //     let cache_data = &self.cache[0..self.next_position];
-        //     match self.volume_manager.write(file, cache_data) {
-        //         Ok(ret) => rprintln!("Success: {:?}", ret),
-        //         Err(err) => rprintln!("Err: {:?}", err),
-        //     }
+        if let Some(file) = self.file {
+            let cache_data = &self.cache[0..self.next_position];
+            match self.volume_manager.write(file, cache_data) {
+                Ok(ret) => rprintln!("Success: {:?}", ret),
+                Err(err) => rprintln!("Err: {:?}", err),
+            }
 
-        //     self.volume_manager.close_file(file);
-        //     self.reopen_file();
-        //     self.next_position = 0;
-        // }
+            let _ = self.volume_manager.close_file(file);
+            self.reopen_file();
+            self.next_position = 0;
+        }
     }
 
     pub fn write(&mut self, data: &[u8], timestamp: i64) {

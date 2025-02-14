@@ -346,6 +346,9 @@ impl DataLogger {
         rprintln!("done loading sensors");
 
         self.write_column_headers_to_storage(board);
+
+        rprintln!("done loading sensors");
+
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {

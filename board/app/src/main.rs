@@ -26,7 +26,7 @@ fn main() -> ! {
     prelude::init();
 
     let mut board = rriv_board_0_4_2::build();
-    board.start(); // not needed, for debug only
+    board.start();
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
     loop {
