@@ -27,8 +27,8 @@ static mut COMMAND_DATA: CommandData = CommandData::default();
 
 #[derive(Serialize, Deserialize, Debug)]
 struct CLICommand<'a> {
-    object: &'a str,
-    action: &'a str,
+    object: &'a str,   // the type of thing we are acting on in this command - the noun
+    action: &'a str,   // the action to take on the object of this command - the verb
 }
 
 // impl CommandService {

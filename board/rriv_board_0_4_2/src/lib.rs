@@ -735,7 +735,7 @@ impl BoardBuilder {
             .unwrap();
             UFI = Some(ufi);
 
-            let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
+            let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x298))
                 .device_class(USB_CLASS_CDC)
                 .self_powered(false)
                 .strings(&[StringDescriptors::default()
