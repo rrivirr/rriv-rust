@@ -312,17 +312,7 @@ pub fn build(
                                              // or copy into a global variable at the top of the run loop
     rprintln!("set up sdcard");
 
-    let mut volume_manager = embedded_sdmmc::VolumeManager::new(sdcard, time_source);
-
-    // rprintln!("set up volume");
-
-    // let mut volume = match volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0)) {
-    //     Ok(volume0) => {
-    //         rprintln!("Volume 0 Success: {:?}", volume0);
-    //         volume0
-    //     }
-    //     Err(error) => panic!("Volume 0 error: {:?}", error),
-    // };
+    let volume_manager = embedded_sdmmc::VolumeManager::new(sdcard, time_source);
 
     Storage {
         volume_manager: volume_manager,
@@ -412,6 +402,14 @@ impl Storage {
         // root_dir.to_raw_directory()
 
         let mut volume_manager = embedded_sdmmc::VolumeManager::new(sd_card, time_source);
+
+
+        // sd_card.num_bytes() //the size
+        // volume_manager.device().read(blocks, start_block_idx, reason)
+
+        // sd_card.num_blocks();
+        // sd_card.read(blocks, start_block_idx, reason);
+        // sd_card.write(blocks, start_block_idx);
 
         // rprintln!("set up volume");
 
@@ -615,6 +613,8 @@ impl Storage {
             rprintln!("File not open");
         }
     }
+
+   
 
     // pub fn write(&mut self, data: &[u8]){
 

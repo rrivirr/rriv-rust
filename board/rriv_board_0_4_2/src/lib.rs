@@ -78,6 +78,83 @@ static mut USB_SERIAL: Option<usbd_serial::SerialPort<UsbBusType>> = None;
 static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
 static mut UFI: Option<Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>> = None;
 
+const UFI_COMMAND_BUFFER_SIZE: usize = 10;
+pub struct UfiCommandData {
+    pub buffer: [Option<
+        Command<'static, UfiCommand, Ufi<BulkOnly<'static, UsbBus<Peripheral>, &'static mut [u8]>>>,
+    >; UFI_COMMAND_BUFFER_SIZE],
+    pub cur: usize,
+    pub end: usize,
+}
+
+impl UfiCommandData {
+    pub const fn default() -> Self {
+        Self {
+            cur: 0,
+            end: UFI_COMMAND_BUFFER_SIZE - 1,
+            buffer: [const { None }; UFI_COMMAND_BUFFER_SIZE],
+        }
+    }
+}
+
+static mut UFI_COMMAND_QUEUE: UfiCommandData = UfiCommandData::default();
+
+// pub fn ufi_queue_command(command_data: &mut UfiCommandData, command: u8) {
+//     let receiving = command_data.receiving;
+//     let starting = character == b'{';
+
+//     if receiving && starting {
+//         // meaningless character
+//         return;
+//     }
+
+//     if receiving && (character == b'\r' || character == b'\n') {
+//         command_data.receiving = false;
+//         command_data.cur = (command_data.cur + 1) % BUFFER_NUM;
+//         return;
+//     }
+
+//     if starting {
+//         if command_data.cur == command_data.end {
+//             // circular buffer is full
+//             return;
+//         }
+//         command_data.receiving = true;
+//         command_data.command_pos = 0;
+//     }
+
+//     if !receiving && !starting {
+//         return;
+//     }
+
+//     let cur = command_data.cur;
+//     let pos: usize = command_data.command_pos;
+//     command_data.buffer[cur][pos] = character;
+//     if pos < BUFFER_SIZE - 1 {
+//         command_data.command_pos = command_data.command_pos + 1;
+//     }
+// }
+
+// pub fn pending_message_count(command_data: &CommandData) -> usize {
+//     if command_data.cur >= (command_data.end + 1) % BUFFER_NUM {
+//         return command_data.cur - (command_data.end + 1) % BUFFER_NUM;
+//     } else {
+//         return command_data.cur + BUFFER_NUM - (command_data.end + 1) % BUFFER_NUM;
+//     }
+// }
+
+// pub fn take_command(command_data: &mut CommandData) -> [u8; BUFFER_SIZE] {
+//     // clone the command bytes buffer so the caller isn't borrowing the command_data buffer
+//     let buffer_index = (command_data.end + 1) % BUFFER_NUM;
+//     let command = command_data.buffer[buffer_index].clone();
+//     // null the buffer
+//     command_data.buffer[buffer_index] = [b'\0'; BUFFER_SIZE];
+//     // move the end marker, effectively marking the buffer as ready for use again
+//     command_data.end = buffer_index;
+
+//     return command;
+// }
+
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
@@ -117,7 +194,7 @@ static mut STATE: State = State {
     sense_qualifier: None,
 };
 
-static FAT: &[u8] = include_bytes!("../hello.world.img"); // part of fat12 fs with some data
+// static FAT: &[u8] = include_bytes!("../hello.world.img"); // part of fat12 fs with some data
 
 #[derive(Default)]
 struct State {
@@ -151,10 +228,17 @@ impl Board {
     ) {
         match command.kind {
             UfiCommand::Inquiry { .. } => {
-                let restult = command.try_write_data_all(&[
-                    0x00, 0b10000000, 0, 0x01, 0x1F, 0, 0, 0, b'F', b'o', b'o', b' ', b'B', b'a',
-                    b'r', b'0', b'F', b'o', b'o', b' ', b'B', b'a', b'r', b'0', b'F', b'o', b'o',
-                    b' ', b'B', b'a', b'r', b'0', b'1', b'.', b'2', b'3',
+                // return device information
+                let result = command.try_write_data_all(&[
+                    0x00, 0b10000000, // removable media bit
+                    0,          // always zeros for UFI
+                    0x01,       // response data format always 1 for UFI
+                    0x1F,       // always 1F for UFI
+                    0, 0, 0, // reserved
+                    b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', // vendor
+                    b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
+                    b' ', b' ', b' ', // product
+                    b'0', b'.', b'4', b'0', // todo: Firmware Version
                 ]);
                 command.pass();
             }
@@ -206,6 +290,25 @@ impl Board {
                 command.pass();
             }
             UfiCommand::Read { lba, len } => unsafe {
+                // storage offset might be the size ?
+
+                let lba = lba as u32;
+                let len = len as u32;
+                if STATE.storage_offset != len as usize * BLOCK_SIZE {
+                    loop {
+                        let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
+                        STATE.storage_offset += count;
+                        if count == 0 {
+                            break;
+                        }
+                    }
+                } else {
+                    command.pass();
+                    STATE.storage_offset = 0;
+                }
+
+                return;
+
                 let lba = lba as u32;
                 let len = len as u32;
                 if STATE.storage_offset != len as usize * BLOCK_SIZE {
@@ -216,8 +319,8 @@ impl Board {
                         let end =
                             (BLOCK_SIZE * lba as usize) + (BLOCK_SIZE as usize * len as usize);
                         rprintln!("Data transfer >>>>>>>> [{}..{}]", start, end);
-                        let count = command.write_data(&FAT[start..end]).unwrap(); // TODO unwrap
-                        STATE.storage_offset += count;
+                        // let count = command.write_data(&FAT[start..end]).unwrap(); // TODO unwrap
+                        // STATE.storage_offset += count;
                     } else {
                         /* fill with 0xF6 */
                         loop {
@@ -275,8 +378,6 @@ impl RRIVBoard for Board {
         // unsafe {
         //     if let Some(ufi) = &mut UFI {
         //         let _ = ufi.poll(|command| {
-        //             // led.set_low();
-
         //             Board::process_ufi_command(command);
         //             // if let Err(err) = Board::process_ufi_command(command) {
         //             //     // defmt::error!("{}", err);
@@ -571,14 +672,13 @@ fn usb_interrupt(cs: &CriticalSection) {
     let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
     let ufi = unsafe { UFI.as_mut().unwrap() };
 
-
-        //     if let Some(usb_device) = &mut USB_DEVICE {
-        //         if matches!(usb_device.state(), UsbDeviceState::Default) {
-        //             unsafe {
-        //                 STATE.reset();
-        //             };
-        //         }
-        //     }
+    //     if let Some(usb_device) = &mut USB_DEVICE {
+    //         if matches!(usb_device.state(), UsbDeviceState::Default) {
+    //             unsafe {
+    //                 STATE.reset();
+    //             };
+    //         }
+    //     }
 
     if !usb_dev.poll(&mut [serial, ufi]) {
         return;
@@ -587,14 +687,17 @@ fn usb_interrupt(cs: &CriticalSection) {
     let _ = ufi.poll(|command| {
         // led.set_low();
 
+        // unsafe {
+        //     command.clone();
+        //     UFI_COMMAND_QUEUE.buffer[0] = Some(command);
+        // }
+
         Board::process_ufi_command(command);
         // if let Err(err) = Board::process_ufi_command(command) {
         //     // defmt::error!("{}", err);
         //     rprintln!("{:?}", err);
         // }
     });
-
-    
 
     let mut buf = [0u8; 8];
 
@@ -768,16 +871,15 @@ impl BoardBuilder {
             .unwrap();
             UFI = Some(ufi);
 
-            let usb_dev =
-                UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
-                    .device_class(USB_CLASS_CDC)
-                    .self_powered(false)
-                    .strings(&[StringDescriptors::default()
-                        .manufacturer("RRIV")
-                        .product("RRIV Data Logger")
-                        .serial_number("_rriv")])
-                    .unwrap()
-                    .build();
+            let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
+                .device_class(USB_CLASS_CDC)
+                .self_powered(false)
+                .strings(&[StringDescriptors::default()
+                    .manufacturer("RRIV")
+                    .product("RRIV Data Logger")
+                    .serial_number("_rriv")])
+                .unwrap()
+                .build();
 
             USB_DEVICE = Some(usb_dev);
         }
@@ -997,35 +1099,15 @@ impl BoardBuilder {
         self.gpio = Some(dynamic_gpio_pins);
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
-        // delay2.delay(2);
         rprintln!("{:?}", clocks);
-
-        // let mut storage = storage::build(
-        //     spi1_pins,
-        //     device_peripherals.SPI1,
-        //     &mut afio.mapr,
-        //     clocks,
-        //     delay2,
-        // );
 
         let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
         storage.setup();
+        STORAGE = Some(storage);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);
 
         self.storage = Some(storage);
-
-        // // let spi_mode = Mode {
-        // //     polarity: Polarity::IdleLow,
-        // //     phase: Phase::CaptureOnFirstTransition,
-        // // };
-        // let spi2 = Spi::spi2(
-        //     device_peripherals.SPI2,
-        //     (spi2_pins.sck, spi2_pins.miso, spi2_pins.mosi),
-        //     MODE,
-        //     1.MHz(),
-        //     clocks,
-        // );
         rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);
