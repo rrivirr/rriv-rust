@@ -117,7 +117,7 @@ static mut STATE: State = State {
     sense_qualifier: None,
 };
 
-static FAT: &[u8] = include_bytes!("../hello.world"); // part of fat12 fs with some data
+static FAT: &[u8] = include_bytes!("../hello.world.img"); // part of fat12 fs with some data
 
 #[derive(Default)]
 struct State {
@@ -251,29 +251,40 @@ impl RRIVBoard for Board {
         self.file_epoch = self.epoch_timestamp();
         // UFI should only get set up when the CLI sends a command to put the board into mass storage mode.
 
-        unsafe {
-        if let Some(usb_device) = &mut USB_DEVICE {
-            if matches!(usb_device.state(), UsbDeviceState::Default) {
-                unsafe {
-                    STATE.reset();
-                };
-            }
-        }
-        }
+        // unsafe {
+        //     if let Some(usb_device) = &mut USB_DEVICE {
+        //         if let Some(ufi) = &mut UFI {
+        //             loop {
+        //                 if !usb_device.poll(&mut [ufi]) {
+        //                     continue;
+        //                 }
+        //                 break;
+        //             }
+        //         }
+        //     }
 
-        unsafe {
-            if let Some(ufi) = &mut UFI {
-                let _ = ufi.poll(|command| {
-                    // led.set_low();
+        //     if let Some(usb_device) = &mut USB_DEVICE {
+        //         if matches!(usb_device.state(), UsbDeviceState::Default) {
+        //             unsafe {
+        //                 STATE.reset();
+        //             };
+        //         }
+        //     }
+        // }
 
-                    Board::process_ufi_command(command);
-                    // if let Err(err) = Board::process_ufi_command(command) {
-                    //     // defmt::error!("{}", err);
-                    //     rprintln!("{:?}", err);
-                    // }
-                });
-            }
-        }
+        // unsafe {
+        //     if let Some(ufi) = &mut UFI {
+        //         let _ = ufi.poll(|command| {
+        //             // led.set_low();
+
+        //             Board::process_ufi_command(command);
+        //             // if let Err(err) = Board::process_ufi_command(command) {
+        //             //     // defmt::error!("{}", err);
+        //             //     rprintln!("{:?}", err);
+        //             // }
+        //         });
+        //     }
+        // }
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -558,10 +569,32 @@ fn USB_LP_CAN_RX0() {
 fn usb_interrupt(cs: &CriticalSection) {
     let usb_dev = unsafe { USB_DEVICE.as_mut().unwrap() };
     let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
+    let ufi = unsafe { UFI.as_mut().unwrap() };
 
-    if !usb_dev.poll(&mut [serial]) {
+
+        //     if let Some(usb_device) = &mut USB_DEVICE {
+        //         if matches!(usb_device.state(), UsbDeviceState::Default) {
+        //             unsafe {
+        //                 STATE.reset();
+        //             };
+        //         }
+        //     }
+
+    if !usb_dev.poll(&mut [serial, ufi]) {
         return;
     }
+
+    let _ = ufi.poll(|command| {
+        // led.set_low();
+
+        Board::process_ufi_command(command);
+        // if let Err(err) = Board::process_ufi_command(command) {
+        //     // defmt::error!("{}", err);
+        //     rprintln!("{:?}", err);
+        // }
+    });
+
+    
 
     let mut buf = [0u8; 8];
 
@@ -735,15 +768,16 @@ impl BoardBuilder {
             .unwrap();
             UFI = Some(ufi);
 
-            let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x298))
-                .device_class(USB_CLASS_CDC)
-                .self_powered(false)
-                .strings(&[StringDescriptors::default()
-                    .manufacturer("RRIV")
-                    .product("RRIV Data Logger")
-                    .serial_number("_rriv")])
-                .unwrap()
-                .build();
+            let usb_dev =
+                UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
+                    .device_class(USB_CLASS_CDC)
+                    .self_powered(false)
+                    .strings(&[StringDescriptors::default()
+                        .manufacturer("RRIV")
+                        .product("RRIV Data Logger")
+                        .serial_number("_rriv")])
+                    .unwrap()
+                    .build();
 
             USB_DEVICE = Some(usb_dev);
         }
