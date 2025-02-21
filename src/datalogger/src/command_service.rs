@@ -141,7 +141,7 @@ where
 
 #[macro_export]
 macro_rules!  parse_command_to_payload {
-    ($payload_type:ty, $variant:path, $command_cstr:expr ) => {
+    ($payload_type:ty, $variant:path, $command_cstr:expr) => {
         let result = parse_command::<$payload_type>($command_cstr);
         match result {
             Ok(payload) => return Ok($variant(payload)),

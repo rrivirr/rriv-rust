@@ -385,6 +385,11 @@ impl DataLogger {
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
+
+        //
+        // Process incoming commands
+        //
+
         //todo: refactor to use Result<T,E>
         let get_command_result = command_service::get_pending_command(board);
         if let Some(get_command_result) = get_command_result {
@@ -406,7 +411,11 @@ impl DataLogger {
             }
         }
 
-        // do the measurement cycle stuff
+
+        //
+        // Do the measurement cycle
+        //
+        // 
         // implement interactive mode logging first
 
         self.update_actuators(board);
@@ -424,6 +433,8 @@ impl DataLogger {
                                                               // writeRawMeasurementToLogFile();
                                                               // fileSystemWriteCache->flushCache();
                 self.write_last_measurement_to_storage(board);
+
+                // self.transmit_lorawan();
 
                 self.last_interactive_log_time = board.timestamp();
             }

@@ -100,8 +100,8 @@ pub trait SensorDriverServices {
     fn ic2_write(&mut self, addr: u8, message: &[u8]) -> Result<(), ()>;
 
     fn write_gpio_pin(&mut self, pin: u8, value: bool);
-    // fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]);
-    // fn ic2_write(&mut self, addr: u8, message: &[u8]);
+    // fn read_gpio_pin(&mut self, pin: u8) -> bool;
+
     // fn borrow_one_wire_bus(&mut self) -> &mut dyn OneWireBusInterface;
 
     fn one_wire_send_command(&mut self, command: u8, address: u64);
