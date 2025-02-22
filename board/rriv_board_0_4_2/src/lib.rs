@@ -4,16 +4,10 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::format;
+use embedded_sdmmc::{Block, BlockDevice};
 
 use core::{
-    cell::RefCell,
-    concat,
-    default::Default,
-    format_args,
-    mem::MaybeUninit,
-    ops::DerefMut,
-    option::Option::{self, *},
-    result::Result::*,
+    cell::RefCell, concat, default::Default, format_args, mem::MaybeUninit, num, ops::DerefMut, option::Option::{self, *}, result::Result::*
 };
 use core::{mem, result};
 use cortex_m::{
@@ -77,83 +71,7 @@ static mut USB_BUS: Option<UsbBusAllocator<UsbBusType>> = None;
 static mut USB_SERIAL: Option<usbd_serial::SerialPort<UsbBusType>> = None;
 static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
 static mut UFI: Option<Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>> = None;
-
-const UFI_COMMAND_BUFFER_SIZE: usize = 10;
-pub struct UfiCommandData {
-    pub buffer: [Option<
-        Command<'static, UfiCommand, Ufi<BulkOnly<'static, UsbBus<Peripheral>, &'static mut [u8]>>>,
-    >; UFI_COMMAND_BUFFER_SIZE],
-    pub cur: usize,
-    pub end: usize,
-}
-
-impl UfiCommandData {
-    pub const fn default() -> Self {
-        Self {
-            cur: 0,
-            end: UFI_COMMAND_BUFFER_SIZE - 1,
-            buffer: [const { None }; UFI_COMMAND_BUFFER_SIZE],
-        }
-    }
-}
-
-static mut UFI_COMMAND_QUEUE: UfiCommandData = UfiCommandData::default();
-
-// pub fn ufi_queue_command(command_data: &mut UfiCommandData, command: u8) {
-//     let receiving = command_data.receiving;
-//     let starting = character == b'{';
-
-//     if receiving && starting {
-//         // meaningless character
-//         return;
-//     }
-
-//     if receiving && (character == b'\r' || character == b'\n') {
-//         command_data.receiving = false;
-//         command_data.cur = (command_data.cur + 1) % BUFFER_NUM;
-//         return;
-//     }
-
-//     if starting {
-//         if command_data.cur == command_data.end {
-//             // circular buffer is full
-//             return;
-//         }
-//         command_data.receiving = true;
-//         command_data.command_pos = 0;
-//     }
-
-//     if !receiving && !starting {
-//         return;
-//     }
-
-//     let cur = command_data.cur;
-//     let pos: usize = command_data.command_pos;
-//     command_data.buffer[cur][pos] = character;
-//     if pos < BUFFER_SIZE - 1 {
-//         command_data.command_pos = command_data.command_pos + 1;
-//     }
-// }
-
-// pub fn pending_message_count(command_data: &CommandData) -> usize {
-//     if command_data.cur >= (command_data.end + 1) % BUFFER_NUM {
-//         return command_data.cur - (command_data.end + 1) % BUFFER_NUM;
-//     } else {
-//         return command_data.cur + BUFFER_NUM - (command_data.end + 1) % BUFFER_NUM;
-//     }
-// }
-
-// pub fn take_command(command_data: &mut CommandData) -> [u8; BUFFER_SIZE] {
-//     // clone the command bytes buffer so the caller isn't borrowing the command_data buffer
-//     let buffer_index = (command_data.end + 1) % BUFFER_NUM;
-//     let command = command_data.buffer[buffer_index].clone();
-//     // null the buffer
-//     command_data.buffer[buffer_index] = [b'\0'; BUFFER_SIZE];
-//     // move the end marker, effectively marking the buffer as ready for use again
-//     command_data.end = buffer_index;
-
-//     return command;
-// }
+static mut STORAGE: Option<Storage> = None;
 
 static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
@@ -182,7 +100,7 @@ pub struct Board {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: BoardI2c2,
     pub internal_rtc: Rtc,
-    pub storage: Storage,
+    // pub storage: Storage,
     pub debug: bool,
     pub file_epoch: i64,
 }
@@ -213,6 +131,14 @@ impl State {
     }
 }
 
+fn transform_u32_to_array_of_u8(x:u32) -> [u8;4] {
+    let b1 : u8 = ((x >> 24) & 0xff) as u8;
+    let b2 : u8 = ((x >> 16) & 0xff) as u8;
+    let b3 : u8 = ((x >> 8) & 0xff) as u8;
+    let b4 : u8 = (x & 0xff) as u8;
+    return [b1, b2, b3, b4]
+}
+
 impl Board {
     pub fn start(&mut self) {
         rprintln!("starting board");
@@ -220,7 +146,18 @@ impl Board {
 
         // self.internal_adc.enable(&mut self.delay);
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
-        self.storage.create_file(timestamp);
+        
+        let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
+        storage.create_file(timestamp);
+
+        let usb_dev = unsafe { USB_DEVICE.as_mut().unwrap() };
+
+        // TODO: this doesn't workk
+        // the ufi is created too early
+        // we need to create it later, after the storage is initialized
+        // actually this should be fine.
+        let _ = usb_dev.force_reset();
+
     }
 
     fn process_ufi_command(
@@ -248,8 +185,30 @@ impl Board {
                 command.pass();
             }
             UfiCommand::ReadCapacity => {
-                let _ =
-                    command.try_write_data_all(&[0x00, 0x00, 0x0b, 0x3f, 0x00, 0x00, 0x02, 0x00]);
+
+                unsafe {
+                    if STORAGE.is_none() {
+                        command.fail();
+                        return;
+                    }
+                }
+                
+                let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
+                let blocks =  match storage.volume_manager.device().num_blocks(){
+                    Ok(num_blocks) => num_blocks,
+                    Err(_) => todo!(),
+                };
+                let last_block_addr = transform_u32_to_array_of_u8(blocks.0);
+                let block_size = 512_u32;
+                let block_size = transform_u32_to_array_of_u8(block_size);
+                let mut command_payload: [u8;8] = [0;8];
+                command_payload[0..4].copy_from_slice(&last_block_addr);
+                command_payload[4..8].copy_from_slice(&block_size);
+
+                match command.try_write_data_all(&command_payload) {
+                    Ok(_) => {rprintln!("Block: Read capacity")},
+                    Err(err) => {rprintln!("Block {:?}", err)},
+                }
                 command.pass();
             }
             UfiCommand::RequestSense { .. } => unsafe {
@@ -292,49 +251,71 @@ impl Board {
             UfiCommand::Read { lba, len } => unsafe {
                 // storage offset might be the size ?
 
-                let lba = lba as u32;
+                let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
+
+                let mut lba = lba as u32;
                 let len = len as u32;
-                if STATE.storage_offset != len as usize * BLOCK_SIZE {
-                    loop {
-                        let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
-                        STATE.storage_offset += count;
-                        if count == 0 {
-                            break;
-                        }
+
+                for i in 0..len {
+                    let mut block: [Block; 1] = [Block::new(); 1];
+                    match storage.volume_manager.device().read(&mut block, embedded_sdmmc::BlockIdx(lba - len + i), "read") {
+                        Ok(_) => {
+                            match command.write_data(&block[0].contents) {
+                                Ok(_) => {}
+                                Err(err) => rprintln!("{:?}", err),
+                            }; // TODO unwrap
+                            // STATE.storage_offset += count;
+                        },
+                        Err(err) => rprintln!("{:?}", err),
                     }
-                } else {
-                    command.pass();
-                    STATE.storage_offset = 0;
                 }
 
-                return;
+                command.pass();
 
-                let lba = lba as u32;
-                let len = len as u32;
-                if STATE.storage_offset != len as usize * BLOCK_SIZE {
-                    const DUMP_MAX_LBA: u32 = 0xCE;
-                    if lba < DUMP_MAX_LBA {
-                        /* requested data from dump */
-                        let start = (BLOCK_SIZE * lba as usize) + STATE.storage_offset;
-                        let end =
-                            (BLOCK_SIZE * lba as usize) + (BLOCK_SIZE as usize * len as usize);
-                        rprintln!("Data transfer >>>>>>>> [{}..{}]", start, end);
-                        // let count = command.write_data(&FAT[start..end]).unwrap(); // TODO unwrap
-                        // STATE.storage_offset += count;
-                    } else {
-                        /* fill with 0xF6 */
-                        loop {
-                            let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
-                            STATE.storage_offset += count;
-                            if count == 0 {
-                                break;
-                            }
-                        }
-                    }
-                } else {
-                    command.pass();
-                    STATE.storage_offset = 0;
-                }
+
+
+
+                // let lba = lba as u32;
+                // let len = len as u32;
+                // if STATE.storage_offset != len as usize * BLOCK_SIZE {
+                //     loop {
+                //         let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
+                //         STATE.storage_offset += count;
+                //         if count == 0 {
+                //             break;
+                //         }
+                //     }
+                // } else {
+                //     command.pass();
+                //     STATE.storage_offset = 0;
+                // }
+
+                // return;
+
+                // if STATE.storage_offset != len as usize * BLOCK_SIZE {
+                //     const DUMP_MAX_LBA: u32 = 0xCE;
+                //     if lba < DUMP_MAX_LBA {
+                //         /* requested data from dump */
+                //         let start = (BLOCK_SIZE * lba as usize) + STATE.storage_offset;
+                //         let end =
+                //             (BLOCK_SIZE * lba as usize) + (BLOCK_SIZE as usize * len as usize);
+                //         rprintln!("Data transfer >>>>>>>> [{}..{}]", start, end);
+                //         // let count = command.write_data(&FAT[start..end]).unwrap(); // TODO unwrap
+                //         // STATE.storage_offset += count;
+                //     } else {
+                //         /* fill with 0xF6 */
+                //         loop {
+                //             let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
+                //             STATE.storage_offset += count;
+                //             if count == 0 {
+                //                 break;
+                //             }
+                //         }
+                //     }
+                // } else {
+                //     command.pass();
+                //     STATE.storage_offset = 0;
+                // }
             },
             ref unknown_ufi_kind => {
                 rprintln!("Unknown UFI command: {:?}", unknown_ufi_kind);
@@ -525,7 +506,8 @@ impl RRIVBoard for Board {
     }
 
     fn write_log_file(&mut self, data: &str) {
-        self.storage.write(data.as_bytes(), self.file_epoch);
+        let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
+        storage.write(data.as_bytes(), self.file_epoch);
     }
 
     fn flush_log_file(&mut self) {
@@ -748,7 +730,7 @@ pub struct BoardBuilder {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
-    pub storage: Option<Storage>,
+    // pub storage: Option<Storage>,
 }
 
 impl BoardBuilder {
@@ -765,7 +747,7 @@ impl BoardBuilder {
             rgb_led: None,
             oscillator_control: None,
             internal_rtc: None,
-            storage: None,
+            // storage: None,
         }
     }
 
@@ -783,7 +765,6 @@ impl BoardBuilder {
             rgb_led: self.rgb_led.unwrap(),
             oscillator_control: self.oscillator_control.unwrap(),
             internal_rtc: self.internal_rtc.unwrap(),
-            storage: self.storage.unwrap(),
             debug: true,
             file_epoch: 0,
         }
@@ -1103,11 +1084,12 @@ impl BoardBuilder {
 
         let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
         storage.setup();
-        STORAGE = Some(storage);
+        unsafe {
+            STORAGE = Some(storage);
+        }
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);
 
-        self.storage = Some(storage);
         rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);

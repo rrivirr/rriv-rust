@@ -68,7 +68,7 @@ pub const MODE: Mode = Mode {
     phase: Phase::CaptureOnSecondTransition,
 };
 
-struct MainSpi {
+pub struct MainSpi {
     spi: Spi<SPI2, u8>,
     cs: Pin<'C', 8, Output>,
 }
@@ -152,7 +152,7 @@ impl SpiDevice for MainSpi {
         let op_res = operations.iter_mut().try_for_each(|op| match op {
             embedded_hal::spi::Operation::Read(buf) => {
                 // while self.spi.is_busy() {}
-                rprintln!("{:?}", "spi read");
+                // rprintln!("{:?}", "spi read");
 
                 return match self.read_spi(buf) {
                     Ok(_) => Ok(()),
@@ -164,7 +164,7 @@ impl SpiDevice for MainSpi {
                 // while self.spi.is_rx_not_empty() {
                 //     self.spi.read_data_reg();
                 // }
-                rprintln!("{:?}", "spi write");
+                // rprintln!("{:?}", "spi write");
 
                 return match self.write_spi(buf, true) {
                     Ok(_) => Ok(()),
@@ -176,7 +176,7 @@ impl SpiDevice for MainSpi {
             }
             embedded_hal::spi::Operation::Transfer(read, write) => {
 
-                rprintln!("{:?}", "spi transfer");
+                // rprintln!("{:?}", "spi transfer");
 
                 // while self.spi.is_busy() {}
                 match self.write_spi(write, false) {
@@ -193,7 +193,7 @@ impl SpiDevice for MainSpi {
                 return returnval;
             }
             embedded_hal::spi::Operation::TransferInPlace(buf) => {
-                rprintln!("{:?}", "spi transfer in place");
+                // rprintln!("{:?}", "spi transfer in place");
 
                 for i in 0..buf.len() {
                     let mut place : [u8; 1] = [buf[i]; 1];
@@ -223,7 +223,7 @@ impl SpiDevice for MainSpi {
         });
 
 
-        rprintln!("{:?}", "spi op complete");
+        // rprintln!("{:?}", "spi op complete");
 
         // self.cs.set_high();
 
@@ -255,7 +255,7 @@ impl SpiDevice for MainSpi {
     }
 }
 
-struct StorageDelay {
+pub struct StorageDelay {
     delay: DelayUs<TIM2>,
 }
 
@@ -334,7 +334,7 @@ pub trait OutputDevice {
 const CACHE_SIZE: usize = 50;
 
 pub struct Storage {
-    volume_manager: VolumeManager<SdCard<MainSpi, StorageDelay>, RrivTimeSource>,
+    pub volume_manager: VolumeManager<SdCard<MainSpi, StorageDelay>, RrivTimeSource>,
     // volume: Option<Volume<'a, SdCard<MainSpi, StorageDelay>, RrivTimeSource, 4, 4, 1>>,
     filename: [u8; 11],
     // file: Option<File<'a, SdCard<MainSpi, StorageDelay>, RrivTimeSource, 4, 4, 1>>,
