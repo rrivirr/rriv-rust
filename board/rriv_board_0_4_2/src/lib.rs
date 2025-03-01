@@ -147,16 +147,8 @@ impl Board {
         // self.internal_adc.enable(&mut self.delay);
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         
-        let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
-        storage.create_file(timestamp);
-
-        let usb_dev = unsafe { USB_DEVICE.as_mut().unwrap() };
-
-        // TODO: this doesn't workk
-        // the ufi is created too early
-        // we need to create it later, after the storage is initialized
-        // actually this should be fine.
-        let _ = usb_dev.force_reset();
+        // let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
+        // storage.create_file(timestamp);
 
     }
 
@@ -165,26 +157,40 @@ impl Board {
     ) {
         match command.kind {
             UfiCommand::Inquiry { .. } => {
+                rprintln!("Block: Inquire");
                 // return device information
+                // let result = command.try_write_data_all(&[
+                //     0x00, 0b10000000, // removable media bit
+                //     0,          // always zeros for UFI
+                //     0x01,       // response data format always 1 for UFI
+                //     0x1F,       // always 1F for UFI
+                //     0, 0, 0, // reserved
+                //     b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', // vendor
+                //     b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
+                //     b' ', b' ', b' ', // product
+                //     b'0', b'.', b'4', b'0', // todo: Firmware Version
+                // ]);
+
                 let result = command.try_write_data_all(&[
-                    0x00, 0b10000000, // removable media bit
-                    0,          // always zeros for UFI
-                    0x01,       // response data format always 1 for UFI
-                    0x1F,       // always 1F for UFI
-                    0, 0, 0, // reserved
-                    b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', // vendor
-                    b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
-                    b' ', b' ', b' ', // product
-                    b'0', b'.', b'4', b'0', // todo: Firmware Version
+                    0x00, 0b10000000, 0, 0x01, 0x1F, 0, 0, 0, b'F', b'o', b'o', b' ', b'B', b'a', b'r',
+                    b'0', b'F', b'o', b'o', b' ', b'B', b'a', b'r', b'0', b'F', b'o', b'o', b' ', b'B',
+                    b'a', b'r', b'0', b'1', b'.', b'2', b'3',
                 ]);
                 command.pass();
             }
             UfiCommand::StartStop { .. }
             | UfiCommand::TestUnitReady
             | UfiCommand::PreventAllowMediumRemoval { .. } => {
+                rprintln!("Block: start stop");
                 command.pass();
             }
             UfiCommand::ReadCapacity => {
+                rprintln!("Block: Read capacity");
+
+                let _ = command.try_write_data_all(&[0x00, 0x00, 0x0b, 0x3f, 0x00, 0x00, 0x02, 0x00]);
+                command.pass();
+
+                return;
 
                 unsafe {
                     if STORAGE.is_none() {
@@ -194,9 +200,14 @@ impl Board {
                 }
                 
                 let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
-                let blocks =  match storage.volume_manager.device().num_blocks(){
+                let device = storage.volume_manager.device();
+                let blocks =  match device.num_blocks(){
                     Ok(num_blocks) => num_blocks,
-                    Err(_) => todo!(),
+                    Err(err) => {
+                        rprintln!("{:?}", err);
+                        command.pass();
+                        return
+                    },
                 };
                 let last_block_addr = transform_u32_to_array_of_u8(blocks.0);
                 let block_size = 512_u32;
@@ -206,12 +217,13 @@ impl Board {
                 command_payload[4..8].copy_from_slice(&block_size);
 
                 match command.try_write_data_all(&command_payload) {
-                    Ok(_) => {rprintln!("Block: Read capacity")},
+                    Ok(_) => {rprintln!("Block: Read capacity sent")},
                     Err(err) => {rprintln!("Block {:?}", err)},
                 }
                 command.pass();
             }
             UfiCommand::RequestSense { .. } => unsafe {
+                rprintln!("Block: RequestSense");
                 let result = command.try_write_data_all(&[
                     0x70, // error code
                     0x00,
@@ -236,6 +248,7 @@ impl Board {
                 command.pass();
             },
             UfiCommand::ModeSense { .. } => {
+                rprintln!("Block: ModeSense");
                 /* Read Only */
                 let _ =
                     command.try_write_data_all(&[0x00, 0x46, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00]);
@@ -246,9 +259,11 @@ impl Board {
                 command.pass();
             }
             UfiCommand::Write { .. } => {
+                rprintln!("Block: Write");
                 command.pass();
             }
             UfiCommand::Read { lba, len } => unsafe {
+                rprintln!("Block: Read");
                 // storage offset might be the size ?
 
                 let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
@@ -507,7 +522,8 @@ impl RRIVBoard for Board {
 
     fn write_log_file(&mut self, data: &str) {
         let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
-        storage.write(data.as_bytes(), self.file_epoch);
+        // rprint!("skip write log file");
+        // storage.write(data.as_bytes(), self.file_epoch);
     }
 
     fn flush_log_file(&mut self) {
@@ -978,15 +994,6 @@ impl BoardBuilder {
         }
         let mut delay = delay.unwrap();
 
-        BoardBuilder::setup_serial(
-            serial_pins,
-            &mut gpio_cr,
-            &mut afio.mapr,
-            device_peripherals.USART2,
-            &clocks,
-        );
-        BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
-
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
 
         power_pins.enable_3v.set_high();
@@ -1087,10 +1094,16 @@ impl BoardBuilder {
         unsafe {
             STORAGE = Some(storage);
         }
-        // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
-        rprintln!("{:?}", clocks);
+     
+        BoardBuilder::setup_serial(
+            serial_pins,
+            &mut gpio_cr,
+            &mut afio.mapr,
+            device_peripherals.USART2,
+            &clocks,
+        );
+        BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
 
-        rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);
 
