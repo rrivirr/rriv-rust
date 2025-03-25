@@ -9,7 +9,7 @@ use embedded_sdmmc::{Block, BlockDevice};
 use core::{
     cell::RefCell, concat, default::Default, format_args, mem::MaybeUninit, num, ops::DerefMut, option::Option::{self, *}, result::Result::*
 };
-use core::{mem, result};
+use core::{mem};
 use cortex_m::{
     asm::{delay, dmb, dsb},
     interrupt::{CriticalSection, Mutex},
@@ -17,12 +17,10 @@ use cortex_m::{
 };
 use embedded_hal::digital::OutputPin;
 use stm32f1xx_hal::afio::MAPR;
-use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
-use stm32f1xx_hal::spi::Spi;
 
-use rtt_target::{rprint, rprintln};
+use rtt_target::{rprintln};
 use stm32f1xx_hal::rcc::{Clocks, CFGR};
 use stm32f1xx_hal::{
     gpio::{self, OpenDrain, Output},
@@ -40,42 +38,37 @@ use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use usbd_storage::subclass::ufi::{Ufi, UfiCommand};
 use usbd_storage::subclass::Command;
-use usbd_storage::transport::bbb::{BulkOnly, BulkOnlyError};
-use usbd_storage::transport::TransportError;
+use usbd_storage::transport::bbb::{BulkOnly};
 
-static mut USB_TRANSPORT_BUF: MaybeUninit<[u8; 512]> = MaybeUninit::uninit();
 
-const BLOCK_SIZE: usize = 512;
-const USB_PACKET_SIZE: u16 = 64; // 8,16,32,64
+
 
 use rriv_board::{
-    ActuatorDriverServices, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices,
+    ActuatorDriverServices, RRIVBoard, RXProcessor, SensorDriverServices,
     TelemetryDriverServices,
 };
 
-use ds323x::{DateTimeAccess, Ds323x, NaiveDate, NaiveDateTime, NaiveTime};
+use ds323x::{DateTimeAccess, Ds323x, NaiveDateTime};
 use stm32f1xx_hal::rtc::Rtc;
 
+mod builder;
+use builder::*;
+mod util;
+use util::*;
 mod components;
 use components::*;
 mod pins;
 use pins::{GpioCr, Pins};
-
 mod pin_groups;
 use pin_groups::*;
 
-type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
+mod shared;
+use shared::*;
 
-static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
-static mut USB_BUS: Option<UsbBusAllocator<UsbBusType>> = None;
-static mut USB_SERIAL: Option<usbd_serial::SerialPort<UsbBusType>> = None;
-static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
-static mut UFI: Option<Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>> = None;
-static mut STORAGE: Option<Storage> = None;
+mod block_device;
+use block_device::*;
 
-static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
+
 
 #[repr(C)]
 pub struct Serial {
@@ -83,8 +76,6 @@ pub struct Serial {
 }
 
 // type aliases to make things tenable
-// type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
-// type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 type BoardI2c1 = BlockingI2c<I2C1>;
 type BoardI2c2 = BlockingI2c<I2C2>;
 
@@ -105,40 +96,6 @@ pub struct Board {
     pub file_epoch: i64,
 }
 
-static mut STATE: State = State {
-    storage_offset: 0,
-    sense_key: None,
-    sense_key_code: None,
-    sense_qualifier: None,
-};
-
-// static FAT: &[u8] = include_bytes!("../hello.world.img"); // part of fat12 fs with some data
-
-#[derive(Default)]
-struct State {
-    storage_offset: usize,
-    sense_key: Option<u8>,
-    sense_key_code: Option<u8>,
-    sense_qualifier: Option<u8>,
-}
-
-impl State {
-    fn reset(&mut self) {
-        self.storage_offset = 0;
-        self.sense_key = None;
-        self.sense_key_code = None;
-        self.sense_qualifier = None;
-    }
-}
-
-fn transform_u32_to_array_of_u8(x:u32) -> [u8;4] {
-    let b1 : u8 = ((x >> 24) & 0xff) as u8;
-    let b2 : u8 = ((x >> 16) & 0xff) as u8;
-    let b3 : u8 = ((x >> 8) & 0xff) as u8;
-    let b4 : u8 = (x & 0xff) as u8;
-    return [b1, b2, b3, b4]
-}
-
 impl Board {
     pub fn start(&mut self) {
         rprintln!("starting board");
@@ -150,198 +107,6 @@ impl Board {
         // let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
         // storage.create_file(timestamp);
 
-    }
-
-    fn process_ufi_command(
-        mut command: Command<'_, UfiCommand, Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>>,
-    ) {
-        match command.kind {
-            UfiCommand::Inquiry { .. } => {
-                rprintln!("Block: Inquire");
-                // return device information
-                // let result = command.try_write_data_all(&[
-                //     0x00, 0b10000000, // removable media bit
-                //     0,          // always zeros for UFI
-                //     0x01,       // response data format always 1 for UFI
-                //     0x1F,       // always 1F for UFI
-                //     0, 0, 0, // reserved
-                //     b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', // vendor
-                //     b'R', b'R', b'I', b'V', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ', b' ',
-                //     b' ', b' ', b' ', // product
-                //     b'0', b'.', b'4', b'0', // todo: Firmware Version
-                // ]);
-
-                let result = command.try_write_data_all(&[
-                    0x00, 0b10000000, 0, 0x01, 0x1F, 0, 0, 0, b'F', b'o', b'o', b' ', b'B', b'a', b'r',
-                    b'0', b'F', b'o', b'o', b' ', b'B', b'a', b'r', b'0', b'F', b'o', b'o', b' ', b'B',
-                    b'a', b'r', b'0', b'1', b'.', b'2', b'3',
-                ]);
-                command.pass();
-            }
-            UfiCommand::StartStop { .. }
-            | UfiCommand::TestUnitReady
-            | UfiCommand::PreventAllowMediumRemoval { .. } => {
-                rprintln!("Block: start stop");
-                command.pass();
-            }
-            UfiCommand::ReadCapacity => {
-                rprintln!("Block: Read capacity");
-
-                let _ = command.try_write_data_all(&[0x00, 0x00, 0x0b, 0x3f, 0x00, 0x00, 0x02, 0x00]);
-                command.pass();
-
-                return;
-
-                unsafe {
-                    if STORAGE.is_none() {
-                        command.fail();
-                        return;
-                    }
-                }
-                
-                let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
-                let device = storage.volume_manager.device();
-                let blocks =  match device.num_blocks(){
-                    Ok(num_blocks) => num_blocks,
-                    Err(err) => {
-                        rprintln!("{:?}", err);
-                        command.pass();
-                        return
-                    },
-                };
-                let last_block_addr = transform_u32_to_array_of_u8(blocks.0);
-                let block_size = 512_u32;
-                let block_size = transform_u32_to_array_of_u8(block_size);
-                let mut command_payload: [u8;8] = [0;8];
-                command_payload[0..4].copy_from_slice(&last_block_addr);
-                command_payload[4..8].copy_from_slice(&block_size);
-
-                match command.try_write_data_all(&command_payload) {
-                    Ok(_) => {rprintln!("Block: Read capacity sent")},
-                    Err(err) => {rprintln!("Block {:?}", err)},
-                }
-                command.pass();
-            }
-            UfiCommand::RequestSense { .. } => unsafe {
-                rprintln!("Block: RequestSense");
-                let result = command.try_write_data_all(&[
-                    0x70, // error code
-                    0x00,
-                    STATE.sense_key.unwrap_or(0),
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x0A, // additional length
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                    STATE.sense_key_code.unwrap_or(0),
-                    STATE.sense_qualifier.unwrap_or(0),
-                    0x00,
-                    0x00,
-                    0x00,
-                    0x00,
-                ]);
-                STATE.reset();
-                command.pass();
-            },
-            UfiCommand::ModeSense { .. } => {
-                rprintln!("Block: ModeSense");
-                /* Read Only */
-                let _ =
-                    command.try_write_data_all(&[0x00, 0x46, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00]);
-
-                /* Read Write */
-                // command.try_write_data_all(&[0x00, 0x46, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00])?;
-
-                command.pass();
-            }
-            UfiCommand::Write { .. } => {
-                rprintln!("Block: Write");
-                command.pass();
-            }
-            UfiCommand::Read { lba, len } => unsafe {
-                rprintln!("Block: Read");
-                // storage offset might be the size ?
-
-                let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
-
-                let mut lba = lba as u32;
-                let len = len as u32;
-
-                for i in 0..len {
-                    let mut block: [Block; 1] = [Block::new(); 1];
-                    match storage.volume_manager.device().read(&mut block, embedded_sdmmc::BlockIdx(lba - len + i), "read") {
-                        Ok(_) => {
-                            match command.write_data(&block[0].contents) {
-                                Ok(_) => {}
-                                Err(err) => rprintln!("{:?}", err),
-                            }; // TODO unwrap
-                            // STATE.storage_offset += count;
-                        },
-                        Err(err) => rprintln!("{:?}", err),
-                    }
-                }
-
-                command.pass();
-
-
-
-
-                // let lba = lba as u32;
-                // let len = len as u32;
-                // if STATE.storage_offset != len as usize * BLOCK_SIZE {
-                //     loop {
-                //         let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
-                //         STATE.storage_offset += count;
-                //         if count == 0 {
-                //             break;
-                //         }
-                //     }
-                // } else {
-                //     command.pass();
-                //     STATE.storage_offset = 0;
-                // }
-
-                // return;
-
-                // if STATE.storage_offset != len as usize * BLOCK_SIZE {
-                //     const DUMP_MAX_LBA: u32 = 0xCE;
-                //     if lba < DUMP_MAX_LBA {
-                //         /* requested data from dump */
-                //         let start = (BLOCK_SIZE * lba as usize) + STATE.storage_offset;
-                //         let end =
-                //             (BLOCK_SIZE * lba as usize) + (BLOCK_SIZE as usize * len as usize);
-                //         rprintln!("Data transfer >>>>>>>> [{}..{}]", start, end);
-                //         // let count = command.write_data(&FAT[start..end]).unwrap(); // TODO unwrap
-                //         // STATE.storage_offset += count;
-                //     } else {
-                //         /* fill with 0xF6 */
-                //         loop {
-                //             let count = command.write_data(&[0xF6; BLOCK_SIZE as usize]).unwrap(); // TODO unwrap;
-                //             STATE.storage_offset += count;
-                //             if count == 0 {
-                //                 break;
-                //             }
-                //         }
-                //     }
-                // } else {
-                //     command.pass();
-                //     STATE.storage_offset = 0;
-                // }
-            },
-            ref unknown_ufi_kind => {
-                rprintln!("Unknown UFI command: {:?}", unknown_ufi_kind);
-                unsafe {
-                    STATE.sense_key.replace(0x05); // illegal request
-                    STATE.sense_key_code.replace(0x20); // Invalid command operation
-                    STATE.sense_qualifier.replace(0x00); // Invalid command operation
-                }
-                command.fail();
-            }
-        }
     }
 }
 
@@ -635,13 +400,13 @@ unsafe fn USART2() {
                     }
                 }
                 // use PA9 to flash RGB led
-                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    if led.is_low() {
-                        led.set_high();
-                    } else {
-                        led.set_low();
-                    }
-                }
+                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                //     if led.is_low() {
+                //         led.set_high();
+                //     } else {
+                //         led.set_low();
+                //     }
+                // }
             }
         }
     })
@@ -690,7 +455,7 @@ fn usb_interrupt(cs: &CriticalSection) {
         //     UFI_COMMAND_QUEUE.buffer[0] = Some(command);
         // }
 
-        Board::process_ufi_command(command);
+        process_ufi_command(command);
         // if let Err(err) = Board::process_ufi_command(command) {
         //     // defmt::error!("{}", err);
         //     rprintln!("{:?}", err);
@@ -708,13 +473,13 @@ fn usb_interrupt(cs: &CriticalSection) {
                     processor.process_character(c.clone());
                 }
                 // use PA9 to flash RGB led
-                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    if led.is_low() {
-                        led.set_high();
-                    } else {
-                        led.set_low();
-                    }
-                }
+                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                //     if led.is_low() {
+                //         led.set_high();
+                //     } else {
+                //         led.set_low();
+                //     }
+                // }
             }
             serial.write(&buf[0..count]).ok();
         }
@@ -786,162 +551,7 @@ impl BoardBuilder {
         }
     }
 
-    fn setup_clocks(
-        oscillator_control: &mut OscillatorControlPins,
-        cfgr: CFGR,
-        flash_acr: &mut ACR,
-    ) -> Clocks {
-        oscillator_control.enable_hse.set_high();
-
-        // Freeze the configuration of all the clocks in the system
-        // and store the frozen frequencies in `clocks`
-        let clocks = cfgr
-            .use_hse(8.MHz())
-            .sysclk(48.MHz())
-            .pclk1(24.MHz())
-            .adcclk(14.MHz())
-            .freeze(flash_acr);
-
-        assert!(clocks.usbclk_valid());
-
-        rprintln!("{:?}", clocks);
-
-        clocks
-    }
-
-    fn setup_serial(
-        pins: pin_groups::SerialPins,
-        cr: &mut GpioCr,
-        mapr: &mut MAPR,
-        usart: USART2,
-        clocks: &Clocks,
-    ) {
-        // rprintln!("initializing serial");
-        rprintln!("serial rx.listen()");
-        let mut serial = usart.serial(
-            (pins.tx, pins.rx),
-            Config::default().baudrate(115200.bps()),
-            clocks,
-        );
-        serial.rx.listen();
-
-        cortex_m::interrupt::free(|cs| {
-            RX.borrow(cs).replace(Some(serial.rx));
-            TX.borrow(cs).replace(Some(serial.tx));
-            // WAKE_LED.borrow(cs).replace(Some(led)); // TODO: this needs to be updated.  entire rgb_led object needs to be shared.
-        });
-        // rprintln!("unmasking USART2 interrupt");
-        unsafe {
-            NVIC::unmask(pac::Interrupt::USART2);
-        }
-    }
-
-    fn setup_usb(pins: pin_groups::UsbPins, cr: &mut GpioCr, usb: USB, clocks: &Clocks) {
-        // USB Serial
-        let mut usb_dp = pins.usb_dp; // take ownership
-        usb_dp.make_push_pull_output(&mut cr.gpioa_crh);
-        usb_dp.set_low();
-        delay(clocks.sysclk().raw() / 100);
-
-        let usb_dm = pins.usb_dm;
-        let usb_dp = usb_dp.into_floating_input(&mut cr.gpioa_crh);
-
-        let usb = Peripheral {
-            usb: usb,
-            pin_dm: usb_dm,
-            pin_dp: usb_dp,
-        };
-
-        // Unsafe to allow access to static variables
-        unsafe {
-            let bus = UsbBus::new(usb);
-
-            USB_BUS = Some(bus);
-
-            USB_SERIAL = Some(SerialPort::new(USB_BUS.as_ref().unwrap()));
-
-            let ufi = usbd_storage::subclass::ufi::Ufi::new(
-                USB_BUS.as_ref().unwrap(),
-                USB_PACKET_SIZE,
-                unsafe { USB_TRANSPORT_BUF.assume_init_mut().as_mut_slice() },
-            )
-            .unwrap();
-            UFI = Some(ufi);
-
-            let usb_dev = UsbDeviceBuilder::new(USB_BUS.as_ref().unwrap(), UsbVidPid(0x0483, 0x29))
-                .device_class(USB_CLASS_CDC)
-                .self_powered(false)
-                .strings(&[StringDescriptors::default()
-                    .manufacturer("RRIV")
-                    .product("RRIV Data Logger")
-                    .serial_number("_rriv")])
-                .unwrap()
-                .build();
-
-            USB_DEVICE = Some(usb_dev);
-        }
-
-        unsafe {
-            NVIC::unmask(pac::Interrupt::USB_HP_CAN_TX);
-            NVIC::unmask(pac::Interrupt::USB_LP_CAN_RX0);
-        }
-    }
-
-    pub fn setup_i2c1(
-        pins: pin_groups::I2c1Pins,
-        cr: &mut GpioCr,
-        i2c1: I2C1,
-        mapr: &mut MAPR,
-        clocks: &Clocks,
-    ) -> BoardI2c1 {
-        let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
-        let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
-        BlockingI2c::new(
-            i2c1,
-            (scl1, sda1),
-            Mode::Standard {
-                frequency: 100.kHz(), // slower to save some energy?
-            },
-            clocks,
-            1000,
-            10,
-            1000,
-            1000,
-        )
-    }
-
-    pub fn setup_i2c2(
-        pins: pin_groups::I2c2Pins,
-        cr: &mut GpioCr,
-        i2c2: I2C2,
-        clocks: &Clocks,
-    ) -> BoardI2c2 {
-        let scl2 = pins.i2c2_scl.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
-        let sda2 = pins.i2c2_sda.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
-        let mut x = BlockingI2c::new(
-            i2c2,
-            (scl2, sda2),
-            Mode::Standard {
-                frequency: 100.kHz(), // slower to same some energy?
-            },
-            clocks,
-            1000,
-            10,
-            1000,
-            1000,
-        );
-
-        // this works, so moving out and putting back could conceivably work.
-        // let mut ds3231 = Ds323x::new_ds3231( x);
-        // let result = ds3231.datetime();
-        // x = ds3231.destroy_ds3231();
-
-        // let mut ds3231 = Ds323x::new_ds3231( x);
-        // let result = ds3231.datetime();
-        // x = ds3231.destroy_ds3231();
-
-        return x;
-    }
+    
 
     fn setup(&mut self) {
         rprintln!("board new");
@@ -985,7 +595,7 @@ impl BoardBuilder {
         ) = pin_groups::build(pins, &mut gpio_cr, delay);
 
         let clocks =
-            BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
+            setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
 
         let mut delay: Option<SysDelay> = None;
         unsafe {
@@ -994,7 +604,10 @@ impl BoardBuilder {
         }
         let mut delay = delay.unwrap();
 
-        self.external_adc = Some(ExternalAdc::new(external_adc_pins));
+        let mut external_adc = ExternalAdc::new(external_adc_pins);
+        external_adc.disable(&mut delay);
+        self.external_adc = Some(external_adc);
+
 
         power_pins.enable_3v.set_high();
         delay.delay_ms(500_u32);
@@ -1011,7 +624,7 @@ impl BoardBuilder {
 
         // rprintln!("starting i2c");
         core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
-        let i2c1 = BoardBuilder::setup_i2c1(
+        let i2c1 = setup_i2c1(
             i2c1_pins,
             &mut gpio_cr,
             device_peripherals.I2C1,
@@ -1022,7 +635,7 @@ impl BoardBuilder {
         rprintln!("set up i2c1");
 
         let i2c2 =
-            BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
+            setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
         self.i2c2 = Some(i2c2);
         rprintln!("set up i2c2");
 
@@ -1058,8 +671,6 @@ impl BoardBuilder {
             delay.delay_ms(10_u32);
         }
         rprintln!("scan is done");
-
-        // }
 
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
@@ -1104,18 +715,7 @@ impl BoardBuilder {
         );
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
 
-
         self.delay = Some(delay);
-
-        // we can unsafely .steal on device peripherals to get rcc again, or not?
-        // unsafe {
-        // let rcc_block = pac::Peripherals::steal().RCC;
-        // I2C1::disable(rcc_block);
-        // // delay.delay_ms(50_u16);
-        // // I2C1::enable(rcc);
-        // // delay.delay_ms(50_u16);
-        // // I2C1::reset(rcc);
-        // // delay.delay_ms(50_u16);
 
         rprintln!("done with setup");
     }

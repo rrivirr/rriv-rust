@@ -21,3 +21,7 @@ pub use external_adc::*;
 
 pub mod eeprom;
 pub use eeprom::*;
+
+
+pub mod i2c;
+pub use i2c::*;

@@ -25,6 +25,14 @@ impl ExternalAdc {
     
   }
 
+  pub fn disable(&mut self, delay: &mut SysDelay) {
+
+    self.pins.enable.set_high();
+    // delay.delay_ms(20); // let the chip power down, maybe not needed?
+    
+  }
+
+
   pub fn reset(&mut self, delay: &mut SysDelay) {
 
     delay.delay_ms(1_u8);  // delay > 50ns before applying ADC reset
@@ -35,11 +43,11 @@ impl ExternalAdc {
 
   }
 
-  pub fn shutdown(&mut self, delay: &mut SysDelay){
+  // pub fn shutdown(&mut self, delay: &mut SysDelay){
 
-    self.pins.enable.set_high();
+  //   self.pins.enable.set_high();
 
-  }
+  // }
  
 }
 
