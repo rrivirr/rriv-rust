@@ -18,6 +18,9 @@ use pac::SPI2;
 
 use crate::*;
 
+pub static mut STORAGE: Option<Storage> = None;
+
+
 pub struct RrivTimeSource {}
 
 impl RrivTimeSource {

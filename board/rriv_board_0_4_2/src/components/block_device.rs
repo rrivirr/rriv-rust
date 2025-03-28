@@ -1,11 +1,9 @@
-use embedded_sdmmc::Block;
+use embedded_sdmmc::{Block, BlockDevice};
 use rtt_target::rprintln;
 use stm32f1xx_hal::usb::{Peripheral, UsbBus};
 use usbd_storage::{subclass::{ufi::{Ufi, UfiCommand}, Command}, transport::bbb::BulkOnly};
 
-use crate::{components::Storage, util::transform_u32_to_array_of_u8};
-
-use crate::shared::*;
+use crate::{components::{Storage, STORAGE}, util::transform_u32_to_array_of_u8};
 
 const BLOCK_SIZE: usize = 512;
 

@@ -25,3 +25,15 @@ pub use eeprom::*;
 
 pub mod i2c;
 pub use i2c::*;
+
+pub mod usb;
+pub use usb::*;
+
+pub mod serial;
+pub use serial::*;
+
+pub mod clocks;
+pub use clocks::*;
+
+pub mod block_device;
+pub use block_device::*;

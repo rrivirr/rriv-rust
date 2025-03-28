@@ -3,6 +3,9 @@ use stm32f1xx_hal::{timer::{Tim1NoRemap, Channel, PwmHz, Ch}, time::ms, pac::TIM
 
 use crate::*;
 
+// type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
+// static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
+
 pub fn build_rgb_led(pins: RgbLedPins, tim1: TIM1, mapr: &mut MAPR, clocks: &Clocks) -> RgbLed{
 
   let pins_array = (pins.red, pins.green, pins.blue);
