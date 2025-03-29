@@ -35,9 +35,10 @@ impl State {
 pub fn process_ufi_command(
     mut command: Command<'_, UfiCommand, Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>>,
 ) {
+    rprintln!("Command: {:?}", command.kind);
+
     match command.kind {
         UfiCommand::Inquiry { .. } => {
-            rprintln!("Block: Inquire");
             // return device information
             // let result = command.try_write_data_all(&[
             //     0x00, 0b10000000, // removable media bit
@@ -51,29 +52,37 @@ pub fn process_ufi_command(
             //     b'0', b'.', b'4', b'0', // todo: Firmware Version
             // ]);
 
-            let result = command.try_write_data_all(&[
+            match command.try_write_data_all(&[
                 0x00, 0b10000000, 0, 0x01, 0x1F, 0, 0, 0, b'F', b'o', b'o', b' ', b'B', b'a', b'r',
                 b'0', b'F', b'o', b'o', b' ', b'B', b'a', b'r', b'0', b'F', b'o', b'o', b' ', b'B',
                 b'a', b'r', b'0', b'1', b'.', b'2', b'3',
-            ]);
+            ]){
+                Ok(_) => {rprintln!("Inquiry response sent")},
+                Err(err) => {rprintln!("error {:?}", err)},
+            }
             command.pass();
         }
         UfiCommand::StartStop { .. }
         | UfiCommand::TestUnitReady
         | UfiCommand::PreventAllowMediumRemoval { .. } => {
-            rprintln!("Block: start stop");
             command.pass();
         }
         UfiCommand::ReadCapacity => {
-            rprintln!("Block: Read capacity");
 
-            let _ = command.try_write_data_all(&[0x00, 0x00, 0x0b, 0x3f, 0x00, 0x00, 0x02, 0x00]);
-            command.pass();
+            // let command_payload = [0x00, 0x00, 0x0b, 0x04, 0x00, 0x00, 0x02, 0x00]; // assume only 2 blocks
 
-            return;
+            // match command.try_write_data_all(&command_payload) {
+            //     Ok(_) => {rprintln!("Success: Read capacity sent")},
+            //     Err(err) => {rprintln!("error {:?}", err)},
+            // }
+            // command.pass();
+            
+
+            // return;
 
             unsafe {
                 if STORAGE.is_none() {
+                    rprintln!("Storage object is none in block device");
                     command.fail();
                     return;
                 }
@@ -81,7 +90,7 @@ pub fn process_ufi_command(
             
             let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
             let device = storage.volume_manager.device();
-            let blocks =  match device.num_blocks(){
+            let blocks: embedded_sdmmc::BlockCount =  match device.num_blocks(){
                 Ok(num_blocks) => num_blocks,
                 Err(err) => {
                     rprintln!("{:?}", err);
@@ -89,7 +98,9 @@ pub fn process_ufi_command(
                     return
                 },
             };
-            let last_block_addr = transform_u32_to_array_of_u8(blocks.0);
+
+            rprintln!("{:?} blocks", blocks);
+            let last_block_addr = transform_u32_to_array_of_u8(blocks.0 - 1);
             let block_size = 512_u32;
             let block_size = transform_u32_to_array_of_u8(block_size);
             let mut command_payload: [u8;8] = [0;8];
@@ -97,13 +108,12 @@ pub fn process_ufi_command(
             command_payload[4..8].copy_from_slice(&block_size);
 
             match command.try_write_data_all(&command_payload) {
-                Ok(_) => {rprintln!("Block: Read capacity sent")},
-                Err(err) => {rprintln!("Block {:?}", err)},
+                Ok(_) => {rprintln!("Block: Read capacity sent {:?}", command_payload)},
+                Err(err) => {rprintln!("error {:?}", err)},
             }
             command.pass();
         }
         UfiCommand::RequestSense { .. } => unsafe {
-            rprintln!("Block: RequestSense");
             let result = command.try_write_data_all(&[
                 0x70, // error code
                 0x00,
@@ -128,23 +138,21 @@ pub fn process_ufi_command(
             command.pass();
         },
         UfiCommand::ModeSense { .. } => {
-            rprintln!("Block: ModeSense");
             /* Read Only */
-            let _ =
-                command.try_write_data_all(&[0x00, 0x46, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00]);
+            // let _ =
+            //     command.try_write_data_all(&[0x00, 0x46, 0x02, 0x80, 0x00, 0x00, 0x00, 0x00]);
 
             /* Read Write */
-            // command.try_write_data_all(&[0x00, 0x46, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00])?;
-
+            match command.try_write_data_all(&[0x00, 0x46, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00]) {
+                Ok(_) => {rprintln!("Block: mode sent")},
+                Err(err) => {rprintln!("error {:?}", err)},
+            }
             command.pass();
         }
         UfiCommand::Write { .. } => {
-            rprintln!("Block: Write");
             command.pass();
         }
         UfiCommand::Read { lba, len } => unsafe {
-            rprintln!("Block: Read");
-            // storage offset might be the size ?
 
             let storage: &mut Storage = unsafe { STORAGE.as_mut().unwrap() };
 
@@ -153,10 +161,10 @@ pub fn process_ufi_command(
 
             for i in 0..len {
                 let mut block: [Block; 1] = [Block::new(); 1];
-                match storage.volume_manager.device().read(&mut block, embedded_sdmmc::BlockIdx(lba - len + i), "read") {
+                match storage.volume_manager.device().read(&mut block, embedded_sdmmc::BlockIdx(lba + i), "read") {
                     Ok(_) => {
                         match command.write_data(&block[0].contents) {
-                            Ok(_) => {}
+                            Ok(_) => {rprintln!("send block {:?}", block[0].contents)}
                             Err(err) => rprintln!("{:?}", err),
                         }; // TODO unwrap
                         // STATE.storage_offset += count;

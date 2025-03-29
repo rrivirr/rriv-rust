@@ -109,40 +109,7 @@ impl Board {
 impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self) {
         self.file_epoch = self.epoch_timestamp();
-        // UFI should only get set up when the CLI sends a command to put the board into mass storage mode.
-
-        // unsafe {
-        //     if let Some(usb_device) = &mut USB_DEVICE {
-        //         if let Some(ufi) = &mut UFI {
-        //             loop {
-        //                 if !usb_device.poll(&mut [ufi]) {
-        //                     continue;
-        //                 }
-        //                 break;
-        //             }
-        //         }
-        //     }
-
-        //     if let Some(usb_device) = &mut USB_DEVICE {
-        //         if matches!(usb_device.state(), UsbDeviceState::Default) {
-        //             unsafe {
-        //                 STATE.reset();
-        //             };
-        //         }
-        //     }
-        // }
-
-        // unsafe {
-        //     if let Some(ufi) = &mut UFI {
-        //         let _ = ufi.poll(|command| {
-        //             Board::process_ufi_command(command);
-        //             // if let Err(err) = Board::process_ufi_command(command) {
-        //             //     // defmt::error!("{}", err);
-        //             //     rprintln!("{:?}", err);
-        //             // }
-        //         });
-        //     }
-        // }
+       
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -444,18 +411,7 @@ fn usb_interrupt(cs: &CriticalSection) {
     }
 
     let _ = ufi.poll(|command| {
-        // led.set_low();
-
-        // unsafe {
-        //     command.clone();
-        //     UFI_COMMAND_QUEUE.buffer[0] = Some(command);
-        // }
-
         components::block_device::process_ufi_command(command);
-        // if let Err(err) = Board::process_ufi_command(command) {
-        //     // defmt::error!("{}", err);
-        //     rprintln!("{:?}", err);
-        // }
     });
 
     let mut buf = [0u8; 8];

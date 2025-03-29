@@ -373,6 +373,9 @@ impl DataLogger {
             }
         }
 
+        // skip the measurements for dev purposes
+        return;
+
         // do the measurement cycle stuff
         // implement interactive mode logging first
 

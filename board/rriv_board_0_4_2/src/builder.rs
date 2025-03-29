@@ -221,12 +221,7 @@ impl BoardBuilder {
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         rprintln!("{:?}", clocks);
 
-        let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
-        storage.setup();
-        unsafe {
-            STORAGE = Some(storage);
-        }
-     
+        storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
 
         components::serial::setup_serial(
             serial_pins,

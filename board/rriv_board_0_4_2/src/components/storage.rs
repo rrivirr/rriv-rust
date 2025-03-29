@@ -83,6 +83,7 @@ impl ErrorType for MainSpi {
 
 impl MainSpi {
     fn read_spi(&mut self, buf: &mut [u8]) -> Result<(), stm32f1xx_hal::spi::Error> {
+        // rprintln!("Reading SD SPI");
         for i in 0..buf.len() {
             loop {
                 match self.spi.read_nonblocking() {
@@ -151,6 +152,7 @@ impl SpiDevice for MainSpi {
         // self.cs.set_low().map_err(SpiDeviceError::Cs)?;
 
         // self.cs.set_low();
+        self.cs.set_low();
 
         let op_res = operations.iter_mut().try_for_each(|op| match op {
             embedded_hal::spi::Operation::Read(buf) => {
@@ -228,7 +230,7 @@ impl SpiDevice for MainSpi {
 
         // rprintln!("{:?}", "spi op complete");
 
-        // self.cs.set_high();
+        self.cs.set_high();
 
         // On failure, it's important to still flush and deassert CS.
         //  let flush_res = bus.flush();
@@ -273,7 +275,7 @@ pub fn build(
     spi_peripheral: SPI2,
     clocks: Clocks,
     mut delay: DelayUs<TIM2>,
-) -> components::storage::Storage {
+) {
     let spi2 = spi_peripheral.spi(
         (Some(pins.sck), Some(pins.miso), Some(pins.mosi)),
         MODE,
@@ -317,7 +319,7 @@ pub fn build(
 
     let volume_manager = embedded_sdmmc::VolumeManager::new(sdcard, time_source);
 
-    Storage {
+    let mut storage = Storage {
         volume_manager: volume_manager,
         filename: [b'\0'; 11],
         file: None,
@@ -325,9 +327,13 @@ pub fn build(
         root_dir: None,
         cache: [b'\0'; CACHE_SIZE],
         next_position: 0,
-    }
+    };
 
-    // return Storage::new(sdcard);
+
+    // storage.setup(); // this opens the root dir, etc.
+    unsafe {
+        STORAGE = Some(storage);
+    }
 }
 
 pub trait OutputDevice {
