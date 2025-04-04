@@ -398,45 +398,38 @@ fn usb_interrupt(cs: &CriticalSection) {
     let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
     let ufi = unsafe { UFI.as_mut().unwrap() };
 
-    //     if let Some(usb_device) = &mut USB_DEVICE {
-    //         if matches!(usb_device.state(), UsbDeviceState::Default) {
-    //             unsafe {
-    //                 STATE.reset();
-    //             };
-    //         }
-    //     }
-
-    if !usb_dev.poll(&mut [serial, ufi]) {
+    // if !usb_dev.poll(&mut [serial, ufi]) {
+    if !usb_dev.poll(&mut [ufi]) {
         return;
     }
 
-    let _ = ufi.poll(|command| {
+    let _ = ufi.poll(|command: Command<'_, UfiCommand, Ufi<BulkOnly<'_, UsbBus<Peripheral>, &mut [u8]>>>| {
         components::block_device::process_ufi_command(command);
     });
 
-    let mut buf = [0u8; 8];
+    // let mut buf = [0u8; 8];
 
-    match serial.read(&mut buf) {
-        Ok(count) if count > 0 => {
-            // Echo back in upper case
-            for c in buf[0..count].iter() {
-                let r = RX_PROCESSOR.borrow(cs);
-                if let Some(processor) = r.borrow_mut().deref_mut() {
-                    processor.process_character(c.clone());
-                }
-                // use PA9 to flash RGB led
-                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                //     if led.is_low() {
-                //         led.set_high();
-                //     } else {
-                //         led.set_low();
-                //     }
-                // }
-            }
-            serial.write(&buf[0..count]).ok();
-        }
-        _ => {}
-    }
+    // match serial.read(&mut buf) {
+    //     Ok(count) if count > 0 => {
+    //         // Echo back in upper case
+    //         for c in buf[0..count].iter() {
+    //             let r = RX_PROCESSOR.borrow(cs);
+    //             if let Some(processor) = r.borrow_mut().deref_mut() {
+    //                 processor.process_character(c.clone());
+    //             }
+    //             // use PA9 to flash RGB led
+    //             // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+    //             //     if led.is_low() {
+    //             //         led.set_high();
+    //             //     } else {
+    //             //         led.set_low();
+    //             //     }
+    //             // }
+    //         }
+    //         serial.write(&buf[0..count]).ok();
+    //     }
+    //     _ => {}
+    // }
 }
 
 pub fn build() -> Board {
