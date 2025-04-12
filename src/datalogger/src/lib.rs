@@ -1093,8 +1093,13 @@ impl DataLogger {
 
                 let message = format!("{}\r\n", message);
                 let message = message.as_str();
-                rprintln!("{}", message);
+                rprintln!("message {}", message);
                 board.usart_send(message);
+                // rprintln!("{}", "\r\n");
+                // board.usart_send("\r\n");
+                // rprintln!("just line feed");
+                // board.usart_send("\r");
+
                 board.delay_ms(500);
 
                 let mut response = [0u8; 30];

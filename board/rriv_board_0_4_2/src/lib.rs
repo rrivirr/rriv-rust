@@ -15,7 +15,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::OutputPin;
-use stm32f1xx_hal::{afio::MAPR, serial::StopBits};
+use stm32f1xx_hal::{afio::MAPR, pac::ethernet_dma::dmabmr::RTPR_R, serial::StopBits};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -132,7 +132,6 @@ impl RRIVBoard for Board {
         cortex_m::interrupt::free(|cs| f())
     }
 
-
     // // use this to talk out on serial to other UART modules, RS 485, etc
     fn usart_send(&mut self, string: &str){
 
@@ -151,12 +150,18 @@ impl RRIVBoard for Board {
             // USART
             let bytes = string.as_bytes();
             for char in bytes.iter() {
-                let t = USART_TX.borrow(cs);
+                rprintln!("char {}", char);
+                let t: &RefCell<Option<Tx<USART2>>> = USART_TX.borrow(cs);
                 if let Some(tx) = t.borrow_mut().deref_mut() {
                     _ = nb::block!(tx.write(char.clone()));
                 }
             }
 
+            // let c = 0b00001101;
+            // let t: &RefCell<Option<Tx<USART2>>> = USART_TX.borrow(cs);
+            // if let Some(tx) = t.borrow_mut().deref_mut() {
+            //     _ = nb::block!(tx.write(c.clone()));
+            // }
         });
 
         rriv_board::RRIVBoard::delay_ms(self, 2);
@@ -581,7 +586,7 @@ impl BoardBuilder {
             usart,
             (pins.tx, pins.rx),
             mapr,
-            Config::default().baudrate(38400.bps()).wordlength_8bits().parity_even().stopbits(StopBits::STOP1), // 19200
+            Config::default().baudrate(38400.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // 19200
             &clocks,
         );
 
