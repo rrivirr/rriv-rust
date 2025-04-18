@@ -434,12 +434,48 @@ impl DataLogger {
                                                               // fileSystemWriteCache->flushCache();
                 self.write_last_measurement_to_storage(board);
 
-                // self.transmit_lorawan();
+                // self.process_telemetry(); // telemeterize the measured values
 
                 self.last_interactive_log_time = board.timestamp();
             }
         }
     }
+
+
+    /*
+
+    
+    # Telemetry Definitions
+
+    Telemetry Transport: A technology used for sending data from the board to the cloud through the internet.  Examples are 
+                         LoRaWAN, MQTT w/ WiFi Backhaul, BLE with internet bridge, serial with internet bridge (via RRIVCTL), etc
+
+    Physical RF Technologies: Radio frequency technologies used for transmitted data from the board wirelessly to a reciever.  Examples
+                              are LoRa, WiFi, BLE, etc.
+
+    A telemetry driver implements communications with a modem implementing a particular physical transport techology _and_ defines how that 
+    modem communicates with the cloud services.
+
+    Datalogger
+    - Telemetry Processor
+        - Codecs
+        - Telemetry Drivers
+            - Telemetry Tranports
+                - Modems
+                   - Physical transport technologies
+
+
+    rrivctl set telemeter lorawan {advanced config}
+    rrivctl set telemeter wifi {}                    // what would this be called??
+
+
+    
+
+
+     */
+
+
+
 
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
