@@ -442,6 +442,42 @@ impl DataLogger {
     }
 
 
+
+
+    fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
+        // call the loraw driver only for now
+
+        let mut values: [f64; 12] = [0_f64; 12];
+        let mut bits: [u8; 12] = [0_u8; 12];
+        for i in 0..self.sensor_drivers.len() {
+            for i in 0..self.sensor_drivers.len() {
+                if let Some(ref mut driver) = self.sensor_drivers[i] {
+                    // TODO: iterate values
+                    match driver.get_measured_parameter_value(0){
+                        Ok(value) => values[i] = value,
+                        Err(_) => todo!(),
+                    }
+
+                    match driver.get_measured_parameters_bits(0){
+                        Ok(bits) => bits[i] = bits,
+                        Err(_) => todo!(),
+                    }
+                }
+            }
+        }
+
+        let timestamp_hour_offset = 0; // TODO get the timestamp offset from the beginning of the utc hour
+        let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, values, [13_u8; 12]);
+
+        // stateful deltas codec
+        // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);
+
+
+        telemetry::telemeters::lorawan::transmit(payload);
+    }
+
+
     /*
 
     
@@ -473,8 +509,6 @@ impl DataLogger {
 
 
      */
-
-
 
 
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
