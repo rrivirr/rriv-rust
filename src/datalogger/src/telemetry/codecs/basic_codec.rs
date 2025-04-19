@@ -1,6 +1,7 @@
 
 
 
+use rtt_target::rprintln;
 
 
 
@@ -23,4 +24,5 @@ pub fn encode( timestamp: long,
                bits: &[u8]
              ) -> Box<[u8]>{
 
+    rprintln("{}", "debug message while running on board");
 }
