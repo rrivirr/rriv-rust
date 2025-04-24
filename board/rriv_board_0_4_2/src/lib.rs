@@ -839,7 +839,8 @@ impl BoardBuilder {
         // build the internal adc
         let internal_adc_configuration =
             InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
-        let internal_adc = internal_adc_configuration.build(&clocks);
+        let mut internal_adc = internal_adc_configuration.build(&clocks);
+        internal_adc.enable(&mut delay);
         self.internal_adc = Some(internal_adc);
 
         self.rgb_led = Some(build_rgb_led(
