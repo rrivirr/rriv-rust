@@ -59,9 +59,7 @@ The code in `board` must be run on target hardware. This is because it is either
 
 `board/lib` - a static C FFI library is being used as a way to call new features written in Rust from the current C firmware. Eventually, the C firmware will have been fully replaced (and upgraded!) by the Rust firmware.
 
-`board/rriv-0-4` - This is where the board-specific code lives.
-
-The Rust library in `src/lib` is for core functionality that can be tested on the host and used by the C firmware via the FFI library.
+`board/rriv-0-4-2` - This is where the board-specific code lives.  A new revision of the board hardware can be supported by creating a new implementation module.
 
 
 ### Build & Debug
