@@ -14,21 +14,32 @@ rustup toolchain install nightly
 ```
 ```zsh
 rustup target add thumbv7m-none-eabi
+rustup default nightly
+rustup update
+```
+You can also list and set the toolchain directly like so:
+```
+rustup toolchain list
+rustup toochain default <toolchain from the list>
+rustup update
 ```
 ```zsh
 rustup default nightly
 ```
 
-[probe-rs]([https://probe.rs/docs/getting-started/installation/](https://probe.rs/docs/getting-started/installation/)) sets up the tooling for flashing and debugging. You will need to install the probe-rs cli tool. You can do this with a curl command in Linux or MacOS:
+[probe-rs](https://probe.rs/docs/getting-started/installation/) is used for flashing and debugging. 
+
+There is a one-liner shell script installer availble here: [https://probe.rs/](https://probe.rs/)
 
 ```zsh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.sh | sh
 ```
-This will install the probe-rs, cargo-flash and cargo-embed binaries and put them in $PATH.
 
 Users of VSCode will also want to install the following extensions:
 * rust-analyzer
 * ~~probe-rs-debugger~~: This is now installed with probe-rs.
+* crates
+
 
 
 ### Code Organization
