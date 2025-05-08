@@ -3,6 +3,29 @@ members = ["app", "rriv_board", "rriv_board_0_4_2"]
 resolver = "2"
 
 [workspace.package]
-authors = ["m. interrupt"]
+authors = ["ZavenArra", "m. interrupt"]
 edition = "2021"
 description = "RRIV board packages"
+
+[profile.release]
+opt-level = 'z'     # optimize for size and don't unroll loops
+codegen-units = 1 # setting this to 1 causes better optimizations, but slower code. setting it higher makes compiling parallelizable
+debug = false       # symbols are nice and they don't increase the size on Flash
+lto = true          # link-time optimizations
+
+[profile.dev]
+#opt-level = 'z'     # optimize for size and don't unroll loops
+codegen-units = 1 # setting this to 1 causes better optimizations, but slower code. setting it higher makes compiling parallelizable
+debug =  true      # 
+lto = true          # link-time optimizations
+panic = "unwind"
+
+
+# Optimize all dependencies
+[profile.release.package."*"]
+opt-level = "z"
+
+[profile.dev.package."*"]
+opt-level = "z"
+
+

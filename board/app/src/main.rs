@@ -4,7 +4,8 @@
 #![feature(prelude_2024)]
 #![no_main]
 
-extern crate panic_halt;
+extern crate panic_abort;
+
 use core::{prelude::rust_2024::*, u8};
 use cortex_m_rt::entry;
 use rtt_target::rtt_init_print;
@@ -12,18 +13,12 @@ use rtt_target::rtt_init_print;
 pub mod prelude;
 
 extern crate rriv_board;
-use rriv_board::{RRIVBoard,RRIVBoardBuilder};
 
 extern crate rriv_board_0_4_2;
-use rriv_board_0_4_2::{Board,BoardBuilder};
+use crate::rriv_board::RRIVBoard;
 
 extern crate datalogger;
 use datalogger::DataLogger;
-
-// #[link(name = "rriv_0_4", kind = "static")]
-// extern "C" {
-//     pub fn rust_serial_interface_new() -> *mut c_void;
-// }
 
 #[entry]
 fn main() -> ! {
@@ -31,19 +26,11 @@ fn main() -> ! {
     prelude::init();
 
     let mut board = rriv_board_0_4_2::build();
+    board.start(); // not needed, for debug only
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
     loop {
+        board.run_loop_iteration();
         datalogger.run_loop_iteration(&mut board);
     }
 }
-
-// some serial commands to test for success and failure
-// {"cmd":"set","object":"datalogger"}
-// {"cmd":"foo","object":"bar"}
-
-
-
-    // let mut peripherals = BoardPeripherals::new();
-    // peripherals.setup();
-    // let mut board = Board::new(peripherals)

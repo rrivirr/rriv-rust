@@ -7,12 +7,15 @@ use rriv_board::{RRIVBoard, RXProcessor};
 extern crate alloc;
 use alloc::boxed::Box;
 use alloc::format;
+use alloc::string::String;
+use serde_json::Value;
 
 use core::borrow::BorrowMut;
 use core::ffi::{c_char, CStr};
 use serde::{Deserialize, Serialize};
 
 use rtt_target::rprintln;
+
 
 use crate::datalogger_commands::*;
 
@@ -26,6 +29,7 @@ static mut COMMAND_DATA: CommandData = CommandData::default();
 struct CLICommand<'a> {
     object: &'a str,
     action: &'a str,
+    subcommand: Option<Box<str>>
 }
 
 // impl CommandService {
@@ -65,7 +69,7 @@ fn pending_message_count(board: &impl RRIVBoard) -> usize {
     board.critical_section(get_pending_message_count)
 }
 
-fn take_command(board: &impl RRIVBoard) -> Result<[u8; 100], ()> {
+fn take_command(board: &impl RRIVBoard) -> Result<[u8; 500], ()> {
     let do_take_command = || unsafe {
         let command_data = COMMAND_DATA.borrow_mut();
         Ok(CommandRecognizer::take_command(command_data))
@@ -79,28 +83,40 @@ pub fn get_pending_command(board: &impl RRIVBoard) -> Option<Result<CommandPaylo
         if let Ok(command_bytes) = take_command(board) {
             let command_cstr = CStr::from_bytes_until_nul(&command_bytes).unwrap();
             let command_identification_result = identify_serial_command(command_cstr);
+            rprintln!("{:?}", command_identification_result);
             match command_identification_result {
                 Ok(command_type) => {
                     let result: Result<CommandPayload, _> =
                         get_command_payload(command_type, command_cstr);
+                    rprintln!("{:?}", result);
                     return Some(result);
                 }
-                Err(error) => return Some(Err(error)),
+                Err(error) => {
+                    rprintln!("{:?}", error);
+                    return Some(Err(error))
+                }
             }
         }
     }
     return None;
 }
 
-pub fn get_command_from_parts(object: &str, action: &str) -> CommandType {
-    let command_str = format!("{}_{}", object, action);
-    CommandType::from_str(&command_str)
+pub fn get_command_from_parts(object: &str, action: &str, subcommmand: Option<Box<str>>) -> CommandType {
+    if let Some(subcommand) = subcommmand {
+        let command_str = format!("{}_{}_{}", object, action, subcommand);
+        rprintln!("{:?}", command_str);
+        CommandType::from_str(&command_str)
+    } else {
+        let command_str = format!("{}_{}", object, action);
+        rprintln!("{:?}", command_str);
+        CommandType::from_str(&command_str)
+    }
 }
 
 fn identify_serial_command(command_cstr: &CStr) -> Result<CommandType, CommandError> {
     match parse_command::<CLICommand>(command_cstr) {
         Ok(cli_command) => {
-            let command_type = get_command_from_parts(cli_command.object, cli_command.action);
+            let command_type = get_command_from_parts(cli_command.object, cli_command.action, cli_command.subcommand);
             if command_type == CommandType::Unknown {
                 return Err(CommandError::InvalidCommand);
             }
@@ -123,33 +139,79 @@ where
     return serde_json::from_str::<T>(command_data_str);
 }
 
+#[macro_export]
+macro_rules!  parse_command_to_payload {
+    ($payload_type:ty, $variant:path, $command_cstr:expr) => {
+        let result = parse_command::<$payload_type>($command_cstr);
+        match result {
+            Ok(payload) => return Ok($variant(payload)),
+            Err(error) => return Err(CommandError::InvalidPayload(error)),
+        }
+    };
+}
+
 fn get_command_payload(
     command: CommandType,
     command_cstr: &CStr,
 ) -> Result<CommandPayload, CommandError> {
     match command {
         CommandType::DataloggerSet => {
-            let result = parse_command::<DataloggerSetCommandPayload>(command_cstr);
-            match result {
-                Ok(payload) => return Ok(CommandPayload::SetCommandPayload(payload)),
-                Err(error) => return Err(CommandError::InvalidPayload(error)),
-            }
+            parse_command_to_payload!(DataloggerSetCommandPayload, CommandPayload::DataloggerSetCommandPayload, command_cstr);
         }
         CommandType::DataloggerGet => {
-            let result = parse_command::<DataloggerGetCommandPayload>(command_cstr);
-            match result {
-                Ok(payload) => return Ok(CommandPayload::GetCommandPayload(payload)),
-                Err(error) => return Err(CommandError::InvalidPayload(error)),
-            }
+            parse_command_to_payload!(DataloggerGetCommandPayload, CommandPayload::DataloggerGetCommandPayload, command_cstr);
         }
         CommandType::DataloggerReset => todo!(),
-        CommandType::DataloggerSetMode => todo!(),
-        CommandType::SensorSet => todo!(),
-        CommandType::SensorGet => todo!(),
-        CommandType::SensorRemove => todo!(),
-        CommandType::SensorList => todo!(),
-        CommandType::SensorCalibratePoint => todo!(),
-        CommandType::SensorCalibrateFit => todo!(),
+        CommandType::DataloggerSetMode => {
+            parse_command_to_payload!(DataloggerSetModeCommandPayload, CommandPayload::DataloggerSetModeCommandPayload, command_cstr);
+        },
+        CommandType::SensorSet => {
+
+            // return serde_json::from_str::<T>(command_data_str);
+
+            let command_data_str = command_cstr.to_str().unwrap();
+
+            let mut raw_value: Value = serde_json::from_str(command_data_str).unwrap(); // use hashbrown HashMap?
+
+
+            let result = parse_command::<SensorSetCommandPayload>(command_cstr);
+            match result {
+                Ok(payload) => return Ok(CommandPayload::SensorSetCommandPayload(payload, raw_value)),
+                Err(error) => return Err(CommandError::InvalidPayload(error)),
+            }
+            // let mut map: HashMap<String, serde_json::Value> = HashMap::new();
+            // for key in keys {
+            //     let (k, v) = lookup.remove_entry (key).unwrap();
+            //     map.insert(k, v);
+            // }
+
+            // parse_command_to_payload!(SensorSetCommandPayload, CommandPayload::SensorSetCommandPayload, command_cstr);
+        },
+        CommandType::SensorGet => {
+            parse_command_to_payload!(SensorGetCommandPayload, CommandPayload::SensorGetCommandPayload, command_cstr);
+        },
+        CommandType::SensorRemove => {
+            parse_command_to_payload!(SensorRemoveCommandPayload, CommandPayload::SensorRemoveCommandPayload, command_cstr);
+        },
+        CommandType::SensorList => {
+            parse_command_to_payload!(SensorListCommandPayload, CommandPayload::SensorListCommandPayload, command_cstr);
+        },
+        CommandType::SensorCalibratePoint => {
+            rprintln!("parsing SensorCalibratePoint");
+            parse_command_to_payload!(SensorCalibratePointPayload, CommandPayload::SensorCalibratePointPayload, command_cstr);
+        },
+        CommandType::SensorCalibrateList => {
+            parse_command_to_payload!(SensorCalibrateListPayload, CommandPayload::SensorCalibrateListPayload, command_cstr);
+        }
+        CommandType::SensorCalibrateRemove => {
+            parse_command_to_payload!(SensorCalibrateRemovePayload, CommandPayload::SensorCalibrateRemovePayload, command_cstr);
+        }
+        CommandType::SensorCalibrateFit => {
+            parse_command_to_payload!(SensorCalibrateFitPayload, CommandPayload::SensorCalibrateFitPayload, command_cstr);
+        },
+        CommandType::SensorCalibrateClear => {
+            parse_command_to_payload!(SensorCalibrateClearPayload, CommandPayload::SensorCalibrateClearPayload, command_cstr);
+        },
         CommandType::SensorReset => todo!(),
         CommandType::ActuatorSet => todo!(),
         CommandType::ActuatorGet => todo!(),
@@ -165,8 +227,12 @@ fn get_command_payload(
         CommandType::BoardFirmwareWarranty => todo!(),
         CommandType::BoardFirmwareConditions => todo!(),
         CommandType::BoardFirmwareLicense => todo!(),
-        CommandType::BoardRtcSet => todo!(),
-        CommandType::BoardRtcGet => todo!(),
+        CommandType::BoardRtcSet => {
+            parse_command_to_payload!(BoardRtcSetPayload, CommandPayload::BoardRtcSetPayload, command_cstr);
+        },
+        CommandType::BoardGet => {
+            parse_command_to_payload!(BoardGetPayload, CommandPayload::BoardGetPayload, command_cstr);
+        }
         CommandType::BoardRestart => todo!(),
         CommandType::BoardI2cList => todo!(),
         CommandType::BoardMemoryCheck => todo!(),
@@ -176,7 +242,7 @@ fn get_command_payload(
         CommandType::BoardSignalExAdcLow => todo!(),
         CommandType::BoardSignal3v3BoostHigh => todo!(),
         CommandType::BoardSignal3v3BoostLow => todo!(),
-        // todo: refactor these to be an errors enumeration
+        // todo: refactor these to be an errors enumerationget_command_payload
         CommandType::Unknown => todo!(),
     }
 }
