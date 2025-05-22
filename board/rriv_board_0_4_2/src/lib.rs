@@ -300,9 +300,11 @@ impl SensorDriverServices for Board {
         }
     }
 
-    fn query_external_adc(&mut self, channel: u8) -> u32 {
-        // return self.external_adc.read(1);
-        return 0; // not implemented
+    fn query_external_adc(&mut self, channel: u8) -> u16 {
+        let i2c1 = mem::replace(&mut self.i2c1, None);
+        let mut i2c1 = i2c1.unwrap();
+        let value = self.external_adc.read_single_channel(&mut i2c1, channel);
+        return value; 
     }
 
     control_services_impl!();
@@ -911,20 +913,25 @@ impl BoardBuilder {
 
         // rprintln!("starting i2c");
         core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
-        let i2c1 = BoardBuilder::setup_i2c1(
+        let mut i2c1 = BoardBuilder::setup_i2c1(
             i2c1_pins,
             &mut gpio_cr,
             device_peripherals.I2C1,
             &mut afio.mapr,
             &clocks,
         );
-        self.i2c1 = Some(i2c1);
         rprintln!("set up i2c1");
 
-        let i2c2 =
-            BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
-        self.i2c2 = Some(i2c2);
+        let mut i2c2 =
+            BoardBuilder::setup_i2c2(
+                i2c2_pins, 
+                &mut gpio_cr, 
+                device_peripherals.I2C2, 
+                &clocks
+            );
         rprintln!("set up i2c2");
+
+     
 
         // loop {
         rprintln!("Start i2c1 scanning...");
@@ -934,11 +941,10 @@ impl BoardBuilder {
             // Write the empty array and check the slave response.
             // rprintln!("trying {:02x}", addr);
             let mut buf = [b'\0'; 1];
-            if let Some(i2c) = &mut self.i2c1 {
-                if i2c.read(addr, &mut buf).is_ok() {
-                    rprintln!("{:02x} good", addr);
-                }
+            if i2c1.read(addr, &mut buf).is_ok() {
+                rprintln!("{:02x} good", addr);
             }
+            
 
             delay.delay_ms(10_u32);
         }
@@ -950,16 +956,20 @@ impl BoardBuilder {
             // Write the empty array and check the slave response.
             // rprintln!("trying {:02x}", addr);
             let mut buf = [b'\0'; 1];
-            if let Some(i2c) = &mut self.i2c2 {
-                if i2c.read(addr, &mut buf).is_ok() {
-                    rprintln!("{:02x} good", addr);
-                }
+            if i2c2.read(addr, &mut buf).is_ok() {
+                rprintln!("{:02x} good", addr);
             }
             delay.delay_ms(10_u32);
         }
         rprintln!("scan is done");
 
-        // }
+        // configure external ADC
+        self.external_adc.as_mut().unwrap().configure(&mut i2c1);
+
+        self.i2c1 = Some(i2c1);
+        self.i2c2 = Some(i2c2);
+
+
 
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
@@ -1037,4 +1047,9 @@ impl BoardBuilder {
 
         rprintln!("done with setup");
     }
+}
+
+
+unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
+    ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
 }

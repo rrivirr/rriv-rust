@@ -47,7 +47,7 @@ struct DataloggerSettings {
     delay_between_bursts: u16,
     burst_repetitions: u8,
     mode: u8,
-    // external_adc_enabled: u8:1, // how we we handle bitfields?
+    // external_adc_enabled: u8:1, // how we we handle bitfields? -> bitfield_struct crate works well
     // debug_includes_values: u8:1,
     // withold_incomplete_readings: u8:1,
     // low_raw_data: u8:1,
