@@ -59,6 +59,10 @@ pub trait RRIVBoard: Send {
     fn get_actuator_driver_services(&mut self) -> &mut dyn ActuatorDriverServices;
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices;
 
+    // low level board functionality
+    // for debugging and basic operation
+    fn dump_eeprom(&mut self);
+
 }
 
 

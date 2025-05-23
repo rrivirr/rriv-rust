@@ -20,7 +20,10 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
                     "epoch" => {
                         let epoch = board.epoch_timestamp();
                         board.serial_send(format!("{:}\n", epoch).as_str());
-                    }
+                    },
+                    "eeprom" => {
+                        board.dump_eeprom();
+                    },
                     _ => {
                         board.serial_send("Unsupported param in command\n");
                     }

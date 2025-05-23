@@ -6,7 +6,14 @@ use alloc::boxed::Box;
 use alloc::format;
 
 use core::{
-    any::Any, cell::RefCell, concat, default::Default, format_args, ops::DerefMut, option::Option::{self, *}, result::Result::*
+    any::Any,
+    cell::RefCell,
+    concat,
+    default::Default,
+    format_args,
+    ops::DerefMut,
+    option::Option::{self, *},
+    result::Result::*,
 };
 use core::{mem, result};
 use cortex_m::{
@@ -15,11 +22,15 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
 use stm32f1xx_hal::spi::Spi;
+use stm32f1xx_hal::{
+    afio::MAPR,
+    gpio::{Cr, Dynamic, PinModeError},
+    pac::TIM3,
+};
 
 use rtt_target::rprintln;
 use stm32f1xx_hal::rcc::{Clocks, CFGR};
@@ -38,14 +49,14 @@ use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use rriv_board::{
-    ActuatorDriverServices, OneWireBusInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor, SensorDriverServices, TelemetryDriverServices
+    ActuatorDriverServices, OneWireBusInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor,
+    SensorDriverServices, TelemetryDriverServices, EEPROM_TOTAL_SENSOR_SLOTS,
 };
 
 use ds323x::{DateTimeAccess, Ds323x, NaiveDate, NaiveDateTime, NaiveTime};
 use stm32f1xx_hal::rtc::Rtc;
 
 use one_wire_bus::{crc::check_crc8, Address, OneWire, SearchState};
-
 
 mod components;
 use components::*;
@@ -92,7 +103,7 @@ pub struct Board {
     pub debug: bool,
     pub file_epoch: i64,
     pub one_wire_bus: OneWire<OneWirePin>,
-    one_wire_search_state: Option<SearchState>
+    one_wire_search_state: Option<SearchState>,
 }
 
 impl Board {
@@ -104,11 +115,10 @@ impl Board {
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         self.storage.create_file(timestamp);
     }
-
 }
 
 impl RRIVBoard for Board {
-    fn run_loop_iteration(&mut self){
+    fn run_loop_iteration(&mut self) {
         self.file_epoch = self.epoch_timestamp();
     }
 
@@ -158,8 +168,8 @@ impl RRIVBoard for Board {
         eeprom::write_datalogger_settings_to_eeprom(self, bytes);
     }
 
-    fn retrieve_datalogger_settings(        // let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
-
+    fn retrieve_datalogger_settings(
+        // let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         &mut self,
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
@@ -194,7 +204,7 @@ impl RRIVBoard for Board {
 
     fn set_epoch(&mut self, epoch: i64) {
         let i2c1 = mem::replace(&mut self.i2c1, None);
-        let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+        let mut ds3231 = Ds323x::new_ds3231(i2c1.unwrap());
         let millis = epoch * 1000;
         // DateTime::from_timestamp_millis(micros);
         let datetime = NaiveDateTime::from_timestamp_millis(millis);
@@ -202,17 +212,16 @@ impl RRIVBoard for Board {
         if let Some(datetime) = datetime {
             match ds3231.set_datetime(&datetime) {
                 Ok(_) => {}
-                Err(err) => rprintln!("Error {:?}",err),
+                Err(err) => rprintln!("Error {:?}", err),
             }
         }
         let result = ds3231.datetime();
-        self.i2c1 = Some(ds3231.destroy_ds3231());  
+        self.i2c1 = Some(ds3231.destroy_ds3231());
     }
 
     fn epoch_timestamp(&mut self) -> i64 {
-
         let i2c1 = mem::replace(&mut self.i2c1, None);
-        let mut ds3231 = Ds323x::new_ds3231( i2c1.unwrap());
+        let mut ds3231 = Ds323x::new_ds3231(i2c1.unwrap());
         let result = ds3231.datetime();
         self.i2c1 = Some(ds3231.destroy_ds3231());
 
@@ -220,10 +229,10 @@ impl RRIVBoard for Board {
             Ok(date_time) => {
                 // rprintln!("got DS3231 time {:?}", date_time.and_utc().timestamp());
                 date_time.and_utc().timestamp()
-            },
+            }
             Err(err) => {
                 rprintln!("DS3231 error {:?}", err);
-                return 0 // this could fail back to some other clock
+                return 0; // this could fail back to some other clock
             }
         }
     }
@@ -231,8 +240,6 @@ impl RRIVBoard for Board {
     // crystal time, systick
     fn timestamp(&mut self) -> i64 {
         return self.internal_rtc.current_time().into(); // internal RTC
-
-       
     }
 
     fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices {
@@ -246,9 +253,9 @@ impl RRIVBoard for Board {
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices {
         return self;
     }
-    
+
     fn set_debug(&mut self, debug: bool) {
-       self.debug = debug;
+        self.debug = debug;
     }
 
     fn write_log_file(&mut self, data: &str) {
@@ -257,6 +264,21 @@ impl RRIVBoard for Board {
 
     fn flush_log_file(&mut self) {
         todo!("flush_log_file");
+    }
+
+    fn dump_eeprom(&mut self) {
+        
+        let mut buffer: [u8; EEPROM_TOTAL_SENSOR_SLOTS * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE] =
+            [0; EEPROM_TOTAL_SENSOR_SLOTS * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
+        self.retrieve_sensor_settings(&mut buffer);
+
+        for i in 0..buffer.len(){
+            if i % rriv_board::EEPROM_SENSOR_SETTINGS_SIZE == 0 {
+              rriv_board::RRIVBoard::serial_send(self, format!("\n{}:", i / rriv_board::EEPROM_SENSOR_SETTINGS_SIZE ).as_str());  
+            }
+           rriv_board::RRIVBoard::serial_send(self,format!("{}", &buffer[i]).as_str()); 
+        }
+        rriv_board::RRIVBoard::serial_send(self,"}\n"); // } ends the transmissions
     }
 }
 
@@ -281,8 +303,6 @@ macro_rules! control_services_impl {
 
 type OneWireGpio1 = OneWire<Pin<'B', 8, Dynamic>>;
 
-
-
 impl SensorDriverServices for Board {
     fn query_internal_adc(&mut self, channel: u8) -> u16 {
         match self.internal_adc.read(channel) {
@@ -304,7 +324,7 @@ impl SensorDriverServices for Board {
         let i2c1 = mem::replace(&mut self.i2c1, None);
         let mut i2c1 = i2c1.unwrap();
         let value = self.external_adc.read_single_channel(&mut i2c1, channel);
-        return value; 
+        return value;
     }
 
     control_services_impl!();
@@ -317,7 +337,10 @@ impl SensorDriverServices for Board {
                 // rprintln!(&format!("Problem reading I2C2 {}\n", addr))
                 // let error_msg  = &format!("Problem reading I2C2 {}\n", addr);
                 // rprintln!(error_msg);
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem reading I2C2 {}\n", addr));
+                rriv_board::RRIVBoard::serial_debug(
+                    self,
+                    &format!("Problem reading I2C2 {}\n", addr),
+                );
                 for i in 0..buffer.len() {
                     buffer[i] = 0b11111111; // error value
                 }
@@ -331,33 +354,38 @@ impl SensorDriverServices for Board {
             Ok(_) => return Ok(()),
             Err(e) => {
                 rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {}", addr));
+                rriv_board::RRIVBoard::serial_debug(
+                    self,
+                    &format!("Problem writing I2C2 {}", addr),
+                );
                 return Err(());
             }
         }
-     }
-     
+    }
+
     // fn borrow_one_wire_bus(&mut self) -> &mut dyn rriv_board::OneWireBusInterface  {
 
     //     return &mut self.one_wire_bus;
 
     // }
-    
+
     fn one_wire_send_command(&mut self, command: u8, address: u64) {
         let address = Address(address);
 
-       match self.one_wire_bus.send_command(command, Some(&address), &mut self.delay) {
-                Ok(_) => rprintln!("sent command ok"),
-                Err(e) => rprintln!("{:?}", e)
-           }
+        match self
+            .one_wire_bus
+            .send_command(command, Some(&address), &mut self.delay)
+        {
+            Ok(_) => rprintln!("sent command ok"),
+            Err(e) => rprintln!("{:?}", e),
+        }
     }
 
-
-    fn write_gpio_pin(&mut self, pin: u8, value: bool){
+    fn write_gpio_pin(&mut self, pin: u8, value: bool) {
         let gpio = match pin {
             0 => {
                 // self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
-                if(value){
+                if (value) {
                     self.gpio.gpio1.set_high();
                 } else {
                     self.gpio.gpio1.set_low();
@@ -385,58 +413,58 @@ impl SensorDriverServices for Board {
                 }
             }
         };
-        
     }
 
-    
     fn one_wire_reset(&mut self) {
         let _ = self.one_wire_bus.reset(&mut self.delay);
     }
-    
+
     fn one_wire_skip_address(&mut self) {
         let _ = self.one_wire_bus.skip_address(&mut self.delay);
     }
-    
+
     fn one_wire_write_byte(&mut self, byte: u8) {
         let _ = self.one_wire_bus.write_byte(byte, &mut self.delay);
     }
-    
+
     fn one_wire_match_address(&mut self, address: u64) {
         let address = Address(address);
         self.one_wire_bus.match_address(&address, &mut self.delay);
     }
-    
-    fn one_wire_read_bytes(&mut self, output: &mut [u8] ) {
+
+    fn one_wire_read_bytes(&mut self, output: &mut [u8]) {
         self.one_wire_bus.read_bytes(output, &mut self.delay);
         // TODO
-        match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output){
+        match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output) {
             Ok(_) => return,
             Err(_) => rprintln!("one wire crc error"),
         }
     }
-    
+
     fn one_wire_bus_start_search(&mut self) {
         self.one_wire_search_state = None;
     }
 
     fn one_wire_bus_search(&mut self) -> Option<u64> {
-        match self.one_wire_bus.device_search(self.one_wire_search_state.as_ref(), false, &mut self.delay){
+        match self.one_wire_bus.device_search(
+            self.one_wire_search_state.as_ref(),
+            false,
+            &mut self.delay,
+        ) {
             Ok(Some((device_address, state))) => {
                 self.one_wire_search_state = Some(state);
-                return Some(device_address.0);    
-            },
+                return Some(device_address.0);
+            }
             Ok(None) => {
                 rprintln!("no devices found on onewire");
-                return None;              
-            },
+                return None;
+            }
             Err(e) => {
-                rprintln!("one wire error{:?}", e);          
-                return None;  
-            },
-        } 
+                rprintln!("one wire error{:?}", e);
+                return None;
+            }
+        }
     }
-
-
 }
 
 impl ActuatorDriverServices for Board {
@@ -536,9 +564,8 @@ pub fn build() -> Board {
 }
 
 pub struct OneWirePin {
-    pin:  Pin<'D', 2, Dynamic>
+    pin: Pin<'D', 2, Dynamic>,
 }
-
 
 impl InputPin for OneWirePin {
     type Error = PinModeError;
@@ -550,7 +577,7 @@ impl InputPin for OneWirePin {
     fn is_low(&self) -> Result<bool, Self::Error> {
         // unsafely access the pin state of GPIO B8
         // because the hal doesn't currently implement a IO pin type later change to that
-        // this is safe because this is a one wire protocol 
+        // this is safe because this is a one wire protocol
         // and we don't need the mode of the pin to be checked.
         unsafe { Ok((*crate::pac::GPIOD::ptr()).idr.read().bits() & (1 << 2) == 0) }
     }
@@ -588,7 +615,7 @@ pub struct BoardBuilder {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
-    pub storage: Option<Storage>
+    pub storage: Option<Storage>,
 }
 
 impl BoardBuilder {
@@ -606,13 +633,11 @@ impl BoardBuilder {
             rgb_led: None,
             oscillator_control: None,
             internal_rtc: None,
-            storage: None
+            storage: None,
         }
     }
 
     pub fn build(self) -> Board {
-
-
         let mut one_wire_option = None;
         let mut gpio_cr = self.gpio_cr.unwrap();
         // steal the gpio5 pin to build a one wire
@@ -627,9 +652,7 @@ impl BoardBuilder {
             let mut gpio5 = gpio5.into_dynamic(&mut gpio_cr.gpiod_crl);
             gpio5.make_open_drain_output(&mut gpio_cr.gpiod_crl);
 
-            let gpio5 = OneWirePin {
-                pin: gpio5
-            };
+            let gpio5 = OneWirePin { pin: gpio5 };
 
             one_wire_option = match OneWire::new(gpio5) {
                 Ok(one_wire) => Some(one_wire),
@@ -640,24 +663,20 @@ impl BoardBuilder {
             };
         }
 
-        if(one_wire_option.is_none()){
+        if (one_wire_option.is_none()) {
             rprintln!("bad one wire creation");
         }
         let one_wire = one_wire_option.unwrap();
 
         // mcu device registers
-       
 
         // TODO: just one GPIO pin for the moment
-        let mut gpio = self.gpio.unwrap();        
+        let mut gpio = self.gpio.unwrap();
         gpio.gpio6.make_push_pull_output(&mut gpio_cr.gpioc_crh);
-
-        
 
         // let one_wire_bus_rriv = OneWireGpio1 {
         //     one_wire
         // };
-
 
         Board {
             i2c1: self.i2c1,
@@ -676,7 +695,7 @@ impl BoardBuilder {
             debug: true,
             file_epoch: 0,
             one_wire_bus: one_wire,
-            one_wire_search_state: None
+            one_wire_search_state: None,
         }
     }
 
@@ -855,7 +874,6 @@ impl BoardBuilder {
 
         let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
 
-
         // Set up pins
         let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
         let (
@@ -885,7 +903,6 @@ impl BoardBuilder {
         // let mut delay = delay.unwrap();
 
         let mut delay: DelayUs<TIM3> = device_peripherals.TIM3.delay(&clocks);
-
 
         BoardBuilder::setup_serial(
             serial_pins,
@@ -923,15 +940,8 @@ impl BoardBuilder {
         rprintln!("set up i2c1");
 
         let mut i2c2 =
-            BoardBuilder::setup_i2c2(
-                i2c2_pins, 
-                &mut gpio_cr, 
-                device_peripherals.I2C2, 
-                &clocks
-            );
+            BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
         rprintln!("set up i2c2");
-
-     
 
         // loop {
         rprintln!("Start i2c1 scanning...");
@@ -944,7 +954,6 @@ impl BoardBuilder {
             if i2c1.read(addr, &mut buf).is_ok() {
                 rprintln!("{:02x} good", addr);
             }
-            
 
             delay.delay_ms(10_u32);
         }
@@ -968,8 +977,6 @@ impl BoardBuilder {
 
         self.i2c1 = Some(i2c1);
         self.i2c2 = Some(i2c2);
-
-
 
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
@@ -1000,7 +1007,7 @@ impl BoardBuilder {
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         // delay2.delay(2);
         rprintln!("{:?}", clocks);
-        
+
         // let mut storage = storage::build(
         //     spi1_pins,
         //     device_peripherals.SPI1,
@@ -1009,15 +1016,10 @@ impl BoardBuilder {
         //     delay2,
         // );
 
-        let mut storage = storage::build(
-            spi2_pins,
-            device_peripherals.SPI2,
-            clocks,
-            delay2,
-        );
+        let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         rprintln!("{:?}", clocks);
-   
+
         self.storage = Some(storage);
 
         // // let spi_mode = Mode {
@@ -1048,7 +1050,6 @@ impl BoardBuilder {
         rprintln!("done with setup");
     }
 }
-
 
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
