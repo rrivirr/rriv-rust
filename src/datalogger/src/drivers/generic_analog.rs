@@ -138,12 +138,8 @@ struct GenericAnalogDriverBitfield {
     #[bits(2)]
     adc_select: usize,
 
-    unused_1: bool,
-    unused_2: bool,
-    unused_3: bool,
-    unused_4: bool,
-    unused_5: bool,
-    unused_6: bool,
+    #[bits(6)]
+    unused: usize
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -152,7 +148,7 @@ pub struct GenericAnalogSpecialConfiguration {
     b: f64,          // 8
     sensor_port: u8, // 1
     settings: GenericAnalogDriverBitfield,
-    empty: [u8; 14], // 15
+    empty: [u8; 14], // 14
 }
 
 impl GenericAnalogSpecialConfiguration {
@@ -176,14 +172,15 @@ impl GenericAnalogSpecialConfiguration {
             }
         }
 
-        let mut bits: u8 = 0;
+
+        let mut bitfield = GenericAnalogDriverBitfield::new();
         match &value["adc_select"] {
             serde_json::Value::String(string) => match string.as_str() {
                 "internal" => {
-                    bits = 0;
+                    bitfield.set_adc_select(0);
                 }
                 "external" => {
-                    bits = 1;
+                    bitfield.set_adc_select(1);
                 }
                 _ => {
                     todo!("need to handle bad adc select string");
@@ -198,7 +195,7 @@ impl GenericAnalogSpecialConfiguration {
             m: 0.0,
             b: 0.0,
             sensor_port: sensor_port,
-            settings: GenericAnalogDriverBitfield::from_bits(bits),
+            settings: bitfield,
             empty: [b'\0'; 14],
         };
     }
@@ -206,7 +203,6 @@ impl GenericAnalogSpecialConfiguration {
     pub fn new_from_bytes(
         bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE],
     ) -> GenericAnalogSpecialConfiguration {
-        // panic if bytes.len() != 32
         let settings = bytes.as_ptr().cast::<GenericAnalogSpecialConfiguration>();
         unsafe { *settings }
     }
