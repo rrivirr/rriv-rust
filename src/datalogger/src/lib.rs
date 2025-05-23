@@ -827,7 +827,7 @@ impl DataLogger {
                         }
                     }
                 }
-                board.serial_send("didn't find the sensor\n");
+                board.serial_send(json!({"error":"didn't find the sensor"}).to_string().as_str());
             }
             CommandPayload::SensorRemoveCommandPayload(payload) => {
                 let sensor_id = match payload.id {
