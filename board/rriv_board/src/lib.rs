@@ -59,6 +59,10 @@ pub trait RRIVBoard: Send {
     fn get_actuator_driver_services(&mut self) -> &mut dyn ActuatorDriverServices;
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices;
 
+    // low level board functionality
+    // for debugging and basic operation
+    fn dump_eeprom(&mut self);
+
 }
 
 
@@ -95,7 +99,7 @@ pub trait SensorDriverServices {
     // fn query adc by index
     
     fn query_internal_adc(&mut self, port: u8) -> u16;
-    fn query_external_adc(&mut self, port: u8) -> u32;
+    fn query_external_adc(&mut self, port: u8) -> u16;
     fn ic2_read(&mut self, addr: u8, buffer: &mut [u8]) -> Result<(), ()>;
     fn ic2_write(&mut self, addr: u8, message: &[u8]) -> Result<(), ()>;
 

@@ -47,7 +47,7 @@ struct DataloggerSettings {
     delay_between_bursts: u16,
     burst_repetitions: u8,
     mode: u8,
-    // external_adc_enabled: u8:1, // how we we handle bitfields?
+    // external_adc_enabled: u8:1, // how we we handle bitfields? -> bitfield_struct crate works well
     // debug_includes_values: u8:1,
     // withold_incomplete_readings: u8:1,
     // low_raw_data: u8:1,
@@ -845,6 +845,8 @@ impl DataLogger {
                 for i in 0..self.sensor_drivers.len() {
                     if let Some(driver) = &mut self.sensor_drivers[i] {
                         let mut found = i;
+
+                        // bytewise comparison of sensor id to delete with sensor id of loaded sensor driver
                         for (j, (u1, u2)) in
                             driver.get_id().iter().zip(sensor_id.iter()).enumerate()
                         {
@@ -853,10 +855,12 @@ impl DataLogger {
                                 break;
                             }
                         }
+
+                        // do the removal if we matched, and then return
                         if usize::from(found) < EEPROM_TOTAL_SENSOR_SLOTS {
                             // remove the sensor driver and write null to EEPROM
                             let bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
-                                [0; EEPROM_DATALOGGER_SETTINGS_SIZE];
+                                [0xFF; EEPROM_DATALOGGER_SETTINGS_SIZE];
                             if let Some(found_u8) = found.try_into().ok() {
                                 board.store_sensor_settings(found_u8, &bytes);
                                 self.sensor_drivers[found] = None;

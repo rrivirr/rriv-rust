@@ -37,7 +37,7 @@ impl SensorDriver for GenericAnalog {
     }
 
     fn setup(&mut self) {
-        todo!()
+        // todo!()
     }
 
     getters!();
@@ -56,7 +56,9 @@ impl SensorDriver for GenericAnalog {
             0 => {
                 value = board.query_internal_adc(self.special_config.sensor_port);
             }
-            1 => todo!("exadc not implemented"),
+            1 => {
+                value = board.query_external_adc(self.special_config.sensor_port);
+            }
             2_usize.. => todo!("other adcs not implemented"),
         }
         self.measured_parameter_values[0] = value.into();
