@@ -40,6 +40,9 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
                         });
                         board.usb_serial_send(format!("{}\n", response).as_str());
                     }
+                    "eeprom" => {
+                        board.dump_eeprom();
+                    },
                     _ => {
                         board.usb_serial_send("Unsupported param in command\n");
                     }
