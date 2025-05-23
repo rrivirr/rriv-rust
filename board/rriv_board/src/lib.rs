@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
-pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 12;
+pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 2;
 
 enum AdcSelect {
     Internal,
