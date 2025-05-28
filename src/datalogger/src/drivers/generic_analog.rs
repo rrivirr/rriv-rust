@@ -37,7 +37,7 @@ impl SensorDriver for GenericAnalog {
     }
 
     fn setup(&mut self) {
-        todo!()
+        
     }
 
     getters!();

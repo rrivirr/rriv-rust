@@ -55,6 +55,9 @@ use pins::{GpioCr, Pins};
 mod pin_groups;
 use pin_groups::*;
 
+mod util;
+use util::*;
+
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
 static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
@@ -164,6 +167,7 @@ impl RRIVBoard for Board {
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
+        remove_invalid_utf8(buffer);
     }
 
     fn retrieve_sensor_settings(
@@ -175,9 +179,11 @@ impl RRIVBoard for Board {
         for slot in 0..rriv_board::EEPROM_TOTAL_SENSOR_SLOTS {
             let slice = &mut buffer[slot * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE
                 ..(slot + 1) * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
-            read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice)
+            read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice);
+            remove_invalid_utf8(slice);
         }
     }
+
 
     fn store_sensor_settings(
         &mut self,
