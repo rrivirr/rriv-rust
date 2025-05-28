@@ -193,7 +193,7 @@ impl SensorDriver for Ds18b20 {
     }
     
     fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
-        todo!()
+        rprintln!("not implemented");
     }
     
     fn get_configuration_json(&mut self) -> serde_json::Value {
@@ -201,7 +201,7 @@ impl SensorDriver for Ds18b20 {
     }
     
     fn update_actuators(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        todo!()
+        rprintln!("not implemented");
     }
     
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()> {
@@ -209,6 +209,6 @@ impl SensorDriver for Ds18b20 {
     }
     
     fn clear_calibration(&mut self) {
-        todo!()
+        rprintln!("not implemented");
     }
 }

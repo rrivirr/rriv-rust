@@ -1,3 +1,4 @@
+use rtt_target::rprint;
 use serde_json::json;
 
 use crate::sensor_name_from_type_id;
@@ -43,13 +44,13 @@ impl SensorDriver for AHT22 {
        
 
     fn setup(&mut self) {
-        todo!()
+        rprint!("not implemented");
     }
 
     getters!();
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        todo!()
+        rprint!("not implemented");
     }
 
     fn get_measured_parameter_count(&mut self) -> usize {
@@ -70,11 +71,11 @@ impl SensorDriver for AHT22 {
     }
     
     fn clear_calibration(&mut self) {
-        todo!()
+        rprint!("not implemented");
     }
     
     fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
-        todo!()
+        rprint!("not implemented");
     }
        
     fn update_actuators(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
