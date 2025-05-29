@@ -171,8 +171,9 @@ macro_rules! driver_create_functions {
                 let bytes: &[u8] = unsafe { any_as_u8_slice(&special_settings) }; // must be this one, maybe size comes back wrong
                 if bytes.len() != SENSOR_SETTINGS_PARTITION_SIZE {
                     // special_settings_type does not confrm to expected size.  this is a development fault
-                    rprintln!("{} is wrong size", "<$special_settings_type>");
+                    rprintln!("{} is wrong size {}", "<$special_settings_type>", bytes.len());
                     // causes crash later.  other way to gracefully handle?
+                    panic!();
                 }
                 let mut bytes_sized: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
                     [0; SENSOR_SETTINGS_PARTITION_SIZE];
@@ -336,14 +337,15 @@ impl DataLogger {
         // setup each service
         command_service::setup(board);
 
-        self.settings = DataloggerSettings::new();
-        self.settings.deployment_identifier = [
-            b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e', b'n', b'a', b'm', b'e', b'e', b'e',
-            b'e', b'e',
-        ];
-        self.settings.logger_name = [b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e'];
-        rprintln!("attempting to store settings for test purposes");
-        self.store_settings(board);
+        // For smaller EERPOM, this would overwrite sensor drivers config
+        // self.settings = DataloggerSettings::new();
+        // self.settings.deployment_identifier = [
+        //     b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e', b'n', b'a', b'm', b'e', b'e', b'e',
+        //     b'e', b'e',
+        // ];
+        // self.settings.logger_name = [b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e'];
+        // rprintln!("attempting to store settings for test purposes");
+        // self.store_settings(board);
 
         // read all the sensors from EEPROM
         let registry = get_registry();
@@ -766,7 +768,8 @@ impl DataLogger {
                     let general_settings =
                         SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
                     rprintln!("calling func 0"); // TODO: crashed here
-                    let (driver, special_settings_bytes) = functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
+                    let (mut driver, special_settings_bytes) = functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
+                    driver.setup();
                     self.sensor_drivers[slot] = Some(driver);
 
                     // get the generic settings as bytes
