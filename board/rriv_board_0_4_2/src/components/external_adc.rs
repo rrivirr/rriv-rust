@@ -11,6 +11,8 @@ impl ExternalAdc {
     }
   }
 
+  
+
 
 
   pub fn start(&mut self,  delay: &mut impl embedded_hal::blocking::delay::DelayMs<u8> ) {
@@ -22,7 +24,14 @@ impl ExternalAdc {
   pub fn enable(&mut self, delay: &mut impl embedded_hal::blocking::delay::DelayMs<u8>) {
 
     self.pins.enable.set_low();
-    // delay.delay_ms(20); // let the chip get power, maybe not needed?
+    delay.delay_ms(250); // let the chip get power
+    
+  }
+
+  pub fn disable(&mut self, delay: &mut impl embedded_hal::blocking::delay::DelayMs<u8>) {
+
+    self.pins.enable.set_high();
+    delay.delay_ms(250); // let the chip power down
     
   }
 

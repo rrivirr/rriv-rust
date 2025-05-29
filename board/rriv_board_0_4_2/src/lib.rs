@@ -967,6 +967,7 @@ impl BoardBuilder {
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
 
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
+        self.external_adc.as_mut().unwrap().disable(&mut delay);
 
         power_pins.enable_3v.set_high();
         delay.delay_ms(500_u32);
