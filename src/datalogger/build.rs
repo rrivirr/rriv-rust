@@ -24,8 +24,19 @@ fn main() {
         .arg("HEAD")
         .output()
         .expect("Failed to get git branch");
-
     let branch_name = String::from_utf8_lossy(&branch.stdout).trim().to_string();
+
+
+    let gitref = Command::new("git")
+        .arg("rev-parse")
+        .arg("--short")
+        .arg("HEAD")
+        .output()
+        .expect("Failed to get git branch");
+    let ref_name = String::from_utf8_lossy(&gitref.stdout).trim().to_string();
+
     println!("cargo:rustc-env=GIT_BRANCH={}", branch_name);
+    println!("cargo:rustc-env=GIT_REF={}", ref_name);
+
 
 }

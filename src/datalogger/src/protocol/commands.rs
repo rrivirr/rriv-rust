@@ -27,11 +27,16 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
                         if let Some(found_branch) = option_env!("GIT_BRANCH") {
                             branch = found_branch;
                         }
+                         let mut gitref = "none";
+                        if let Some(found_ref) = option_env!("GIT_REF") {
+                            gitref = found_ref;
+                        }
 
                         let response = json!({
                             "hv":"0.4.2",
                             "fv":"0.5.0",
-                            "br":branch
+                            "br":branch,
+                            "ref":gitref
                         });
                         board.serial_send(format!("{}\n", response).as_str());
                     }
