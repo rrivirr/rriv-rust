@@ -16,9 +16,9 @@ use serde_json::json;
 
 #[derive(Copy, Clone, Debug)]
 pub struct RingTemperatureDriverSpecialConfiguration {
-    calibration_offset: [i16; 8],
-    address_offset: u8,
-    empty: [u8; 23], // 32
+    calibration_offset: [i16; 8], // 16
+    address_offset: u8, // 1
+    _reserved: [u8; 15], // 32 - 1 -16 = 15
 }
 
 impl RingTemperatureDriverSpecialConfiguration {
@@ -26,7 +26,7 @@ impl RingTemperatureDriverSpecialConfiguration {
         Self {
             calibration_offset: [0; 8],
             address_offset: 0,
-            empty: [b'\0'; 23],
+            _reserved: [b'\0'; 15],
         } // Just using default address offset of 0 for now, need to optionally read from JSON
     }
     pub fn new_from_bytes(
