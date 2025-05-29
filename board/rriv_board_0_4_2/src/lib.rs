@@ -198,7 +198,9 @@ impl RRIVBoard for Board {
         });
     }
 
+    // outputs to serial and also echos to rtt
     fn serial_debug(&self, string: &str) {
+        rprintln!("{:?}", string);
         if self.debug {
             rriv_board::RRIVBoard::usb_serial_send(self, string);
             rriv_board::RRIVBoard::usb_serial_send(self, "\n");
@@ -394,8 +396,15 @@ impl SensorDriverServices for Board {
         match self.i2c2.write(addr, message) {
             Ok(_) => return Ok(()),
             Err(e) => {
-                rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {}", addr));
+                let kind = match e {
+                    stm32f1xx_hal::i2c::Error::Bus => "bus",
+                    stm32f1xx_hal::i2c::Error::Arbitration => "arb",
+                    stm32f1xx_hal::i2c::Error::Acknowledge => "ack",
+                    stm32f1xx_hal::i2c::Error::Overrun => "ovr",
+                    stm32f1xx_hal::i2c::Error::Timeout => "tout",
+                    _ => "none",
+                };
+                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {} {}", addr, kind));
                 return Err(());
             }
         }
