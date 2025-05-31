@@ -22,4 +22,15 @@ impl I2c2Pins {
     }
   }
 
+   pub fn rebuild(
+    i2c2_scl: Pin<'B', 10, Output<OpenDrain>>,
+    i2c2_sda: Pin<'B', 11, Output<OpenDrain>>,
+    cr: &mut GpioCr
+  ) -> Self {
+
+    return I2c2Pins {
+      i2c2_scl: i2c2_scl.into_alternate_open_drain(&mut cr.gpiob_crh), 
+      i2c2_sda: i2c2_sda.into_alternate_open_drain(&mut cr.gpiob_crh),
+    }
+  }
 }

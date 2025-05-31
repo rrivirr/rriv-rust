@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::format;
+use i2c_hung_fix::try_unhang_i2c;
 
 use core::{
     any::Any, cell::RefCell, concat, default::Default, format_args, ops::DerefMut, option::Option::{self, *}, ptr::addr_of, result::Result::*
@@ -859,15 +860,17 @@ impl BoardBuilder {
         }
     }
 
-    pub fn setup_i2c1(
+    pub fn setup_i2c1 (
         pins: pin_groups::I2c1Pins,
         cr: &mut GpioCr,
         i2c1: I2C1,
         mapr: &mut MAPR,
-        clocks: &Clocks,
+        clocks: &Clocks
     ) -> BoardI2c1 {
-        let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
-        let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
+        let scl1 = pins.i2c1_scl; 
+        let sda1 = pins.i2c1_sda; 
+           
+
         BlockingI2c::i2c1(
             i2c1,
             (scl1, sda1),
@@ -996,22 +999,6 @@ impl BoardBuilder {
         self.external_adc.as_mut().unwrap().enable(&mut delay);
         self.external_adc.as_mut().unwrap().reset(&mut delay);
 
-        // rprintln!("starting i2c");
-        core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
-        let i2c1 = BoardBuilder::setup_i2c1(
-            i2c1_pins,
-            &mut gpio_cr,
-            device_peripherals.I2C1,
-            &mut afio.mapr,
-            &clocks,
-        );
-        self.i2c1 = Some(i2c1);
-        rprintln!("set up i2c1");
-
-        let i2c2 =
-            BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
-        self.i2c2 = Some(i2c2);
-        rprintln!("set up i2c2");
 
         let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
         watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
@@ -1019,8 +1006,53 @@ impl BoardBuilder {
         watchdog.start(MilliSeconds::secs(6));
         watchdog.feed();
 
+        rprintln!("unhang I2C1 if hung");
+
+        let mut scl1= i2c1_pins.i2c1_scl.into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        let mut sda1 = i2c1_pins.i2c1_sda.into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        sda1.set_high(); // remove signal from the master
+
+        match  try_unhang_i2c(&mut scl1, &sda1, &mut delay, i2c_hung_fix::FALLBACK_I2C_FREQUENCY, 30){
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("Couln't reset i2c1");
+                loop{}
+            }, // wait for IDWP to reset.   actually we can just hardware reset here?
+        }
+
+        let i2c1_pins = I2c1Pins::rebuild(scl1, sda1, &mut gpio_cr);
+
+        // rprintln!("starting i2c");
+        core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
+        let i2c1 = BoardBuilder::setup_i2c1(
+            i2c1_pins,
+            &mut gpio_cr,
+            device_peripherals.I2C1,
+            &mut afio.mapr,
+            &clocks
+        );
+        self.i2c1 = Some(i2c1);
+        rprintln!("set up i2c1 done");
+
+        rprintln!("unhang I2C2 if hung");
+        
+        let mut scl2 = i2c2_pins.i2c2_scl.into_open_drain_output(&mut gpio_cr.gpiob_crh);
+        let mut sda2= i2c2_pins.i2c2_sda.into_open_drain_output(&mut gpio_cr.gpiob_crh);
+        sda2.set_high(); // remove signal from the master
+
+        match  try_unhang_i2c(&mut scl2, &sda2, &mut delay, 100_000, i2c_hung_fix::RECOMMENDED_MAX_CLOCK_CYCLES){
+            Ok(_) => {},
+            Err(_) => loop{}, // wiat for IDWP to reset.   actually we can just hardware reset here?
+        }
+
+        let i2c2_pins = I2c2Pins::rebuild(scl2, sda2, &mut gpio_cr);
+
+        let i2c2 =
+            BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
+        self.i2c2 = Some(i2c2);
+        rprintln!("set up i2c2 done");
+
         rprintln!("Start i2c1 scanning...");
-        rprintln!();
 
         for addr in 0x00_u8..0x7F {
             // Write the empty array and check the slave response.
@@ -1056,7 +1088,7 @@ impl BoardBuilder {
 
         watchdog.feed();
 
-        // }
+
 
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
