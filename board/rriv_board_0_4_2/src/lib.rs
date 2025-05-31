@@ -15,7 +15,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, watchdog::IndependentWatchdog};
 use stm32f1xx_hal::{serial::StopBits};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
@@ -101,7 +101,8 @@ pub struct Board {
     pub debug: bool,
     pub file_epoch: i64,
     pub one_wire_bus: OneWire<OneWirePin>,
-    one_wire_search_state: Option<SearchState>
+    one_wire_search_state: Option<SearchState>,
+    pub watchdog: IndependentWatchdog
 }
 
 impl Board {
@@ -123,6 +124,7 @@ impl Board {
 
 impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self){
+        self.watchdog.feed();
         self.file_epoch = self.epoch_timestamp();
     }
 
@@ -667,7 +669,8 @@ pub struct BoardBuilder {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
-    pub storage: Option<Storage>
+    pub storage: Option<Storage>,
+    pub watchdog: Option<IndependentWatchdog>
 }
 
 impl BoardBuilder {
@@ -685,7 +688,8 @@ impl BoardBuilder {
             rgb_led: None,
             oscillator_control: None,
             internal_rtc: None,
-            storage: None
+            storage: None,
+            watchdog: None
         }
     }
 
@@ -755,7 +759,8 @@ impl BoardBuilder {
             debug: true,
             file_epoch: 0,
             one_wire_bus: one_wire,
-            one_wire_search_state: None
+            one_wire_search_state: None,
+            watchdog: self.watchdog.unwrap()
         }
     }
 
@@ -1008,7 +1013,12 @@ impl BoardBuilder {
         self.i2c2 = Some(i2c2);
         rprintln!("set up i2c2");
 
-        // loop {
+        let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
+        watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
+        
+        watchdog.start(MilliSeconds::secs(6));
+        watchdog.feed();
+
         rprintln!("Start i2c1 scanning...");
         rprintln!();
 
@@ -1026,6 +1036,8 @@ impl BoardBuilder {
         }
         rprintln!("scan is done");
 
+        watchdog.feed();
+
         rprintln!("Start i2c2 scanning...");
         rprintln!();
         for addr in 0x00_u8..0x7F {
@@ -1040,6 +1052,9 @@ impl BoardBuilder {
             delay.delay_ms(10_u32);
         }
         rprintln!("scan is done");
+
+
+        watchdog.feed();
 
         // }
 
@@ -1118,6 +1133,10 @@ impl BoardBuilder {
         // // delay.delay_ms(50_u16);
         // // I2C1::reset(rcc);
         // // delay.delay_ms(50_u16);
+
+        watchdog.feed();
+
+        self.watchdog = Some(watchdog);
 
         rprintln!("done with setup");
     }
