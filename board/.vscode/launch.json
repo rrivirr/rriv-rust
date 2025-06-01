@@ -83,6 +83,51 @@
                 }
             },
             "consoleLogLevel": "Console", //Info, Debug
+        },
+        {
+            "type": "probe-rs-debug",
+            "preLaunchTask": "RRIV: Build App Binary Crate (0_4_0)",
+            "request": "launch",
+            "name": "Build, Run, Debug Rust Binary (0_4_0 board)",
+            "cwd": "${workspaceFolder}",
+            "chip": "STM32F103RE",
+            "wireProtocol": "Swd",
+            "runtimeExecutable": "probe-rs",
+            "flashingConfig": {
+                "flashingEnabled": true,
+                "resetAfterFlashing": true,
+                "haltAfterReset": false
+            },
+            "coreConfigs": [
+                {
+                    "programBinary": "${workspaceFolder}/target/thumbv7m-none-eabi/debug/app",
+                    "svdFile": "${workspaceFolder}/STM32F103xx.svd",
+                    "rttEnabled": true,
+                    "rttChannelFormats": [
+                        {
+                            "channelNumber": 0,
+                            "dataFormat": "String",
+                            "showTimestamps": true
+                        },
+                        {
+                            "channelNumber": 1,
+                            "dataFormat": "BinaryLE"
+                        }
+                    ]
+                }
+            ],
+            "env": {
+                "RUST_BACKTRACE": "1"
+            },
+            "linux": {
+                "env": {
+                    "PATH": "${env:HOME}/.cargo/bin:/home/linuxbrew/.linuxbrew/bin:/home/linuxbrew/.linuxbrew/sbin:${env:HOME}/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/snap/bin"
+                }
+            },
+            "consoleLogLevel": "Console",
+            "cargo": {
+                "args": ["build", "--no-default-features", "--features", "rriv_board_0_4_0", "-p", "app"]
+            }
         }
     ],
 }
