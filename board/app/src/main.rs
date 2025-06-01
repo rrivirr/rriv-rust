@@ -5,8 +5,10 @@
 #![no_main]
 
 extern crate panic_abort;
+extern crate alloc;
 
-use core::{prelude::rust_2024::*, u8};
+use core::prelude::rust_2024::*;
+use alloc::boxed::Box;
 use cortex_m_rt::entry;
 use rtt_target::rtt_init_print;
 
@@ -14,20 +16,21 @@ pub mod prelude;
 
 extern crate rriv_board;
 
-extern crate rriv_board_0_4_2;
-use crate::rriv_board::RRIVBoard;
-
 extern crate datalogger;
-use datalogger::DataLogger;
+
+mod board_select;
+
+// Import only build_board and SelectedBoard, not glob import
+use board_select::{build_board, SelectedBoard};
+use rriv_board::RRIVBoard;
 
 #[entry]
 fn main() -> ! {
     rtt_init_print!();
     prelude::init();
-
-    let mut board = rriv_board_0_4_2::build();
+    let mut board = build_board();
     board.start(); // not needed, for debug only
-    let mut datalogger = DataLogger::new();
+    let mut datalogger = datalogger::DataLogger::new();
     datalogger.setup(&mut board);
     loop {
         board.run_loop_iteration();

@@ -10,18 +10,25 @@ cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
 cortex-m-rt = "0.7.3"
 
 # Panic behaviour, see https://crates.io/keywords/panic-impl for alternatives
-# panic-halt = "0.2.0"panic = "abort"
 panic-abort = "0.3.2"
+# panic-halt = "0.2.0"
 # panic_rtt = "0.3.0"
-
 
 unwrap-infallible = "0.1.5"
 rtt-target = "0.4.0"
 embedded-alloc = "0.5.0"
 
 rriv_board = { path = "../rriv_board" }
-rriv_board_0_4_2 = { path = "../rriv_board_0_4_2" }
+rriv_board_0_4_2 = { path = "../rriv_board_0_4_2", optional = true }
+rriv_board_0_4_0 = { path = "../rriv_board_0_4_0", optional = true }
 datalogger = { path = "../../src/datalogger" }
+
+[features]
+rriv_board_0_4_2 = ["dep:rriv_board_0_4_2"]
+rriv_board_0_4_0 = ["dep:rriv_board_0_4_0"]
+default = ["rriv_board_0_4_2"]
+# This feature is only for IDE support (Rust Analyzer). Do not enable for real builds.
+rust-analyzer = []
 
 [dependencies.stm32f1xx-hal]
 version = "0.10.0"
