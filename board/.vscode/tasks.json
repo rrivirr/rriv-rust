@@ -14,7 +14,7 @@
             "group": {
                 "kind": "build",
                 "isDefault": false
-            },
+            }
         },
         {
             "label": "RRIV: Build App Binary Crate",
@@ -29,7 +29,7 @@
             "group": {
                 "kind": "build",
                 "isDefault": false
-            },
+            }
         },
         {
             "label": "RRIV: Build App Binary Crate (0_4_0)",
@@ -62,7 +62,7 @@
             "group": {
                 "kind": "build",
                 "isDefault": false
-            },
-        },
+            }
+        }
     ]
 }
