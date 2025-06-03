@@ -1,0 +1,24 @@
+[package]
+name = "rriv_board_0_4_0"
+version = "0.1.0"
+edition = "2021"
+
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+rriv_board = { path = "../rriv_board" } 
+embedded-hal = "0.2.7"
+nb = "1"
+cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }
+cortex-m-rt = "0.7.3"
+# Panic behaviour, see https://crates.io/keywords/panic-impl for alternatives
+panic-halt = "0.2.0"
+unwrap-infallible = "0.1.5"
+stm32f1xx-hal = { version = "0.10", features = ["rt", "stm32f103", "high"] }
+rtt-target = "0.4.0"
+usb-device = "0.2.9"
+usbd-serial = "0.1.1"
+embedded-sdmmc = "0.6.0"
+ds323x = "0.5.1"
+one-wire-bus = "0.1.1"
