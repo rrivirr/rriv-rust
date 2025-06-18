@@ -4,6 +4,7 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::format;
+use i2c_hung_fix::try_unhang_i2c;
 
 use core::{
     any::Any, cell::RefCell, concat, default::Default, format_args, ops::DerefMut, option::Option::{self, *}, result::Result::*
@@ -15,7 +16,7 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, watchdog::IndependentWatchdog};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -55,6 +56,9 @@ use pins::{GpioCr, Pins};
 mod pin_groups;
 use pin_groups::*;
 
+mod util;
+use util::*;
+
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
 static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
@@ -92,7 +96,8 @@ pub struct Board {
     pub debug: bool,
     pub file_epoch: i64,
     pub one_wire_bus: OneWire<OneWirePin>,
-    one_wire_search_state: Option<SearchState>
+    one_wire_search_state: Option<SearchState>,
+    pub watchdog: IndependentWatchdog
 }
 
 impl Board {
@@ -109,6 +114,7 @@ impl Board {
 
 impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self){
+        self.watchdog.feed();
         self.file_epoch = self.epoch_timestamp();
     }
 
@@ -143,7 +149,9 @@ impl RRIVBoard for Board {
         });
     }
 
+    // outputs to serial and also echos to rtt
     fn serial_debug(&self, string: &str) {
+        rprintln!("{:?}", string);
         if self.debug {
             rriv_board::RRIVBoard::serial_send(self, string);
             rriv_board::RRIVBoard::serial_send(self, "\n");
@@ -164,6 +172,7 @@ impl RRIVBoard for Board {
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
+        remove_invalid_utf8(buffer);
     }
 
     fn retrieve_sensor_settings(
@@ -175,9 +184,11 @@ impl RRIVBoard for Board {
         for slot in 0..rriv_board::EEPROM_TOTAL_SENSOR_SLOTS {
             let slice = &mut buffer[slot * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE
                 ..(slot + 1) * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
-            read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice)
+            read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice);
+            remove_invalid_utf8(slice);
         }
     }
+
 
     fn store_sensor_settings(
         &mut self,
@@ -328,8 +339,15 @@ impl SensorDriverServices for Board {
         match self.i2c2.write(addr, message) {
             Ok(_) => return Ok(()),
             Err(e) => {
-                rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {}", addr));
+                let kind = match e {
+                    stm32f1xx_hal::i2c::Error::Bus => "bus",
+                    stm32f1xx_hal::i2c::Error::Arbitration => "arb",
+                    stm32f1xx_hal::i2c::Error::Acknowledge => "ack",
+                    stm32f1xx_hal::i2c::Error::Overrun => "ovr",
+                    stm32f1xx_hal::i2c::Error::Timeout => "tout",
+                    _ => "none",
+                };
+                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {} {}", addr, kind));
                 return Err(());
             }
         }
@@ -586,7 +604,8 @@ pub struct BoardBuilder {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
-    pub storage: Option<Storage>
+    pub storage: Option<Storage>,
+    pub watchdog: Option<IndependentWatchdog>
 }
 
 impl BoardBuilder {
@@ -604,7 +623,8 @@ impl BoardBuilder {
             rgb_led: None,
             oscillator_control: None,
             internal_rtc: None,
-            storage: None
+            storage: None,
+            watchdog: None
         }
     }
 
@@ -674,7 +694,8 @@ impl BoardBuilder {
             debug: true,
             file_epoch: 0,
             one_wire_bus: one_wire,
-            one_wire_search_state: None
+            one_wire_search_state: None,
+            watchdog: self.watchdog.unwrap()
         }
     }
 
@@ -773,15 +794,17 @@ impl BoardBuilder {
         }
     }
 
-    pub fn setup_i2c1(
+    pub fn setup_i2c1 (
         pins: pin_groups::I2c1Pins,
         cr: &mut GpioCr,
         i2c1: I2C1,
         mapr: &mut MAPR,
-        clocks: &Clocks,
+        clocks: &Clocks
     ) -> BoardI2c1 {
-        let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
-        let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
+        let scl1 = pins.i2c1_scl; 
+        let sda1 = pins.i2c1_sda; 
+           
+
         BlockingI2c::i2c1(
             i2c1,
             (scl1, sda1),
@@ -895,6 +918,7 @@ impl BoardBuilder {
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
 
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
+        self.external_adc.as_mut().unwrap().disable(&mut delay);
 
         power_pins.enable_3v.set_high();
         delay.delay_ms(500_u32);
@@ -909,6 +933,29 @@ impl BoardBuilder {
         self.external_adc.as_mut().unwrap().enable(&mut delay);
         self.external_adc.as_mut().unwrap().reset(&mut delay);
 
+
+        let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
+        watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
+        
+        watchdog.start(MilliSeconds::secs(6));
+        watchdog.feed();
+
+        rprintln!("unhang I2C1 if hung");
+
+        let mut scl1= i2c1_pins.i2c1_scl.into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        let mut sda1 = i2c1_pins.i2c1_sda.into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        sda1.set_high(); // remove signal from the master
+
+        match  try_unhang_i2c(&mut scl1, &sda1, &mut delay, i2c_hung_fix::FALLBACK_I2C_FREQUENCY, 30){
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("Couln't reset i2c1");
+                loop{}
+            }, // wait for IDWP to reset.   actually we can just hardware reset here?
+        }
+
+        let i2c1_pins = I2c1Pins::rebuild(scl1, sda1, &mut gpio_cr);
+
         // rprintln!("starting i2c");
         core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
         let i2c1 = BoardBuilder::setup_i2c1(
@@ -916,19 +963,30 @@ impl BoardBuilder {
             &mut gpio_cr,
             device_peripherals.I2C1,
             &mut afio.mapr,
-            &clocks,
+            &clocks
         );
         self.i2c1 = Some(i2c1);
-        rprintln!("set up i2c1");
+        rprintln!("set up i2c1 done");
+
+        rprintln!("unhang I2C2 if hung");
+        
+        let mut scl2 = i2c2_pins.i2c2_scl.into_open_drain_output(&mut gpio_cr.gpiob_crh);
+        let mut sda2= i2c2_pins.i2c2_sda.into_open_drain_output(&mut gpio_cr.gpiob_crh);
+        sda2.set_high(); // remove signal from the master
+
+        match  try_unhang_i2c(&mut scl2, &sda2, &mut delay, 100_000, i2c_hung_fix::RECOMMENDED_MAX_CLOCK_CYCLES){
+            Ok(_) => {},
+            Err(_) => loop{}, // wiat for IDWP to reset.   actually we can just hardware reset here?
+        }
+
+        let i2c2_pins = I2c2Pins::rebuild(scl2, sda2, &mut gpio_cr);
 
         let i2c2 =
             BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
         self.i2c2 = Some(i2c2);
-        rprintln!("set up i2c2");
+        rprintln!("set up i2c2 done");
 
-        // loop {
         rprintln!("Start i2c1 scanning...");
-        rprintln!();
 
         for addr in 0x00_u8..0x7F {
             // Write the empty array and check the slave response.
@@ -943,6 +1001,8 @@ impl BoardBuilder {
             delay.delay_ms(10_u32);
         }
         rprintln!("scan is done");
+
+        watchdog.feed();
 
         rprintln!("Start i2c2 scanning...");
         rprintln!();
@@ -959,7 +1019,10 @@ impl BoardBuilder {
         }
         rprintln!("scan is done");
 
-        // }
+
+        watchdog.feed();
+
+
 
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
@@ -1034,6 +1097,10 @@ impl BoardBuilder {
         // // delay.delay_ms(50_u16);
         // // I2C1::reset(rcc);
         // // delay.delay_ms(50_u16);
+
+        watchdog.feed();
+
+        self.watchdog = Some(watchdog);
 
         rprintln!("done with setup");
     }
