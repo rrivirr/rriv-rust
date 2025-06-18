@@ -131,7 +131,10 @@ impl Storage {
     let result = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0));
     let volume = match result {
       Ok(volume0) =>   {rprintln!("Volume 0 Success: {:?}", volume0); volume0 },
-      Err(error) => panic!("Volume 0 error: {:?}", error),
+      Err(error) => {
+        rprintln!("Volume 0 error: {:?}", error);
+        panic!("sd card error");
+      }
     };
   
     // let volume = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0)).unwrap();
