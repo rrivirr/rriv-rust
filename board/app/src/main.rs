@@ -4,7 +4,7 @@
 #![feature(prelude_2024)]
 #![no_main]
 
-extern crate panic_abort;
+extern crate panic_halt;
 
 use core::{prelude::rust_2024::*, u8};
 use cortex_m_rt::entry;

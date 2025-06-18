@@ -17,11 +17,14 @@ impl Spi2Pins {
     cr: &mut GpioCr
   ) -> Self {
 
+    // set the chip select to high immediately to avoid any corrupt commands going to the sd card
+    let sd_card_chip_select = sd_card_chip_select.into_push_pull_output_with_state(&mut cr.gpioc_crh, PinState::High);
+
     Spi2Pins {
       sck: sck.into_alternate_push_pull(&mut cr.gpiob_crh),
       miso,
       mosi: mosi.into_alternate_push_pull(&mut cr.gpiob_crh),
-      sd_card_chip_select: sd_card_chip_select.into_push_pull_output(&mut cr.gpioc_crh),
+      sd_card_chip_select: sd_card_chip_select,
     }
   }
 
