@@ -38,7 +38,7 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
                             "br":branch,
                             "ref":gitref
                         });
-                        board.serial_send(format!("{}\n", response).as_str());
+                        board.usb_serial_send(format!("{}\n", response).as_str());
                     }
                     _ => {
                         board.usb_serial_send("Unsupported param in command\n");
