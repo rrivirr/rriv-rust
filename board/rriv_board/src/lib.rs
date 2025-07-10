@@ -18,7 +18,10 @@ pub trait RXProcessor: Send + Sync {
 // Board Services Used by Control Logic and Drivers
 macro_rules! control_services {
     () => {
-        fn serial_send(&self, string: &str);
+        fn usb_serial_send(&self, string: &str); // TODO: give his a more unique name specifying that it's used to talk with the serial rrivctl interface
+                                                 // maybe rrivctl_send
+        fn usart_send(&mut self, string: &str);
+        fn get_usart_response(&self, message: &mut [u8;30]) -> usize;
         fn serial_debug(&self, string: &str);    
         fn delay_ms(&mut self, ms: u16);
         fn timestamp(&mut self) -> i64;
