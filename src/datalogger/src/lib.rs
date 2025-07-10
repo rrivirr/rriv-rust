@@ -330,7 +330,7 @@ impl DataLogger {
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
         // enable power to the eeprom and bring i2bufferc online
 
-        rprintln!("retrieving settings");
+        // rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
         rprintln!("retrieved settings {:?}", self.settings);
 
@@ -384,6 +384,12 @@ impl DataLogger {
 
         self.write_column_headers_to_storage(board);
         rprintln!("done with setup");
+
+
+        // rprintln!("setting up lorawan");
+        // board.usart_send(string);
+
+        // rprintln!("done setting up lorawan")
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
@@ -1129,10 +1135,10 @@ impl DataLogger {
                     }
                 };
 
-                let message = format!("{}\r\n", message);
-                let message = message.as_str();
-                rprintln!("message {}", message);
-                board.usart_send(message);
+                let prepared_message = format!("{}\r\n", message);
+                let prepared_message = prepared_message.as_str();
+                rprintln!("message {}", prepared_message);
+                board.usart_send(prepared_message);
                 // rprintln!("{}", "\r\n");
                 // board.usart_send("\r\n");
                 // rprintln!("just line feed");
@@ -1140,9 +1146,10 @@ impl DataLogger {
 
                 board.delay_ms(500);
 
-                let mut response = [0u8; 30];
+                let mut response = [0u8; 40];
                 let length = board.get_usart_response(&mut response);
                 if length == 0 {
+                    rprintln!("no usart response");
                     board.usb_serial_send(json!({message:"no response received"}).to_string().as_str());
                     board.usb_serial_send("\n");
                     return;
@@ -1153,16 +1160,16 @@ impl DataLogger {
                     let c = *b as char;
                     rprintln!("{}", c);
                 }
-                board.usb_serial_send("\n");
-                // match core::str::from_utf8(&response){
-                //     Ok(response) => {
-                //         board.usb_serial_send(response);
-                //         board.usb_serial_send("\n");
-                //     }
-                //     Err(message) => {
-                //         board.usb_serial_send(format!("problem receiving message {} \n", message).as_str());
-                //     }
-                // };
+                // board.usb_serial_send("\n");
+                match core::str::from_utf8(&response){
+                    Ok(response) => {
+                        board.usb_serial_send(json!({message:response}).to_string().as_str());
+                        board.usb_serial_send("\n");
+                    }
+                    Err(message) => {
+                        board.usb_serial_send(format!("problem receiving message {} \n", message).as_str());
+                    }
+                };
                 
                 return;
             }

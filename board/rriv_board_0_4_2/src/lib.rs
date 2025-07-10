@@ -73,6 +73,7 @@ static USART_TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::n
 const USART_RECEIVE_SIZE: usize = 30;
 static mut USART_RECEIVE: [u8; USART_RECEIVE_SIZE] = [0u8; USART_RECEIVE_SIZE];
 static mut USART_RECEIVE_INDEX: usize = 0;
+static mut USART_UNREAD_MESSAGE: bool = false;
 
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
@@ -127,6 +128,15 @@ impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self){
         self.watchdog.feed();
         self.file_epoch = self.epoch_timestamp();
+        if rriv_board::RRIVBoard::unread_usart_message(self) {
+            let mut message = [0u8; 30];
+            rriv_board::RRIVBoard::get_usart_response(self, &mut message);
+            remove_invalid_utf8(&mut message);
+            match core::str::from_utf8(&message){
+                Ok(message) => rprintln!("got usart message: {}", message),
+                Err(e) => rprintln!("utf8 error: {:?}", e),
+            }
+        }
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -184,10 +194,24 @@ impl RRIVBoard for Board {
         // rriv_board::RRIVBoard::delay_ms(self, 70);
     }
 
+    fn unread_usart_message(&self) -> bool {
+        return cortex_m::interrupt::free(|cs| {
+            unsafe { USART_UNREAD_MESSAGE }
+        });
+    }
+
     fn get_usart_response(&self, message: &mut [u8;30]) -> usize {
         return cortex_m::interrupt::free(|cs| {
             message.clone_from_slice( unsafe { &USART_RECEIVE }); // TODO: this isn't very safe
             let length = unsafe { USART_RECEIVE_INDEX };
+
+            // clear the receive buffer
+            unsafe { USART_UNREAD_MESSAGE = false; }
+            unsafe { 
+                USART_RECEIVE = [0u8; USART_RECEIVE_SIZE]; 
+                USART_RECEIVE_INDEX = 0;
+            }
+
             return length;
         });
     }
@@ -333,8 +357,12 @@ macro_rules! control_services_impl {
             rriv_board::RRIVBoard::usart_send(self, string);
         }
 
-        fn get_usart_response(&self, message: &mut [u8;30]) -> usize {
+        fn get_usart_response(&self, message: &mut [u8;40]) -> usize {
             return rriv_board::RRIVBoard::get_usart_response(self, message);
+        }
+
+        fn unread_usart_message(&self) -> bool {
+            rriv_board::RRIVBoard::unread_usart_message(self)
         }
 
         fn serial_debug(&self, string: &str) {
@@ -344,6 +372,7 @@ macro_rules! control_services_impl {
         fn delay_ms(&mut self, ms: u16) {
             rriv_board::RRIVBoard::delay_ms(self, ms);
         }
+
         fn timestamp(&mut self) -> i64 {
             rriv_board::RRIVBoard::timestamp(self)
         }
@@ -502,11 +531,11 @@ impl SensorDriverServices for Board {
                 return Some(device_address.0);    
             },
             Ok(None) => {
-                rprintln!("no devices found on onewire");
+                rprintln!("no devices 1wire");
                 return None;              
             },
             Err(e) => {
-                rprintln!("one wire error{:?}", e);          
+                rprintln!("1wire error{:?}", e);          
                 return None;  
             },
         } 
@@ -530,6 +559,7 @@ unsafe fn USART2() {
             if rx.is_rx_not_empty() {
                 if let Ok(c) = nb::block!(rx.read()) {
                     rprintln!("serial rx byte: {}", c);
+                    USART_UNREAD_MESSAGE = true;
                     if USART_RECEIVE_INDEX < USART_RECEIVE_SIZE - 1 {
                         USART_RECEIVE[USART_RECEIVE_INDEX] = c;
                         USART_RECEIVE_INDEX = USART_RECEIVE_INDEX + 1;
@@ -801,7 +831,8 @@ impl BoardBuilder {
             usart,
             (pins.tx, pins.rx),
             mapr,
-            Config::default().baudrate(38400.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // 19200
+            // Config::default().baudrate(38400.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // this worked for the nox sensor
+            Config::default().baudrate(115200.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // this appears to be right for the RAK 3172
             &clocks,
         );
 
