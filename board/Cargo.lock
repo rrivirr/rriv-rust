@@ -192,6 +192,7 @@ dependencies = [
  "rtt-target",
  "serde",
  "serde_json",
+ "util",
 ]
 
 [[package]]
@@ -431,6 +432,7 @@ dependencies = [
  "unwrap-infallible",
  "usb-device",
  "usbd-serial",
+ "util",
 ]
 
 [[package]]
@@ -648,6 +650,10 @@ dependencies = [
  "nb 0.1.3",
  "usb-device",
 ]
+
+[[package]]
+name = "util"
+version = "0.1.0"
 
 [[package]]
 name = "vcell"

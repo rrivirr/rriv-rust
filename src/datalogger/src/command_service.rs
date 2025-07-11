@@ -83,12 +83,12 @@ pub fn get_pending_command(board: &impl RRIVBoard) -> Option<Result<CommandPaylo
         if let Ok(command_bytes) = take_command(board) {
             let command_cstr = CStr::from_bytes_until_nul(&command_bytes).unwrap();
             let command_identification_result = identify_serial_command(command_cstr);
-            rprintln!("{:?}", command_identification_result);
+            // rprintln!("{:?}", command_identification_result);
             match command_identification_result {
                 Ok(command_type) => {
                     let result: Result<CommandPayload, _> =
                         get_command_payload(command_type, command_cstr);
-                    rprintln!("{:?}", result);
+                    // rprintln!("{:?}", result);
                     return Some(result);
                 }
                 Err(error) => {
@@ -197,7 +197,7 @@ fn get_command_payload(
             parse_command_to_payload!(SensorListCommandPayload, CommandPayload::SensorListCommandPayload, command_cstr);
         },
         CommandType::SensorCalibratePoint => {
-            rprintln!("parsing SensorCalibratePoint");
+            // rprintln!("parsing SensorCalibratePoint");
             parse_command_to_payload!(SensorCalibratePointPayload, CommandPayload::SensorCalibratePointPayload, command_cstr);
         },
         CommandType::SensorCalibrateList => {

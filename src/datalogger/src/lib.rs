@@ -6,8 +6,8 @@ mod datalogger_commands;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
-use heater::{Heater, HeaterSpecialConfiguration};
 use ds18b20::{Ds18b20, Ds18b20SpecialConfiguration};
+use heater::{Heater, HeaterSpecialConfiguration};
 use ring_temperature::{RingTemperatureDriver, RingTemperatureDriverSpecialConfiguration};
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
@@ -30,7 +30,7 @@ use protocol::*;
 use serde::de::value;
 use serde_json::{json, Value};
 
-use core::{ffi::CStr, str::from_utf8};
+use core::{ffi::CStr, panic::PanicMessage, str::from_utf8};
 
 const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
 
@@ -138,7 +138,7 @@ const SENSOR_NAMES: [&str; 8] = [
     "mcp_9808",
     "ring_temperature",
     "heater",
-    "ds18b20"
+    "ds18b20",
 ];
 
 fn sensor_type_id_from_name(name: &str) -> u16 {
@@ -215,7 +215,7 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
     driver_create_functions[1] = Some(driver_create_functions!(
         GenericAnalog,
         GenericAnalogSpecialConfiguration
-        )); //distinct settings? characteristic settings?
+    )); //distinct settings? characteristic settings?
     driver_create_functions[2] = None;
     driver_create_functions[3] = None;
     driver_create_functions[4] = Some(driver_create_functions!(
@@ -226,10 +226,7 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
         RingTemperatureDriver,
         RingTemperatureDriverSpecialConfiguration
     ));
-    driver_create_functions[6] = Some(driver_create_functions!(
-        Heater,
-        HeaterSpecialConfiguration
-    ));
+    driver_create_functions[6] = Some(driver_create_functions!(Heater, HeaterSpecialConfiguration));
     driver_create_functions[7] = Some(driver_create_functions!(
         Ds18b20,
         Ds18b20SpecialConfiguration
@@ -263,6 +260,9 @@ pub struct DataLogger {
     // naive calibration value book keeping
     // not memory efficient
     calibration_point_values: [Option<Box<[CalibrationPair]>>; EEPROM_TOTAL_SENSOR_SLOTS],
+
+    telemetry_step: u8,
+    usart_send_time: i64,
 }
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
 const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> =
@@ -283,6 +283,8 @@ impl DataLogger {
             log_raw_data: true,
             mode: DataLoggerMode::Interactive,
             calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
+            telemetry_step: 0,
+            usart_send_time: 0,
         }
     }
 
@@ -332,7 +334,7 @@ impl DataLogger {
 
         // rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
-        rprintln!("retrieved settings {:?}", self.settings);
+        // rprintln!("retrieved settings {:?}", self.settings);
 
         // setup each service
         command_service::setup(board);
@@ -384,16 +386,9 @@ impl DataLogger {
 
         self.write_column_headers_to_storage(board);
         rprintln!("done with setup");
-
-
-        // rprintln!("setting up lorawan");
-        // board.usart_send(string);
-
-        // rprintln!("done setting up lorawan")
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
-
         //
         // Process incoming commands
         //
@@ -419,11 +414,15 @@ impl DataLogger {
             }
         }
 
+        //
+        //  Process any telemetry setup or QOS
+        //
+        self.check_telemetry(board);
 
         //
         // Do the measurement cycle
         //
-        // 
+        //
         // implement interactive mode logging first
 
         self.update_actuators(board);
@@ -449,6 +448,117 @@ impl DataLogger {
         }
     }
 
+    pub fn send_and_increment_step(&mut self, board: &mut impl RRIVBoard, message: &str) {
+        let prepared_message = format!("{}\r\n", message);
+        board.usart_send(&prepared_message);
+        self.usart_send_time = board.timestamp();
+        self.telemetry_step = self.telemetry_step + 1;
+        rprintln!("trying telemetry step {}", self.telemetry_step);
+    }
+
+    pub fn check_ok_or_restart(&mut self, board: &mut impl RRIVBoard) {
+        if board.unread_usart_message() {
+            let mut message: [u8; 40] = [0; 40];
+            board.get_usart_response(&mut message);
+            util::remove_invalid_utf8(&mut message);
+            let message = core::str::from_utf8(&message);
+            match message {
+                Ok(message) => match message.find("OK") {
+                    Some(index) => {
+                        if index == 0 {
+                            self.telemetry_step = self.telemetry_step + 1;
+                            rprintln!("trying telemetry step {}", self.telemetry_step);
+                            return;
+                        }
+                    }
+                    None => self.telemetry_step = 0,
+                },
+                Err(_) => self.telemetry_step = 0,
+            }
+        } else {
+            // need to check for a timeout here
+            if board.timestamp() - self.usart_send_time > 2 {
+                self.telemetry_step = 0;
+            }
+        }
+    }
+
+    pub fn check_joined(&mut self, board: &mut impl RRIVBoard) {
+        if board.unread_usart_message() {
+            let mut message: [u8; 40] = [0; 40];
+            board.get_usart_response(&mut message);
+            util::remove_invalid_utf8(&mut message);
+            let message = core::str::from_utf8(&message); // TODO: also need to remove invalid utf chars for crash safety
+                                                          // TODO: this will eventually error out, needs some restart join code
+            match message {
+                Ok(message) => match message.find("+EVT:JOINED") {
+                    Some(index) => {
+                        if index == 0 {
+                            self.telemetry_step = self.telemetry_step + 1;
+                            rprintln!("trying telemetry step {}", self.telemetry_step);
+                            return;
+                        }
+                    }
+                    None => {
+                        rprintln!("{}", message);
+                    }
+                },
+                Err(_) => {}
+            }
+        } else {
+            if board.timestamp() - self.usart_send_time > 2 {
+                // just let it keep trying
+            }
+        }
+    }
+
+    pub fn check_telemetry(&mut self, board: &mut impl RRIVBoard) {
+        match self.telemetry_step {
+            0 => {
+                rprintln!("trying telemetry step {}", self.telemetry_step);
+                self.send_and_increment_step(board, "AT+JOIN=0");
+            }
+            1 => {
+                self.check_ok_or_restart(board);
+            }
+            2 => {
+                self.send_and_increment_step(board, "AT+BAND=5");
+            }
+            3 => {
+                self.check_ok_or_restart(board);
+
+            }
+            4 => {
+                self.send_and_increment_step(board, "AT+MASK=0002");
+            }
+            5 => {
+                self.check_ok_or_restart(board);
+            }
+            6 => {
+                self.send_and_increment_step(board, "AT+JOIN=1:0:10:100");
+            }
+            7 => {
+                self.check_ok_or_restart(board);
+            }
+            8 => {
+                self.check_joined(board);
+            }
+            _ => {}
+        }
+
+        //        rprintln!("setting up lorawan");
+        // board.usart_send("AT+JOIN=0");
+        // board.delay_ms(2000);
+        // board.usart_send("AT+BAND=5");
+        // board.delay_ms(2000);
+        // board.usart_send("AT+MASK=0002");
+        // board.delay_ms(2000);
+        // board.usart_send("AT+JOIN=1:1:7:100");
+        // board.delay_ms(2000);
+
+        // rprintln!("done setting up lorawan")
+    }
+
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
@@ -459,12 +569,11 @@ impl DataLogger {
 
     fn update_actuators(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
-            if let Some(ref mut driver) = self.sensor_drivers[i] {;
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
                 driver.update_actuators(board.get_sensor_driver_services());
             }
         }
     }
-
 
     fn write_column_headers_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         board.usb_serial_send("timestamp,");
@@ -504,7 +613,6 @@ impl DataLogger {
         }
         board.usb_serial_send("\n");
     }
-
 
     fn write_column_headers_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         board.write_log_file("timestamp,");
@@ -634,7 +742,7 @@ impl DataLogger {
     }
 
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
-        rprintln!("executing command {:?}", command_payload);
+        // rprintln!("executing command {:?}", command_payload);
         match command_payload {
             CommandPayload::DataloggerSetCommandPayload(payload) => {
                 self.update_datalogger_settings(board, payload);
@@ -774,7 +882,8 @@ impl DataLogger {
                     let general_settings =
                         SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
                     rprintln!("calling func 0"); // TODO: crashed here
-                    let (mut driver, special_settings_bytes) = functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
+                    let (mut driver, special_settings_bytes) =
+                        functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
                     driver.setup();
                     self.sensor_drivers[slot] = Some(driver);
 
@@ -817,14 +926,11 @@ impl DataLogger {
                             serde_json::Value::String(ref payload_id) => {
                                 if payload_id == id_str {
                                     //echo the details and return
-                                
 
-                                
                                     let configuration_payload = driver.get_configuration_json();
-                                    
 
                                     // TODO: get the other sensor values
-                                    
+
                                     let string = configuration_payload.to_string();
                                     let str = string.as_str();
                                     board.usb_serial_send(str);
@@ -922,12 +1028,12 @@ impl DataLogger {
                             board.usb_serial_send("Epoch set\n");
                         } else {
                             board.usb_serial_send("Bad epoch in command\n");
-                            rprintln!("Bad epoch {:?}", epoch);
+                            // rprintln!("Bad epoch {:?}", epoch);
                         }
                     }
                     err => {
                         board.usb_serial_send("Bad epoch in command\n");
-                        rprintln!("Bad epoch {:?}", err);
+                        // rprintln!("Bad epoch {:?}", err);
                         return;
                     }
                 };
@@ -971,7 +1077,7 @@ impl DataLogger {
                             let mut values = Box::new([0_f64; 10]); // TODO: max of 10, should we make this dynamic?
                             for i in 0..count {
                                 rprintln!("{:?}", i);
-                                let value = match driver.get_measured_parameter_value(i*2) {
+                                let value = match driver.get_measured_parameter_value(i * 2) {
                                     Ok(value) => value,
                                     Err(_) => {
                                         // board.usb_serial_send("missing parameter value\n");
@@ -996,7 +1102,6 @@ impl DataLogger {
                         board.usb_serial_send("didn't find the sensor\n");
                     }
                 }
-
             }
             CommandPayload::SensorCalibrateListPayload(payload) => {
                 board.usb_serial_send("[");
@@ -1086,16 +1191,14 @@ impl DataLogger {
                                     let mut storage = [0u8; EEPROM_SENSOR_SETTINGS_SIZE];
                                     driver.get_configuration_bytes(&mut storage);
 
-                                    
                                     board.store_sensor_settings(index as u8, &storage);
                                     board.usb_serial_send("fit ok\n")
-                                },
+                                }
                                 Err(_) => board.usb_serial_send("something went wrong\n"),
                             }
                         }
                     }
                 }
-
             }
 
             CommandPayload::SensorCalibrateClearPayload(payload) => {
@@ -1106,7 +1209,7 @@ impl DataLogger {
                         return;
                     }
                 };
-                
+
                 if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         driver.clear_calibration();
@@ -1115,11 +1218,9 @@ impl DataLogger {
                 }
                 board.usb_serial_send("}");
                 board.usb_serial_send("\n");
-
             }
             CommandPayload::BoardSerialSendPayload(payload) => {
                 let payload_values = match payload.convert() {
-                    
                     Ok(payload_values) => payload_values,
                     Err(message) => {
                         board.usb_serial_send("problem with message \n");
@@ -1127,10 +1228,14 @@ impl DataLogger {
                     }
                 };
 
-                let message = match core::str::from_utf8(&payload_values.message[0..payload_values.message_len as usize]) {
+                let message = match core::str::from_utf8(
+                    &payload_values.message[0..payload_values.message_len as usize],
+                ) {
                     Ok(message) => message,
                     Err(message) => {
-                        board.usb_serial_send(format!("problem sending message {} \n", message).as_str());
+                        board.usb_serial_send(
+                            format!("problem sending message {} \n", message).as_str(),
+                        );
                         return;
                     }
                 };
@@ -1150,27 +1255,36 @@ impl DataLogger {
                 let length = board.get_usart_response(&mut response);
                 if length == 0 {
                     rprintln!("no usart response");
-                    board.usb_serial_send(json!({message:"no response received"}).to_string().as_str());
+                    board.usb_serial_send(
+                        json!({message:"no response received"}).to_string().as_str(),
+                    );
                     board.usb_serial_send("\n");
                     return;
                 }
 
-                
                 for b in &response[0..length] {
                     let c = *b as char;
                     rprintln!("{}", c);
                 }
-                // board.usb_serial_send("\n");
-                match core::str::from_utf8(&response){
+
+                match core::str::from_utf8(&response) {
                     Ok(response) => {
+                        let end = response.find("\0");
+                        let mut response = response;
+                        match end {
+                            Some(end) => response = &response[0..end],
+                            None => {}
+                        }
                         board.usb_serial_send(json!({message:response}).to_string().as_str());
                         board.usb_serial_send("\n");
                     }
                     Err(message) => {
-                        board.usb_serial_send(format!("problem receiving message {} \n", message).as_str());
+                        board.usb_serial_send(
+                            format!("problem receiving message {} \n", message).as_str(),
+                        );
                     }
                 };
-                
+
                 return;
             }
         }

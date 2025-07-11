@@ -8,6 +8,7 @@ edition = "2021"
 
 [dependencies]
 rriv_board = { path = "../rriv_board" } 
+util = { path = " ../../../../src/util" }
 embedded-hal = "0.2.7"
 nb = "1"
 cortex-m = { version = "0.7.6", features = ["critical-section-single-core"] }

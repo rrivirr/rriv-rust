@@ -37,8 +37,6 @@ pub const MODE: Mode = Mode {
 
   let sdcard = embedded_sdmmc::SdCard::new(spi2, pins.sd_card_chip_select, delay);
 
-  rprintln!("set up sdcard");
-
   return Storage::new(sdcard);
 
 }
@@ -130,15 +128,15 @@ impl Storage {
     rprintln!("set up volume");
     let result = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0));
     let volume = match result {
-      Ok(volume0) =>   {rprintln!("Volume 0 Success: {:?}", volume0); volume0 },
+      Ok(volume0) =>   {rprintln!("Volume Success: {:?}", volume0); volume0 },
       Err(error) => {
-        rprintln!("Volume 0 error: {:?}", error);
+        rprintln!("Volume error: {:?}", error);
         panic!("sd card error");
       }
     };
   
     // let volume = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0)).unwrap();
-    rprintln!("Volume 0 Success: {:?}", volume);
+    rprintln!("Volume Success: {:?}", volume);
     // Open the root directory (mutably borrows from the volume).  
     
     // let mut filename_bytes: [u8; 20] = [b'\0'; 20];
@@ -146,7 +144,7 @@ impl Storage {
     // filename_bytes[0..filename.len()].clone_from_slice(filename);
     // rprintln!("file: {:?}", filename);
    
-    rprintln!("set up root dir");
+    // rprintln!("set up root dir");
 
     let root_dir = volume_manager.open_root_dir(volume).unwrap();
     // This mutably borrows the directory.
@@ -219,7 +217,7 @@ impl Storage {
 
       let cache_data = &self.cache[0..self.next_position];
       match self.volume_manager.write(file, cache_data) {
-        Ok(ret) => rprintln!("Success: {:?}", ret),
+        Ok(ret) => rprintln!("OK: {:?}", ret),
         Err(err) => rprintln!("Err: {:?}", err),
       }
 

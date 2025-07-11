@@ -57,9 +57,6 @@ use pins::{GpioCr, Pins};
 mod pin_groups;
 use pin_groups::*;
 
-mod util;
-use util::*;
-
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
 static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
@@ -70,7 +67,7 @@ static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
 static USART_RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static USART_TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 
-const USART_RECEIVE_SIZE: usize = 30;
+const USART_RECEIVE_SIZE: usize = 40;
 static mut USART_RECEIVE: [u8; USART_RECEIVE_SIZE] = [0u8; USART_RECEIVE_SIZE];
 static mut USART_RECEIVE_INDEX: usize = 0;
 static mut USART_UNREAD_MESSAGE: bool = false;
@@ -128,15 +125,17 @@ impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self){
         self.watchdog.feed();
         self.file_epoch = self.epoch_timestamp();
-        if rriv_board::RRIVBoard::unread_usart_message(self) {
-            let mut message = [0u8; 30];
-            rriv_board::RRIVBoard::get_usart_response(self, &mut message);
-            remove_invalid_utf8(&mut message);
-            match core::str::from_utf8(&message){
-                Ok(message) => rprintln!("got usart message: {}", message),
-                Err(e) => rprintln!("utf8 error: {:?}", e),
-            }
-        }
+        // TODO: implement a peek rprint here with a peeked bool
+        // TODO: don't interfere with other code that needs async usart
+        // if rriv_board::RRIVBoard::unread_usart_message(self) {
+        //     let mut message = [0u8; 40];
+        //     rriv_board::RRIVBoard::get_usart_response(self, &mut message);
+        //     util::remove_invalid_utf8(&mut message);
+        //     match core::str::from_utf8(&message){
+        //         Ok(message) => rprintln!("got usart message: {}", message),
+        //         Err(e) => rprintln!("{:?}", e),
+        //     }
+        // }
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -157,7 +156,7 @@ impl RRIVBoard for Board {
     fn usart_send(&mut self, string: &str){
 
         // set control bit for sending
-        self.gpio.gpio6.set_high(); // origi
+        let _ = self.gpio.gpio6.set_high(); // origi
         // self.gpio.gpio6.set_low();
         // rriv_board::RRIVBoard::delay_ms(self, 100);
 
@@ -171,7 +170,7 @@ impl RRIVBoard for Board {
             // USART
             let bytes = string.as_bytes();
             for char in bytes.iter() {
-                rprintln!("char {}", char);
+                // rprintln!("char {}", char);
                 let t: &RefCell<Option<Tx<USART2>>> = USART_TX.borrow(cs);
                 if let Some(tx) = t.borrow_mut().deref_mut() {
                     _ = nb::block!(tx.write(char.clone()));
@@ -200,11 +199,16 @@ impl RRIVBoard for Board {
         });
     }
 
-    fn get_usart_response(&self, message: &mut [u8;30]) -> usize {
+    fn get_usart_response(&self, message: &mut [u8;USART_RECEIVE_SIZE]) -> usize {
         return cortex_m::interrupt::free(|cs| {
-            message.clone_from_slice( unsafe { &USART_RECEIVE }); // TODO: this isn't very safe
+            message.clone_from_slice( unsafe { &USART_RECEIVE }); // TODO: this isn't safe
             let length = unsafe { USART_RECEIVE_INDEX };
-
+            if message[length-1] == 10 {
+                message[length-1] = 0;
+            }
+            if message[length-2] == 13 {
+                message[length-2] = 0;
+            }
             // clear the receive buffer
             unsafe { USART_UNREAD_MESSAGE = false; }
             unsafe { 
@@ -248,7 +252,7 @@ impl RRIVBoard for Board {
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
-        remove_invalid_utf8(buffer);
+        util::remove_invalid_utf8(buffer);
     }
 
     fn retrieve_sensor_settings(
@@ -261,7 +265,7 @@ impl RRIVBoard for Board {
             let slice = &mut buffer[slot * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE
                 ..(slot + 1) * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
             read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice);
-            remove_invalid_utf8(slice);
+            util::remove_invalid_utf8(slice);
         }
     }
 
@@ -285,7 +289,7 @@ impl RRIVBoard for Board {
         let millis = epoch * 1000;
         // DateTime::from_timestamp_millis(micros);
         let datetime = NaiveDateTime::from_timestamp_millis(millis);
-        rprintln!("{:?}", datetime);
+        // rprintln!("{:?}", datetime);
         if let Some(datetime) = datetime {
             match ds3231.set_datetime(&datetime) {
                 Ok(_) => {}
@@ -388,13 +392,13 @@ impl SensorDriverServices for Board {
         match self.internal_adc.read(channel) {
             Ok(value) => return value,
             Err(error) => {
-                let mut errorString = "unhandled error";
+                let mut error_string = "unhandled error";
                 match error {
-                    AdcError::NBError(_) => errorString = "ADC NBError",
-                    AdcError::NotConfigured => errorString = "ADC Not Configured",
-                    AdcError::ReadError => errorString = "ADC Read Error",
+                    AdcError::NBError(_) => error_string = "ADC NBError",
+                    AdcError::NotConfigured => error_string = "ADC Not Configured",
+                    AdcError::ReadError => error_string = "ADC Read Error",
                 }
-                rriv_board::RRIVBoard::usb_serial_send(self, &errorString);
+                rriv_board::RRIVBoard::usb_serial_send(self, &error_string);
                 return 0;
             }
         }
@@ -516,7 +520,7 @@ impl SensorDriverServices for Board {
         // TODO
         match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output){
             Ok(_) => return,
-            Err(_) => rprintln!("one wire crc error"),
+            Err(_) => rprintln!("1wire crc error"),
         }
     }
     
@@ -836,7 +840,7 @@ impl BoardBuilder {
             &clocks,
         );
 
-        rprintln!("serial rx.listen()");
+        // rprintln!("serial rx.listen()");
 
         serial.rx.listen();
 
@@ -1083,7 +1087,7 @@ impl BoardBuilder {
         self.i2c2 = Some(i2c2);
         rprintln!("set up i2c2 done");
 
-        rprintln!("Start i2c1 scanning...");
+        rprintln!("i2c1 scanning...");
 
         for addr in 0x00_u8..0x7F {
             // Write the empty array and check the slave response.
@@ -1101,7 +1105,7 @@ impl BoardBuilder {
 
         watchdog.feed();
 
-        rprintln!("Start i2c2 scanning...");
+        rprintln!("i2c2 scanning...");
         rprintln!();
         for addr in 0x00_u8..0x7F {
             // Write the empty array and check the slave response.
@@ -1151,7 +1155,7 @@ impl BoardBuilder {
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         // delay2.delay(2);
-        rprintln!("{:?}", clocks);
+        // rprintln!("{:?}", clocks);
         
         // let mut storage = storage::build(
         //     spi1_pins,
@@ -1168,7 +1172,7 @@ impl BoardBuilder {
             delay2,
         );
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
-        rprintln!("{:?}", clocks);
+        // rprintln!("{:?}", clocks);
    
         self.storage = Some(storage);
 
@@ -1183,19 +1187,8 @@ impl BoardBuilder {
         //     1.MHz(),
         //     clocks,
         // );
-        rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);
-
-        // we can unsafely .steal on device peripherals to get rcc again, or not?
-        // unsafe {
-        // let rcc_block = pac::Peripherals::steal().RCC;
-        // I2C1::disable(rcc_block);
-        // // delay.delay_ms(50_u16);
-        // // I2C1::enable(rcc);
-        // // delay.delay_ms(50_u16);
-        // // I2C1::reset(rcc);
-        // // delay.delay_ms(50_u16);
 
         watchdog.feed();
 

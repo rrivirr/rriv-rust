@@ -8,7 +8,7 @@ use alloc::boxed::Box;
 /// NOTE: Since this has a C compatible representation, it could be used in the FFI
 /// we use from_str when processing commands from the serial side anyway though..
 #[repr(u8)]
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq)]
 pub enum CommandType {
     DataloggerSet = 0,
     DataloggerGet = 1,

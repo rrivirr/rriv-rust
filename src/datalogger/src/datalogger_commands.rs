@@ -4,7 +4,7 @@ use alloc::fmt::Debug;
 use alloc::boxed::Box;
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct DataloggerSetCommandPayload {
     pub object: Value,
     pub action: Value,
@@ -19,14 +19,14 @@ pub struct DataloggerSetCommandPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct DataloggerGetCommandPayload {
     pub object: Value,
     pub action: Value,
     pub propery: Option<Value>
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct DataloggerSetModeCommandPayload {
     pub object: Value,
     pub action: Value,
@@ -34,7 +34,7 @@ pub struct DataloggerSetModeCommandPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorSetCommandPayload {
     pub object: Value,
     pub action: Value, 
@@ -42,27 +42,27 @@ pub struct SensorSetCommandPayload {
     pub r#type: Value, // option
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorGetCommandPayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorRemoveCommandPayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorListCommandPayload {
     pub object: Value,
     pub action: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct BoardRtcSetPayload {
     pub object: Value,
     pub action: Value,
@@ -70,7 +70,7 @@ pub struct BoardRtcSetPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct BoardGetPayload {
     pub object: Value,
     pub action: Value,
@@ -79,7 +79,7 @@ pub struct BoardGetPayload {
 
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct BoardSerialSendPayload {
     pub object: Value,
     pub action: Value,
@@ -116,7 +116,7 @@ impl BoardSerialSendPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibratePointPayload {
     pub object: Value,
     pub action: Value,
@@ -127,7 +127,7 @@ pub struct SensorCalibratePointPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateListPayload {
     pub object: Value,
     pub action: Value,
@@ -136,7 +136,7 @@ pub struct SensorCalibrateListPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateRemovePayload {
     pub object: Value,
     pub action: Value,
@@ -145,7 +145,7 @@ pub struct SensorCalibrateRemovePayload {
     pub tag: Value
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateFitPayload {
     pub object: Value,
     pub action: Value,
@@ -153,7 +153,7 @@ pub struct SensorCalibrateFitPayload {
     pub subcommand: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateClearPayload {
     pub object: Value,
     pub action: Value,
@@ -277,7 +277,7 @@ impl SensorCalibrateRemovePayload {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub enum CommandPayload {
     DataloggerSetCommandPayload(DataloggerSetCommandPayload),
     DataloggerGetCommandPayload(DataloggerGetCommandPayload),
