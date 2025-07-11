@@ -4,9 +4,10 @@ extern crate alloc;
 
 use alloc::boxed::Box;
 use alloc::format;
+use i2c_hung_fix::try_unhang_i2c;
 
 use core::{
-    any::Any, cell::RefCell, concat, default::Default, format_args, ops::DerefMut, option::Option::{self, *}, result::Result::*
+    any::Any, cell::RefCell, concat, default::Default, format_args, ops::DerefMut, option::Option::{self, *}, ptr::addr_of, result::Result::*
 };
 use core::{mem, result};
 use cortex_m::{
@@ -15,7 +16,8 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, watchdog::IndependentWatchdog};
+use stm32f1xx_hal::{serial::StopBits};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
@@ -55,9 +57,6 @@ use pins::{GpioCr, Pins};
 mod pin_groups;
 use pin_groups::*;
 
-mod util;
-use util::*;
-
 type RedLed = gpio::Pin<'A', 9, Output<OpenDrain>>;
 
 static WAKE_LED: Mutex<RefCell<Option<RedLed>>> = Mutex::new(RefCell::new(None));
@@ -65,12 +64,18 @@ static mut USB_BUS: Option<UsbBusAllocator<UsbBusType>> = None;
 static mut USB_SERIAL: Option<usbd_serial::SerialPort<UsbBusType>> = None;
 static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
 
-static RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
-static TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
+static USART_RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
+static USART_TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
+
+const USART_RECEIVE_SIZE: usize = 40;
+static mut USART_RECEIVE: [u8; USART_RECEIVE_SIZE] = [0u8; USART_RECEIVE_SIZE];
+static mut USART_RECEIVE_INDEX: usize = 0;
+static mut USART_UNREAD_MESSAGE: bool = false;
+
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
-pub struct Serial {
+pub struct Usart {
     tx: &'static Mutex<RefCell<Option<Tx<pac::USART2>>>>,
 }
 
@@ -95,7 +100,8 @@ pub struct Board {
     pub debug: bool,
     pub file_epoch: i64,
     pub one_wire_bus: OneWire<OneWirePin>,
-    one_wire_search_state: Option<SearchState>
+    one_wire_search_state: Option<SearchState>,
+    pub watchdog: IndependentWatchdog
 }
 
 impl Board {
@@ -106,13 +112,30 @@ impl Board {
         // self.internal_adc.enable(&mut self.delay);
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         self.storage.create_file(timestamp);
+
+
+        // TODO: this is for the NOX sensor, needs to be configured by drivers
+        self.gpio.gpio6.make_push_pull_output(&mut self.gpio_cr.gpioc_crh);
+
     }
 
 }
 
 impl RRIVBoard for Board {
     fn run_loop_iteration(&mut self){
+        self.watchdog.feed();
         self.file_epoch = self.epoch_timestamp();
+        // TODO: implement a peek rprint here with a peeked bool
+        // TODO: don't interfere with other code that needs async usart
+        // if rriv_board::RRIVBoard::unread_usart_message(self) {
+        //     let mut message = [0u8; 40];
+        //     rriv_board::RRIVBoard::get_usart_response(self, &mut message);
+        //     util::remove_invalid_utf8(&mut message);
+        //     match core::str::from_utf8(&message){
+        //         Ok(message) => rprintln!("got usart message: {}", message),
+        //         Err(e) => rprintln!("{:?}", e),
+        //     }
+        // }
     }
 
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
@@ -129,27 +152,89 @@ impl RRIVBoard for Board {
         cortex_m::interrupt::free(|cs| f())
     }
 
-    fn serial_send(&self, string: &str) {
+    // // use this to talk out on serial to other UART modules, RS 485, etc
+    fn usart_send(&mut self, string: &str){
+
+        // set control bit for sending
+        let _ = self.gpio.gpio6.set_high(); // origi
+        // self.gpio.gpio6.set_low();
+        // rriv_board::RRIVBoard::delay_ms(self, 100);
+
         cortex_m::interrupt::free(|cs| {
+            // clear the receive buffer
+            unsafe { 
+                USART_RECEIVE = [0u8; USART_RECEIVE_SIZE]; 
+                USART_RECEIVE_INDEX = 0;
+            }
+
             // USART
             let bytes = string.as_bytes();
             for char in bytes.iter() {
-                let t = TX.borrow(cs);
+                // rprintln!("char {}", char);
+                let t: &RefCell<Option<Tx<USART2>>> = USART_TX.borrow(cs);
                 if let Some(tx) = t.borrow_mut().deref_mut() {
                     _ = nb::block!(tx.write(char.clone()));
                 }
             }
 
+            // let c = 0b00001101;
+            // let t: &RefCell<Option<Tx<USART2>>> = USART_TX.borrow(cs);
+            // if let Some(tx) = t.borrow_mut().deref_mut() {
+            //     _ = nb::block!(tx.write(c.clone()));
+            // }
+        });
+
+        rriv_board::RRIVBoard::delay_ms(self, 2);
+        self.gpio.gpio6.set_low(); // origi
+        // self.gpio.gpio6.set_high();
+
+
+        // set control bit for receiving
+        // rriv_board::RRIVBoard::delay_ms(self, 70);
+    }
+
+    fn unread_usart_message(&self) -> bool {
+        return cortex_m::interrupt::free(|cs| {
+            unsafe { USART_UNREAD_MESSAGE }
+        });
+    }
+
+    fn get_usart_response(&self, message: &mut [u8;USART_RECEIVE_SIZE]) -> usize {
+        return cortex_m::interrupt::free(|cs| {
+            message.clone_from_slice( unsafe { &USART_RECEIVE }); // TODO: this isn't safe
+            let length = unsafe { USART_RECEIVE_INDEX };
+            if message[length-1] == 10 {
+                message[length-1] = 0;
+            }
+            if message[length-2] == 13 {
+                message[length-2] = 0;
+            }
+            // clear the receive buffer
+            unsafe { USART_UNREAD_MESSAGE = false; }
+            unsafe { 
+                USART_RECEIVE = [0u8; USART_RECEIVE_SIZE]; 
+                USART_RECEIVE_INDEX = 0;
+            }
+
+            return length;
+        });
+    }
+
+
+    fn usb_serial_send(&self, string: &str) {
+        cortex_m::interrupt::free(|cs| {
             // USB
             let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
             serial.write(string.as_bytes()).ok();
         });
     }
 
+    // outputs to serial and also echos to rtt
     fn serial_debug(&self, string: &str) {
+        rprintln!("{:?}", string);
         if self.debug {
-            rriv_board::RRIVBoard::serial_send(self, string);
-            rriv_board::RRIVBoard::serial_send(self, "\n");
+            rriv_board::RRIVBoard::usb_serial_send(self, string);
+            rriv_board::RRIVBoard::usb_serial_send(self, "\n");
         }
     }
 
@@ -167,7 +252,7 @@ impl RRIVBoard for Board {
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
-        remove_invalid_utf8(buffer);
+        util::remove_invalid_utf8(buffer);
     }
 
     fn retrieve_sensor_settings(
@@ -180,7 +265,7 @@ impl RRIVBoard for Board {
             let slice = &mut buffer[slot * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE
                 ..(slot + 1) * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
             read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice);
-            remove_invalid_utf8(slice);
+            util::remove_invalid_utf8(slice);
         }
     }
 
@@ -204,7 +289,7 @@ impl RRIVBoard for Board {
         let millis = epoch * 1000;
         // DateTime::from_timestamp_millis(micros);
         let datetime = NaiveDateTime::from_timestamp_millis(millis);
-        rprintln!("{:?}", datetime);
+        // rprintln!("{:?}", datetime);
         if let Some(datetime) = datetime {
             match ds3231.set_datetime(&datetime) {
                 Ok(_) => {}
@@ -268,8 +353,20 @@ impl RRIVBoard for Board {
 
 macro_rules! control_services_impl {
     () => {
-        fn serial_send(&self, string: &str) {
-            rriv_board::RRIVBoard::serial_send(self, string);
+        fn usb_serial_send(&self, string: &str) {
+            rriv_board::RRIVBoard::usb_serial_send(self, string);
+        }
+
+        fn usart_send(&mut self, string: &str) {
+            rriv_board::RRIVBoard::usart_send(self, string);
+        }
+
+        fn get_usart_response(&self, message: &mut [u8;40]) -> usize {
+            return rriv_board::RRIVBoard::get_usart_response(self, message);
+        }
+
+        fn unread_usart_message(&self) -> bool {
+            rriv_board::RRIVBoard::unread_usart_message(self)
         }
 
         fn serial_debug(&self, string: &str) {
@@ -279,6 +376,7 @@ macro_rules! control_services_impl {
         fn delay_ms(&mut self, ms: u16) {
             rriv_board::RRIVBoard::delay_ms(self, ms);
         }
+
         fn timestamp(&mut self) -> i64 {
             rriv_board::RRIVBoard::timestamp(self)
         }
@@ -294,13 +392,13 @@ impl SensorDriverServices for Board {
         match self.internal_adc.read(channel) {
             Ok(value) => return value,
             Err(error) => {
-                let mut errorString = "unhandled error";
+                let mut error_string = "unhandled error";
                 match error {
-                    AdcError::NBError(_) => errorString = "ADC NBError",
-                    AdcError::NotConfigured => errorString = "ADC Not Configured",
-                    AdcError::ReadError => errorString = "ADC Read Error",
+                    AdcError::NBError(_) => error_string = "ADC NBError",
+                    AdcError::NotConfigured => error_string = "ADC Not Configured",
+                    AdcError::ReadError => error_string = "ADC Read Error",
                 }
-                rriv_board::RRIVBoard::serial_send(self, &errorString);
+                rriv_board::RRIVBoard::usb_serial_send(self, &error_string);
                 return 0;
             }
         }
@@ -334,8 +432,15 @@ impl SensorDriverServices for Board {
         match self.i2c2.write(addr, message) {
             Ok(_) => return Ok(()),
             Err(e) => {
-                rprintln!("{:?}", e);
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {}", addr));
+                let kind = match e {
+                    stm32f1xx_hal::i2c::Error::Bus => "bus",
+                    stm32f1xx_hal::i2c::Error::Arbitration => "arb",
+                    stm32f1xx_hal::i2c::Error::Acknowledge => "ack",
+                    stm32f1xx_hal::i2c::Error::Overrun => "ovr",
+                    stm32f1xx_hal::i2c::Error::Timeout => "tout",
+                    _ => "none",
+                };
+                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {} {}", addr, kind));
                 return Err(());
             }
         }
@@ -415,7 +520,7 @@ impl SensorDriverServices for Board {
         // TODO
         match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output){
             Ok(_) => return,
-            Err(_) => rprintln!("one wire crc error"),
+            Err(_) => rprintln!("1wire crc error"),
         }
     }
     
@@ -430,11 +535,11 @@ impl SensorDriverServices for Board {
                 return Some(device_address.0);    
             },
             Ok(None) => {
-                rprintln!("no devices found on onewire");
+                rprintln!("no devices 1wire");
                 return None;              
             },
             Err(e) => {
-                rprintln!("one wire error{:?}", e);          
+                rprintln!("1wire error{:?}", e);          
                 return None;  
             },
         } 
@@ -454,28 +559,35 @@ impl TelemetryDriverServices for Board {
 #[interrupt]
 unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
-        if let Some(ref mut rx) = RX.borrow(cs).borrow_mut().deref_mut() {
+        if let Some(ref mut rx) = USART_RX.borrow(cs).borrow_mut().deref_mut() {
             if rx.is_rx_not_empty() {
                 if let Ok(c) = nb::block!(rx.read()) {
                     rprintln!("serial rx byte: {}", c);
-                    let r = RX_PROCESSOR.borrow(cs);
+                    USART_UNREAD_MESSAGE = true;
+                    if USART_RECEIVE_INDEX < USART_RECEIVE_SIZE - 1 {
+                        USART_RECEIVE[USART_RECEIVE_INDEX] = c;
+                        USART_RECEIVE_INDEX = USART_RECEIVE_INDEX + 1;
+                    }
+                    
 
-                    if let Some(processor) = r.borrow_mut().deref_mut() {
-                        processor.process_character(c);
-                    }
-                    let t = TX.borrow(cs);
-                    if let Some(tx) = t.borrow_mut().deref_mut() {
-                        _ = nb::block!(tx.write(c.clone())); // need to make a blocking call to TX
-                    }
+                    // let r = RX_PROCESSOR.borrow(cs);
+
+                    // if let Some(processor) = r.borrow_mut().deref_mut() {
+                    //     processor.process_character(c);
+                    // }
+                    // let t = USART_TX.borrow(cs);
+                    // if let Some(tx) = t.borrow_mut().deref_mut() {
+                    //     _ = nb::block!(tx.write(c.clone())); // need to make a blocking call to TX
+                    // }
                 }
-                // use PA9 to flash RGB led
-                if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                    if led.is_low() {
-                        led.set_high();
-                    } else {
-                        led.set_low();
-                    }
-                }
+                // // use PA9 to flash RGB led
+                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
+                //     if led.is_low() {
+                //         led.set_high();
+                //     } else {
+                //         led.set_low();
+                //     }
+                // }
             }
         }
     })
@@ -592,7 +704,8 @@ pub struct BoardBuilder {
     pub i2c1: Option<BoardI2c1>,
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
-    pub storage: Option<Storage>
+    pub storage: Option<Storage>,
+    pub watchdog: Option<IndependentWatchdog>
 }
 
 impl BoardBuilder {
@@ -610,7 +723,8 @@ impl BoardBuilder {
             rgb_led: None,
             oscillator_control: None,
             internal_rtc: None,
-            storage: None
+            storage: None,
+            watchdog: None
         }
     }
 
@@ -680,7 +794,8 @@ impl BoardBuilder {
             debug: true,
             file_epoch: 0,
             one_wire_bus: one_wire,
-            one_wire_search_state: None
+            one_wire_search_state: None,
+            watchdog: self.watchdog.unwrap()
         }
     }
 
@@ -720,17 +835,18 @@ impl BoardBuilder {
             usart,
             (pins.tx, pins.rx),
             mapr,
-            Config::default().baudrate(57600.bps()),
+            // Config::default().baudrate(38400.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // this worked for the nox sensor
+            Config::default().baudrate(115200.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // this appears to be right for the RAK 3172
             &clocks,
         );
 
-        rprintln!("serial rx.listen()");
+        // rprintln!("serial rx.listen()");
 
         serial.rx.listen();
 
         cortex_m::interrupt::free(|cs| {
-            RX.borrow(cs).replace(Some(serial.rx));
-            TX.borrow(cs).replace(Some(serial.tx));
+            USART_RX.borrow(cs).replace(Some(serial.rx));
+            USART_TX.borrow(cs).replace(Some(serial.tx));
             // WAKE_LED.borrow(cs).replace(Some(led)); // TODO: this needs to be updated.  entire rgb_led object needs to be shared.
         });
         // rprintln!("unmasking USART2 interrupt");
@@ -779,15 +895,17 @@ impl BoardBuilder {
         }
     }
 
-    pub fn setup_i2c1(
+    pub fn setup_i2c1 (
         pins: pin_groups::I2c1Pins,
         cr: &mut GpioCr,
         i2c1: I2C1,
         mapr: &mut MAPR,
-        clocks: &Clocks,
+        clocks: &Clocks
     ) -> BoardI2c1 {
-        let scl1 = pins.i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
-        let sda1 = pins.i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl); // i2c
+        let scl1 = pins.i2c1_scl; 
+        let sda1 = pins.i2c1_sda; 
+           
+
         BlockingI2c::i2c1(
             i2c1,
             (scl1, sda1),
@@ -901,6 +1019,7 @@ impl BoardBuilder {
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
 
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
+        self.external_adc.as_mut().unwrap().disable(&mut delay);
 
         power_pins.enable_3v.set_high();
         delay.delay_ms(500_u32);
@@ -915,6 +1034,29 @@ impl BoardBuilder {
         self.external_adc.as_mut().unwrap().enable(&mut delay);
         self.external_adc.as_mut().unwrap().reset(&mut delay);
 
+
+        let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
+        watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
+        
+        watchdog.start(MilliSeconds::secs(6));
+        watchdog.feed();
+
+        rprintln!("unhang I2C1 if hung");
+
+        let mut scl1= i2c1_pins.i2c1_scl.into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        let mut sda1 = i2c1_pins.i2c1_sda.into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        sda1.set_high(); // remove signal from the master
+
+        match  try_unhang_i2c(&mut scl1, &sda1, &mut delay, i2c_hung_fix::FALLBACK_I2C_FREQUENCY, 30){
+            Ok(_) => {},
+            Err(e) => {
+                rprintln!("Couln't reset i2c1");
+                loop{}
+            }, // wait for IDWP to reset.   actually we can just hardware reset here?
+        }
+
+        let i2c1_pins = I2c1Pins::rebuild(scl1, sda1, &mut gpio_cr);
+
         // rprintln!("starting i2c");
         core_peripherals.DWT.enable_cycle_counter(); // BlockingI2c says this is required
         let i2c1 = BoardBuilder::setup_i2c1(
@@ -922,19 +1064,30 @@ impl BoardBuilder {
             &mut gpio_cr,
             device_peripherals.I2C1,
             &mut afio.mapr,
-            &clocks,
+            &clocks
         );
         self.i2c1 = Some(i2c1);
-        rprintln!("set up i2c1");
+        rprintln!("set up i2c1 done");
+
+        rprintln!("unhang I2C2 if hung");
+        
+        let mut scl2 = i2c2_pins.i2c2_scl.into_open_drain_output(&mut gpio_cr.gpiob_crh);
+        let mut sda2= i2c2_pins.i2c2_sda.into_open_drain_output(&mut gpio_cr.gpiob_crh);
+        sda2.set_high(); // remove signal from the master
+
+        match  try_unhang_i2c(&mut scl2, &sda2, &mut delay, 100_000, i2c_hung_fix::RECOMMENDED_MAX_CLOCK_CYCLES){
+            Ok(_) => {},
+            Err(_) => loop{}, // wiat for IDWP to reset.   actually we can just hardware reset here?
+        }
+
+        let i2c2_pins = I2c2Pins::rebuild(scl2, sda2, &mut gpio_cr);
 
         let i2c2 =
             BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
         self.i2c2 = Some(i2c2);
-        rprintln!("set up i2c2");
+        rprintln!("set up i2c2 done");
 
-        // loop {
-        rprintln!("Start i2c1 scanning...");
-        rprintln!();
+        rprintln!("i2c1 scanning...");
 
         for addr in 0x00_u8..0x7F {
             // Write the empty array and check the slave response.
@@ -950,7 +1103,9 @@ impl BoardBuilder {
         }
         rprintln!("scan is done");
 
-        rprintln!("Start i2c2 scanning...");
+        watchdog.feed();
+
+        rprintln!("i2c2 scanning...");
         rprintln!();
         for addr in 0x00_u8..0x7F {
             // Write the empty array and check the slave response.
@@ -965,18 +1120,23 @@ impl BoardBuilder {
         }
         rprintln!("scan is done");
 
-        // }
+
+        watchdog.feed();
+
+
 
         // a basic idea is to have the struct for a given periphal take ownership of the register block that controls stuff there
         // then Board would have ownership of the feature object, and make changes to the the registers (say through shutdown) through the interface of that struct
 
         // build the power control
-        // self.power_control = Some(PowerControl::new(power_pins));
+        let mut power_control = Some(PowerControl::new(power_pins)).unwrap();
+        power_control.cycle_5v(&mut delay);
 
         // build the internal adc
         let internal_adc_configuration =
             InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
-        let internal_adc = internal_adc_configuration.build(&clocks);
+        let mut internal_adc = internal_adc_configuration.build(&clocks);
+        internal_adc.enable(&mut delay);
         self.internal_adc = Some(internal_adc);
 
         self.rgb_led = Some(build_rgb_led(
@@ -995,7 +1155,7 @@ impl BoardBuilder {
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         // delay2.delay(2);
-        rprintln!("{:?}", clocks);
+        // rprintln!("{:?}", clocks);
         
         // let mut storage = storage::build(
         //     spi1_pins,
@@ -1012,7 +1172,7 @@ impl BoardBuilder {
             delay2,
         );
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
-        rprintln!("{:?}", clocks);
+        // rprintln!("{:?}", clocks);
    
         self.storage = Some(storage);
 
@@ -1027,19 +1187,12 @@ impl BoardBuilder {
         //     1.MHz(),
         //     clocks,
         // );
-        rprintln!("{:?}", clocks);
 
         self.delay = Some(delay);
 
-        // we can unsafely .steal on device peripherals to get rcc again, or not?
-        // unsafe {
-        // let rcc_block = pac::Peripherals::steal().RCC;
-        // I2C1::disable(rcc_block);
-        // // delay.delay_ms(50_u16);
-        // // I2C1::enable(rcc);
-        // // delay.delay_ms(50_u16);
-        // // I2C1::reset(rcc);
-        // // delay.delay_ms(50_u16);
+        watchdog.feed();
+
+        self.watchdog = Some(watchdog);
 
         rprintln!("done with setup");
     }

@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 use alloc::fmt::Debug;
+use alloc::boxed::Box;
 
-#[derive(Serialize, Deserialize, Debug)]
+
+#[derive(Serialize, Deserialize)]
 pub struct DataloggerSetCommandPayload {
     pub object: Value,
     pub action: Value,
@@ -17,14 +19,14 @@ pub struct DataloggerSetCommandPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct DataloggerGetCommandPayload {
     pub object: Value,
     pub action: Value,
     pub propery: Option<Value>
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct DataloggerSetModeCommandPayload {
     pub object: Value,
     pub action: Value,
@@ -32,7 +34,7 @@ pub struct DataloggerSetModeCommandPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorSetCommandPayload {
     pub object: Value,
     pub action: Value, 
@@ -40,27 +42,27 @@ pub struct SensorSetCommandPayload {
     pub r#type: Value, // option
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorGetCommandPayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorRemoveCommandPayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorListCommandPayload {
     pub object: Value,
     pub action: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct BoardRtcSetPayload {
     pub object: Value,
     pub action: Value,
@@ -68,7 +70,7 @@ pub struct BoardRtcSetPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct BoardGetPayload {
     pub object: Value,
     pub action: Value,
@@ -76,7 +78,45 @@ pub struct BoardGetPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+
+#[derive(Serialize, Deserialize)]
+pub struct BoardSerialSendPayload {
+    pub object: Value,
+    pub action: Value,
+    pub message: Value
+}
+
+pub struct BoardSerialSendCommandPayload {
+    pub message: [u8;20],
+    pub message_len: u8, 
+}
+
+impl BoardSerialSendPayload {
+    pub fn convert(&self) -> Result<BoardSerialSendCommandPayload, &'static str> { // TODO: this static lifetime is not good.  Need to pass in some storage or use a box.
+        let message = match self.message {
+            serde_json::Value::String(ref message) => {
+                message
+            },
+            _ => {
+                // board.usb_serial_send("bad sensor id\n");
+                return Err("bad message");
+            }
+        };
+
+        let mut message_bytes = [0u8;20];
+        message_bytes[0..message.len()].clone_from_slice(&message.as_bytes()[0..message.len()]);
+        
+        Ok(
+        BoardSerialSendCommandPayload {
+            message: message_bytes,
+            message_len: message.len() as u8,
+        }
+        )
+    }
+}
+
+
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibratePointPayload {
     pub object: Value,
     pub action: Value,
@@ -87,7 +127,7 @@ pub struct SensorCalibratePointPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateListPayload {
     pub object: Value,
     pub action: Value,
@@ -96,7 +136,7 @@ pub struct SensorCalibrateListPayload {
 }
 
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateRemovePayload {
     pub object: Value,
     pub action: Value,
@@ -105,7 +145,7 @@ pub struct SensorCalibrateRemovePayload {
     pub tag: Value
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateFitPayload {
     pub object: Value,
     pub action: Value,
@@ -113,7 +153,7 @@ pub struct SensorCalibrateFitPayload {
     pub subcommand: Value,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateClearPayload {
     pub object: Value,
     pub action: Value,
@@ -131,13 +171,13 @@ pub struct SensorCalibrateSubcommand<'a> {
 // TODO: these impls should be derived or ??
 
 impl SensorCalibrateFitPayload {
-    pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> {
+    pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> { // TODO: this static lifetime is not good.  Need to pass in some storage or use a box.
         let id = match self.id {
             serde_json::Value::String(ref payload_id) => {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -158,7 +198,7 @@ impl SensorCalibrateClearPayload {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -181,7 +221,7 @@ impl SensorCalibrateListPayload {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -211,7 +251,7 @@ impl SensorCalibrateRemovePayload {
                 payload_id
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
             }
         };
@@ -221,7 +261,7 @@ impl SensorCalibrateRemovePayload {
                 tag
             },
             _ => {
-                // board.serial_send("bad sensor id\n");
+                // board.usb_serial_send("bad sensor id\n");
                 return Err("bad calibration point tag");
             }
         };
@@ -237,7 +277,7 @@ impl SensorCalibrateRemovePayload {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 pub enum CommandPayload {
     DataloggerSetCommandPayload(DataloggerSetCommandPayload),
     DataloggerGetCommandPayload(DataloggerGetCommandPayload),
@@ -252,7 +292,8 @@ pub enum CommandPayload {
     SensorCalibrateFitPayload(SensorCalibrateFitPayload),
     SensorCalibrateClearPayload(SensorCalibrateClearPayload),
     BoardRtcSetPayload(BoardRtcSetPayload),
-    BoardGetPayload(BoardGetPayload)
+    BoardGetPayload(BoardGetPayload),
+    BoardSerialSendPayload(BoardSerialSendPayload)
 }
 
 
@@ -279,7 +320,7 @@ pub fn get_id(id: &serde_json::Value) -> Result<(&alloc::string::String), (&str)
             return Ok(payload_id)
         },
         _ => {
-            // board.serial_send("bad sensor id\n");
+            // board.usb_serial_send("bad sensor id\n");
             return Err("bad sensor id")
         }
     };

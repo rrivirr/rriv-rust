@@ -1,10 +1,9 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(clippy::empty_loop)]
 #![feature(alloc_error_handler)]
-#![feature(prelude_2024)]
 #![no_main]
 
-extern crate panic_abort;
+extern crate panic_halt;
 
 use core::{prelude::rust_2024::*, u8};
 use cortex_m_rt::entry;

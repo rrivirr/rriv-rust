@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
-pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 12;
+pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 2;
 
 enum AdcSelect {
     Internal,
@@ -18,7 +18,11 @@ pub trait RXProcessor: Send + Sync {
 // Board Services Used by Control Logic and Drivers
 macro_rules! control_services {
     () => {
-        fn serial_send(&self, string: &str);
+        fn usb_serial_send(&self, string: &str); // TODO: give his a more unique name specifying that it's used to talk with the serial rrivctl interface
+                                                 // maybe rrivctl_send
+        fn usart_send(&mut self, string: &str);
+        fn get_usart_response(&self, message: &mut [u8;40]) -> usize;
+        fn unread_usart_message(&self) -> bool;
         fn serial_debug(&self, string: &str);    
         fn delay_ms(&mut self, ms: u16);
         fn timestamp(&mut self) -> i64;

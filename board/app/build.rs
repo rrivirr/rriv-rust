@@ -12,6 +12,7 @@ use std::env;
 use std::fs::File;
 use std::io::Write;
 use std::path::PathBuf;
+use std::process::Command;
 
 fn macos_copy_memory_x() {
     // Put `memory.x` in our output directory and ensure it's
@@ -46,4 +47,15 @@ fn main() {
     // https://doc.rust-lang.org/rustc/command-line-arguments.html#option-l-search-path
     println!("cargo:rustc-link-search=./target/thumbv7m-none-eabi/debug");
     // println!("cargo:rustc-link-lib=static=rriv_0_4");
+
+    let branch = Command::new("git")
+        .arg("rev-parse")
+        .arg("--abbrev-ref")
+        .arg("HEAD")
+        .output()
+        .expect("Failed to get git branch");
+
+    let branch_name = String::from_utf8_lossy(&branch.stdout).trim().to_string();
+    println!("cargo:rustc-env=GIT_BRANCH={}", branch_name);
+
 }

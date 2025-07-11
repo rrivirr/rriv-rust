@@ -2,21 +2,6 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "RRIV: Build Static C FFI Lib",
-            "type": "cargo",
-            "command": "build",
-            "args": [
-                "-p=rrivrust"
-            ],
-            "problemMatcher": [
-                "$rustc"
-            ],
-            "group": {
-                "kind": "build",
-                "isDefault": false
-            },
-        },
-        {
             "label": "RRIV: Build App Binary Crate",
             "type": "cargo",
             "command": "build",
@@ -30,6 +15,44 @@
                 "kind": "build",
                 "isDefault": false
             },
+        },
+        {
+            "label": "RRIV: Build Release App Binary Crate",
+            "type": "cargo",
+            "command": "build",
+            "args": [
+                "--release",
+                "-p=app"
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+        },
+         {
+            "label": "RRIV: Clean",
+            "type": "cargo",
+            "command": "clean",
+            "args": [
+                "--release",
+            ],
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": {
+                "kind": "build",
+                "isDefault": false
+            },
+        },
+        {
+            "label": "RRIV: Build Release",
+            "dependsOn": [
+                "RRIV: Clean",
+                "RRIV: Build Release App Binary Crate"
+            ]
         },
         {
             "label": "RRIV: Build Board Crate",

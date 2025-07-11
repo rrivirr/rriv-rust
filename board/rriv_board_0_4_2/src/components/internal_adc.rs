@@ -43,9 +43,9 @@ impl InternalAdc {
     }
   }
 
-  pub fn enable(&mut self, delay: &mut SysDelay) {
+  pub fn enable(&mut self, delay: &mut impl embedded_hal::blocking::delay::DelayMs<u32> ) {
     self.pins.enable_avdd.set_low();
-    delay.delay_ms(100_u16);
+    delay.delay_ms(100_u32);
   }
 
   pub fn disable(&mut self){

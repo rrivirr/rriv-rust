@@ -1,11 +1,11 @@
 
 use embedded_hal::prelude::{
-    _embedded_hal_blocking_i2c_Read, _embedded_hal_blocking_i2c_Write,
+    _embedded_hal_blocking_i2c_Write,
     _embedded_hal_blocking_i2c_WriteRead,
 };
 use crate::Board;
 use rriv_board::RRIVBoard;
-use rtt_target::{rprint, rprintln};
+use rtt_target::rprintln;
 
 // implementation specific consts
 const EEPROM_I2C_ADDRESS: u8 = 0x50;
@@ -58,7 +58,7 @@ pub fn read_bytes_from_eeprom(board: &mut crate::Board, block: u8, start_address
                     buffer[i] = b[0];
                 }
                 Err(_) => {
-                    board.serial_send("EEPROM read failure, restarting");
+                    board.usb_serial_send("EEPROM read failure, restarting");
                     // board.restart();
                     return;
                 } // what do we do if we fail?  panic?  retry?  restart the board?
