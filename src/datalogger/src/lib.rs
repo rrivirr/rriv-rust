@@ -471,24 +471,33 @@ impl DataLogger {
                             return;
                         }
                     }
-                    None => self.telemetry_step = 0,
+                    None => {
+                        rprintln!("telem not ok: {}", message);
+                        self.telemetry_step = 0;
+                    }
                 },
                 Err(_) => self.telemetry_step = 0,
             }
         } else {
             // need to check for a timeout here
+            rprintln!("no message, checking timeout");
             if board.timestamp() - self.usart_send_time > 2 {
+                rprintln!("timed out, going to step 0");
                 self.telemetry_step = 0;
             }
         }
     }
 
+
+    // TODO: need a command recieved queue, just like for USB
+    // AT_BUSY_ERROR
+    // Restricted_Wait_158785
     pub fn check_joined(&mut self, board: &mut impl RRIVBoard) {
         if board.unread_usart_message() {
             let mut message: [u8; 40] = [0; 40];
             board.get_usart_response(&mut message);
             util::remove_invalid_utf8(&mut message);
-            let message = core::str::from_utf8(&message); // TODO: also need to remove invalid utf chars for crash safety
+            let message = core::str::from_utf8(&message); 
                                                           // TODO: this will eventually error out, needs some restart join code
             match message {
                 Ok(message) => match message.find("+EVT:JOINED") {
@@ -535,7 +544,7 @@ impl DataLogger {
                 self.check_ok_or_restart(board);
             }
             6 => {
-                self.send_and_increment_step(board, "AT+JOIN=1:0:10:100");
+                self.send_and_increment_step(board, "AT+JOIN=1:0:15:100");
             }
             7 => {
                 self.check_ok_or_restart(board);
