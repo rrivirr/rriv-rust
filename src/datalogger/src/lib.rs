@@ -508,7 +508,7 @@ impl DataLogger {
                         Some(index) => {
                             if index == 0 {
                                 self.telemetry_step = self.telemetry_step + 1;
-                                rprintln!("Joined!!");
+                                rprintln!("Joined!!");  
                                 return;
                             }
                         }
@@ -527,31 +527,6 @@ impl DataLogger {
             // just let it keep trying
         }
 
-        // if usart_service::pending_message_count(board) > 0 {
-        //     let mut message: [u8; 40] = [0; 40];
-        //     usart_service::take_command(board);
-        //     let message = util::str_from_utf8(&message);
-        //                                                   // TODO: this will eventually error out, needs some restart join code
-        //     match message {
-        //         Ok(message) => match message.find("+EVT:JOINED") {
-        //             Some(index) => {
-        //                 if index == 0 {
-        //                     self.telemetry_step = self.telemetry_step + 1;
-        //                     rprintln!("trying telemetry step {}", self.telemetry_step);
-        //                     return;
-        //                 }
-        //             }
-        //             None => {
-        //                 rprintln!("{}", message);
-        //             }
-        //         },
-        //         Err(_) => {}
-        //     }
-        // } else {
-        //     if board.timestamp() - self.usart_send_time > 2 {
-        //         // just let it keep trying
-        //     }
-        // }
     }
 
     pub fn check_telemetry(&mut self, board: &mut impl RRIVBoard) {
