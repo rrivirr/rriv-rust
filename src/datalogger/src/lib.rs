@@ -14,6 +14,7 @@ use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
     EEPROM_TOTAL_SENSOR_SLOTS,
 };
+use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
 use crate::alloc::string::ToString;
 use alloc::boxed::Box;
@@ -26,9 +27,9 @@ use generic_analog::*;
 use mcp9808::*;
 
 mod protocol;
-use protocol::*;
 mod telemetry;
-use telemetry::*;
+mod registry;
+use registry::*;
 
 use serde::de::value;
 use serde_json::{json, Value};
@@ -121,44 +122,9 @@ impl DataloggerSettings {
     }
 }
 
-pub fn check_alphanumeric(array: &[u8]) -> bool {
-    let checks = array.iter();
-    let checks = checks.map(|x| (*x as char).is_alphanumeric());
-    checks.fold(true, |acc, check| if !check || !acc { false } else { true })
-}
-
-unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
-    ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
-}
 
 /* start registry WIP */
 
-const SENSOR_NAMES: [&str; 8] = [
-    "no_match",
-    "generic_analog",
-    "atlas_ec",
-    "aht22",
-    "mcp_9808",
-    "ring_temperature",
-    "heater",
-    "ds18b20",
-];
-
-fn sensor_type_id_from_name(name: &str) -> u16 {
-    for i in 0..SENSOR_NAMES.len() {
-        if name == SENSOR_NAMES[i] {
-            return u16::try_from(i).ok().unwrap();
-        }
-    }
-    return 0;
-}
-
-fn sensor_name_from_type_id(id: usize) -> [u8; 16] {
-    let mut rval = [b'\0'; 16];
-    let name = SENSOR_NAMES[id].clone();
-    rval[..name.len()].copy_from_slice(name.as_bytes());
-    rval
-}
 
 #[macro_export]
 macro_rules! driver_create_functions {
@@ -715,7 +681,7 @@ impl DataLogger {
                 // let sensor_type: Result<&str, core::str::Utf8Error> = core::str::from_utf8(&payload.r#type);
                 let sensor_type_id = match payload.r#type {
                     serde_json::Value::String(sensor_type) => {
-                        sensor_type_id_from_name(&sensor_type)
+                        registry::sensor_type_id_from_name(&sensor_type)
                     }
                     _ => {
                         board.usb_serial_send("{\"error\": \"sensor type not specified\"}");
