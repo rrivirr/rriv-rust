@@ -3,6 +3,7 @@
 
 mod command_service;
 mod datalogger_commands;
+mod usart_service;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
@@ -338,6 +339,7 @@ impl DataLogger {
 
         // setup each service
         command_service::setup(board);
+        usart_service::setup(board);
 
         // For smaller EERPOM, this would overwrite sensor drivers config
         // self.settings = DataloggerSettings::new();
@@ -457,68 +459,99 @@ impl DataLogger {
     }
 
     pub fn check_ok_or_restart(&mut self, board: &mut impl RRIVBoard) {
-        if board.unread_usart_message() {
-            let mut message: [u8; 40] = [0; 40];
-            board.get_usart_response(&mut message);
-            util::remove_invalid_utf8(&mut message);
-            let message = core::str::from_utf8(&message);
-            match message {
-                Ok(message) => match message.find("OK") {
-                    Some(index) => {
-                        if index == 0 {
-                            self.telemetry_step = self.telemetry_step + 1;
-                            rprintln!("trying telemetry step {}", self.telemetry_step);
+        match usart_service::take_command(board) {
+            Ok(message) => {
+                let mut message = message;
+                let message = util::str_from_utf8(&mut message);
+                match message {
+                    Ok(message) => match message.find("OK") {
+                        Some(index) => {
+                            if index == 0 {
+                                self.telemetry_step = self.telemetry_step + 1;
+                                rprintln!("trying telemetry step {}", self.telemetry_step);
+                                return;
+                            }
+                        }
+                        None => {
+                            rprintln!("telem not ok: {}", message);
+                            self.telemetry_step = 0;
                             return;
                         }
+                    },
+                    Err(_) => {
+                        self.telemetry_step = 0; // bad message
+                        return;
                     }
-                    None => {
-                        rprintln!("telem not ok: {}", message);
-                        self.telemetry_step = 0;
-                    }
-                },
-                Err(_) => self.telemetry_step = 0,
+                }
             }
-        } else {
-            // need to check for a timeout here
-            rprintln!("no message, checking timeout");
-            if board.timestamp() - self.usart_send_time > 2 {
-                rprintln!("timed out, going to step 0");
-                self.telemetry_step = 0;
-            }
+            Err(_) => {} // no command ready, check timeout
+        }
+
+        // need to check for a timeout here
+        // rprintln!("no message, checking timeout");
+        if board.timestamp() - self.usart_send_time > 2 {
+            rprintln!("timed out, going to step 0");
+            self.telemetry_step = 0;
         }
     }
-
 
     // TODO: need a command recieved queue, just like for USB
     // AT_BUSY_ERROR
     // Restricted_Wait_158785
     pub fn check_joined(&mut self, board: &mut impl RRIVBoard) {
-        if board.unread_usart_message() {
-            let mut message: [u8; 40] = [0; 40];
-            board.get_usart_response(&mut message);
-            util::remove_invalid_utf8(&mut message);
-            let message = core::str::from_utf8(&message); 
-                                                          // TODO: this will eventually error out, needs some restart join code
-            match message {
-                Ok(message) => match message.find("+EVT:JOINED") {
-                    Some(index) => {
-                        if index == 0 {
-                            self.telemetry_step = self.telemetry_step + 1;
-                            rprintln!("trying telemetry step {}", self.telemetry_step);
-                            return;
+        match usart_service::take_command(board) {
+            Ok(message) => {
+                let mut message = message;
+                let message = util::str_from_utf8(&mut message);
+                match message {
+                    Ok(message) => match message.find("+EVT:JOINED") {
+                        Some(index) => {
+                            if index == 0 {
+                                self.telemetry_step = self.telemetry_step + 1;
+                                rprintln!("trying telemetry step {}", self.telemetry_step);
+                                return;
+                            }
                         }
-                    }
-                    None => {
-                        rprintln!("{}", message);
-                    }
-                },
-                Err(_) => {}
+                        None => {
+                            rprintln!("{}", message);
+                        }
+                    },
+                    Err(_) => {} // bad message
+                }
             }
-        } else {
-            if board.timestamp() - self.usart_send_time > 2 {
-                // just let it keep trying
-            }
+            Err(_) => {} // keep waiting
         }
+
+        // checking timeout if we didn't return above
+        if board.timestamp() - self.usart_send_time > 2 {
+            // just let it keep trying
+        }
+
+        // if usart_service::pending_message_count(board) > 0 {
+        //     let mut message: [u8; 40] = [0; 40];
+        //     usart_service::take_command(board);
+        //     let message = util::str_from_utf8(&message);
+        //                                                   // TODO: this will eventually error out, needs some restart join code
+        //     match message {
+        //         Ok(message) => match message.find("+EVT:JOINED") {
+        //             Some(index) => {
+        //                 if index == 0 {
+        //                     self.telemetry_step = self.telemetry_step + 1;
+        //                     rprintln!("trying telemetry step {}", self.telemetry_step);
+        //                     return;
+        //                 }
+        //             }
+        //             None => {
+        //                 rprintln!("{}", message);
+        //             }
+        //         },
+        //         Err(_) => {}
+        //     }
+        // } else {
+        //     if board.timestamp() - self.usart_send_time > 2 {
+        //         // just let it keep trying
+        //     }
+        // }
     }
 
     pub fn check_telemetry(&mut self, board: &mut impl RRIVBoard) {
@@ -535,7 +568,6 @@ impl DataLogger {
             }
             3 => {
                 self.check_ok_or_restart(board);
-
             }
             4 => {
                 self.send_and_increment_step(board, "AT+MASK=0002");

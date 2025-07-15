@@ -73,6 +73,7 @@ static mut USART_RECEIVE_INDEX: usize = 0;
 static mut USART_UNREAD_MESSAGE: bool = false;
 
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
+static USART_RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Usart {
@@ -141,6 +142,13 @@ impl RRIVBoard for Board {
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
         cortex_m::interrupt::free(|cs| {
             let mut global_rx_binding = RX_PROCESSOR.borrow(cs).borrow_mut();
+            *global_rx_binding = Some(processor);
+        });
+    }
+
+    fn set_usart_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>) {
+        cortex_m::interrupt::free(|cs| {
+            let mut global_rx_binding = USART_RX_PROCESSOR.borrow(cs).borrow_mut();
             *global_rx_binding = Some(processor);
         });
     }
@@ -563,31 +571,19 @@ unsafe fn USART2() {
             if rx.is_rx_not_empty() {
                 if let Ok(c) = nb::block!(rx.read()) {
                     rprintln!("serial rx byte: {}", c);
-                    USART_UNREAD_MESSAGE = true;
-                    if USART_RECEIVE_INDEX < USART_RECEIVE_SIZE - 1 {
-                        USART_RECEIVE[USART_RECEIVE_INDEX] = c;
-                        USART_RECEIVE_INDEX = USART_RECEIVE_INDEX + 1;
-                    }
+                    // USART_UNREAD_MESSAGE = true;
+                    // if USART_RECEIVE_INDEX < USART_RECEIVE_SIZE - 1 {
+                    //     USART_RECEIVE[USART_RECEIVE_INDEX] = c;
+                    //     USART_RECEIVE_INDEX = USART_RECEIVE_INDEX + 1;
+                    // }
                     
 
-                    // let r = RX_PROCESSOR.borrow(cs);
+                    let r = USART_RX_PROCESSOR.borrow(cs);
+                    if let Some(processor) = r.borrow_mut().deref_mut() {
+                        processor.process_character(c.clone());
+                    }
 
-                    // if let Some(processor) = r.borrow_mut().deref_mut() {
-                    //     processor.process_character(c);
-                    // }
-                    // let t = USART_TX.borrow(cs);
-                    // if let Some(tx) = t.borrow_mut().deref_mut() {
-                    //     _ = nb::block!(tx.write(c.clone())); // need to make a blocking call to TX
-                    // }
                 }
-                // // use PA9 to flash RGB led
-                // if let Some(led) = WAKE_LED.borrow(cs).borrow_mut().deref_mut() {
-                //     if led.is_low() {
-                //         led.set_high();
-                //     } else {
-                //         led.set_low();
-                //     }
-                // }
             }
         }
     })

@@ -36,6 +36,7 @@ pub trait RRIVBoard: Send {
 
     // Core Services
     fn set_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>);
+    fn set_usart_rx_processor(&mut self, processor: Box<&'static dyn RXProcessor>);
     fn critical_section<T, F>(&self, f: F) -> T where F: Fn() -> T;
 
     // Storage Services
