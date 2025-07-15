@@ -508,7 +508,7 @@ impl DataLogger {
                         Some(index) => {
                             if index == 0 {
                                 self.telemetry_step = self.telemetry_step + 1;
-                                rprintln!("trying telemetry step {}", self.telemetry_step);
+                                rprintln!("Joined!!");
                                 return;
                             }
                         }
