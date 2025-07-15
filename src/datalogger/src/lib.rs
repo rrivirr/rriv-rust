@@ -1,9 +1,8 @@
 #![cfg_attr(not(test), no_std)]
 #![feature(array_methods)]
 
-mod command_service;
+mod services;
 mod datalogger_commands;
-mod usart_service;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
@@ -16,7 +15,7 @@ use rriv_board::{
 };
 use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
-use crate::alloc::string::ToString;
+use crate::{alloc::string::ToString, services::{*}, telemetry::telemeters::lorawan::RakWireless3172};
 use alloc::boxed::Box;
 use alloc::format;
 use rtt_target::rprintln;
@@ -230,13 +229,13 @@ pub struct DataLogger {
     // not memory efficient
     calibration_point_values: [Option<Box<[CalibrationPair]>>; EEPROM_TOTAL_SENSOR_SLOTS],
 
+    telemeter: telemetry::telemeters::lorawan::RakWireless3172,
   
 }
+
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
-const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> =
-    None;
-const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::TelemeterDriver>> =
-    None;
+const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> = None;
+const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::TelemeterDriver>> = None;
 const CALIBRATION_REPEAT_VALUE: core::option::Option<Box<[types::CalibrationPair]>> = None;
 
 impl DataLogger {
@@ -250,7 +249,8 @@ impl DataLogger {
             debug_values: true,
             log_raw_data: true,
             mode: DataLoggerMode::Interactive,
-            calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS]
+            calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
+            telemeter: RakWireless3172::new()
         }
     }
 
@@ -384,8 +384,7 @@ impl DataLogger {
         //
         //  Process any telemetry setup or QOS
         //
-        // telemetry::telemeters::lorawan::
-        // self.check_telemetry(board);
+        self.telemeter.run_loop_iteration(board);
 
         //
         // Do the measurement cycle

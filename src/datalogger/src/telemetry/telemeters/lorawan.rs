@@ -1,7 +1,7 @@
 use rriv_board::RRIVBoard;
 use rtt_target::rprintln;
 
-use crate::usart_service;
+use crate::services::usart_service;
 use alloc::string::String;
 
 use alloc::format;
@@ -56,20 +56,20 @@ impl RakWireless3172Step {
     }
 }
 
-struct RakWireless3172 {
+pub struct RakWireless3172 {
     telemetry_step: RakWireless3172Step,
     usart_send_time: i64,
 }
 
 impl RakWireless3172 {
-    fn new() -> RakWireless3172 {
+    pub fn new() -> RakWireless3172 {
         return Self {
             telemetry_step: RakWireless3172Step::Begin,
             usart_send_time: 0
         }
     }
 
-    fn status(&self) -> String {
+    pub fn status(&self) -> String {
         self.telemetry_step.status()
     }
 
@@ -152,7 +152,7 @@ impl RakWireless3172 {
 
     }
 
-    fn check_telemetry(&mut self, board: &mut impl RRIVBoard) {
+    pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
         match self.telemetry_step {
             RakWireless3172Step::Begin => {
                 rprintln!("trying telemetry step {}", self.telemetry_step as u8);
