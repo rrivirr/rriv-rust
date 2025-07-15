@@ -27,6 +27,8 @@ use mcp9808::*;
 
 mod protocol;
 use protocol::*;
+mod telemetry;
+use telemetry::*;
 
 use serde::de::value;
 use serde_json::{json, Value};
@@ -262,8 +264,7 @@ pub struct DataLogger {
     // not memory efficient
     calibration_point_values: [Option<Box<[CalibrationPair]>>; EEPROM_TOTAL_SENSOR_SLOTS],
 
-    telemetry_step: u8,
-    usart_send_time: i64,
+  
 }
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
 const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> =
@@ -283,9 +284,7 @@ impl DataLogger {
             debug_values: true,
             log_raw_data: true,
             mode: DataLoggerMode::Interactive,
-            calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
-            telemetry_step: 0,
-            usart_send_time: 0,
+            calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS]
         }
     }
 
@@ -419,7 +418,8 @@ impl DataLogger {
         //
         //  Process any telemetry setup or QOS
         //
-        self.check_telemetry(board);
+        // telemetry::telemeters::lorawan::
+        // self.check_telemetry(board);
 
         //
         // Do the measurement cycle
@@ -450,133 +450,6 @@ impl DataLogger {
         }
     }
 
-    pub fn send_and_increment_step(&mut self, board: &mut impl RRIVBoard, message: &str) {
-        let prepared_message = format!("{}\r\n", message);
-        board.usart_send(&prepared_message);
-        self.usart_send_time = board.timestamp();
-        self.telemetry_step = self.telemetry_step + 1;
-        rprintln!("trying telemetry step {}", self.telemetry_step);
-    }
-
-    pub fn check_ok_or_restart(&mut self, board: &mut impl RRIVBoard) {
-        match usart_service::take_command(board) {
-            Ok(message) => {
-                let mut message = message;
-                let message = util::str_from_utf8(&mut message);
-                match message {
-                    Ok(message) => match message.find("OK") {
-                        Some(index) => {
-                            if index == 0 {
-                                self.telemetry_step = self.telemetry_step + 1;
-                                rprintln!("trying telemetry step {}", self.telemetry_step);
-                                return;
-                            }
-                        }
-                        None => {
-                            rprintln!("telem not ok: {}", message);
-                            self.telemetry_step = 0;
-                            return;
-                        }
-                    },
-                    Err(_) => {
-                        self.telemetry_step = 0; // bad message
-                        return;
-                    }
-                }
-            }
-            Err(_) => {} // no command ready, check timeout
-        }
-
-        // need to check for a timeout here
-        // rprintln!("no message, checking timeout");
-        if board.timestamp() - self.usart_send_time > 2 {
-            rprintln!("timed out, going to step 0");
-            self.telemetry_step = 0;
-        }
-    }
-
-    // TODO: need a command recieved queue, just like for USB
-    // AT_BUSY_ERROR
-    // Restricted_Wait_158785
-    pub fn check_joined(&mut self, board: &mut impl RRIVBoard) {
-        match usart_service::take_command(board) {
-            Ok(message) => {
-                let mut message = message;
-                let message = util::str_from_utf8(&mut message);
-                match message {
-                    Ok(message) => match message.find("+EVT:JOINED") {
-                        Some(index) => {
-                            if index == 0 {
-                                self.telemetry_step = self.telemetry_step + 1;
-                                rprintln!("Joined!!");  
-                                return;
-                            }
-                        }
-                        None => {
-                            rprintln!("{}", message);
-                        }
-                    },
-                    Err(_) => {} // bad message
-                }
-            }
-            Err(_) => {} // keep waiting
-        }
-
-        // checking timeout if we didn't return above
-        if board.timestamp() - self.usart_send_time > 2 {
-            // just let it keep trying
-        }
-
-    }
-
-    pub fn check_telemetry(&mut self, board: &mut impl RRIVBoard) {
-        match self.telemetry_step {
-            0 => {
-                rprintln!("trying telemetry step {}", self.telemetry_step);
-                self.send_and_increment_step(board, "AT+JOIN=0");
-            }
-            1 => {
-                self.check_ok_or_restart(board);
-            }
-            2 => {
-                self.send_and_increment_step(board, "AT+BAND=5");
-            }
-            3 => {
-                self.check_ok_or_restart(board);
-            }
-            4 => {
-                self.send_and_increment_step(board, "AT+MASK=0002");
-            }
-            5 => {
-                self.check_ok_or_restart(board);
-            }
-            6 => {
-                self.send_and_increment_step(board, "AT+JOIN=1:0:15:100");
-            }
-            7 => {
-                self.check_ok_or_restart(board);
-            }
-            8 => {
-                self.check_joined(board);
-            }
-            _ => {}
-        }
-
-        //        rprintln!("setting up lorawan");
-        // board.usart_send("AT+JOIN=0");
-        // board.delay_ms(2000);
-        // board.usart_send("AT+BAND=5");
-        // board.delay_ms(2000);
-        // board.usart_send("AT+MASK=0002");
-        // board.delay_ms(2000);
-        // board.usart_send("AT+JOIN=1:1:7:100");
-        // board.delay_ms(2000);
-
-        // rprintln!("done setting up lorawan")
-    }
-
-
-
     fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
 
         // call the loraw driver only for now
@@ -593,6 +466,7 @@ impl DataLogger {
                     }
 
                     // TODO: returning bits instead of full f64 is a way to use less space in the payload
+                    //  Bits is a number of bits that should be used when encoding.
                     // match driver.get_measured_parameters_bits(0){
                     //     Ok(bits) => bits[i] = bits,
                     //     Err(_) => todo!(),
@@ -602,47 +476,16 @@ impl DataLogger {
         }
 
         let timestamp_hour_offset = 0; // TODO get the timestamp offset from the beginning of the utc hour
-        let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, values, [13_u8; 12]);
+        let bits = [13_u8; 12];
+        let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, &values, &bits);
 
         // stateful deltas codec
         // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);
 
 
-        telemetry::telemeters::lorawan::transmit(payload);
+        // telemetry::telemeters::lorawan::transmit(payload);
     }
 
-
-    /*
-
-    
-    # Telemetry Definitions
-
-    Telemetry Transport: A technology used for sending data from the board to the cloud through the internet.  Examples are 
-                         LoRaWAN, MQTT w/ WiFi Backhaul, BLE with internet bridge, serial with internet bridge (via RRIVCTL), etc
-
-    Physical RF Technologies: Radio frequency technologies used for transmitted data from the board wirelessly to a reciever.  Examples
-                              are LoRa, WiFi, BLE, etc.
-
-    A telemetry driver implements communications with a modem implementing a particular physical transport techology _and_ defines how that 
-    modem communicates with the cloud services.
-
-    Datalogger
-    - Telemetry Processor
-        - Codecs
-        - Telemetry Drivers
-            - Telemetry Tranports
-                - Modems
-                   - Physical transport technologies
-
-
-    rrivctl set telemeter lorawan {advanced config}
-    rrivctl set telemeter wifi {}                    // what would this be called??
-
-
-    
-
-
-     */
 
 
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {

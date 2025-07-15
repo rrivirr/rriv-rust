@@ -1,9 +1,9 @@
-pub trait telemeter {
-    pub fn setup();
-    pub fn run_loop_iteration();
-    pub fn error() -> boolean; // maybe return an enum with errors
-    pub fn transmit(bytes: &[u8]);
-}
+// pub trait telemeter {
+//     pub fn setup();
+//     pub fn run_loop_iteration();
+//     pub fn error() -> boolean; // maybe return an enum with errors
+//     pub fn transmit(bytes: &[u8]);
+// }
 
 
 /*

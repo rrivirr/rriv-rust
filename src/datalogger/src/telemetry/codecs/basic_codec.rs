@@ -1,8 +1,6 @@
-
-
-
 use rtt_target::rprintln;
 
+use alloc::boxed::Box;
 
 
 
@@ -19,10 +17,11 @@ use rtt_target::rprintln;
 
 // }
 
-pub fn encode( timestamp: long, 
-               values: &[double],
+pub fn encode( timestamp: u128, 
+               values: &[f64],
                bits: &[u8]
              ) -> Box<[u8]>{
 
-    rprintln("{}", "debug message while running on board");
+    rprintln!("{}", "codec not implemented");
+    return Box::new([0]);
 }
