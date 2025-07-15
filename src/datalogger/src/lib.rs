@@ -443,7 +443,7 @@ impl DataLogger {
                                                               // fileSystemWriteCache->flushCache();
                 self.write_last_measurement_to_storage(board);
 
-                // self.transmit_lorawan();
+                // self.process_telemetry(); // telemeterize the measured values
 
                 self.last_interactive_log_time = board.timestamp();
             }
@@ -574,6 +574,76 @@ impl DataLogger {
 
         // rprintln!("done setting up lorawan")
     }
+
+
+
+    fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
+        // call the loraw driver only for now
+
+        let mut values: [f64; 12] = [0_f64; 12];
+        let mut bits: [u8; 12] = [0_u8; 12];
+        for i in 0..self.sensor_drivers.len() {
+            for i in 0..self.sensor_drivers.len() {
+                if let Some(ref mut driver) = self.sensor_drivers[i] {
+                    // TODO: iterate values
+                    match driver.get_measured_parameter_value(0){
+                        Ok(value) => values[i] = value,
+                        Err(_) => todo!(),
+                    }
+
+                    // TODO: returning bits instead of full f64 is a way to use less space in the payload
+                    // match driver.get_measured_parameters_bits(0){
+                    //     Ok(bits) => bits[i] = bits,
+                    //     Err(_) => todo!(),
+                    // }
+                }
+            }
+        }
+
+        let timestamp_hour_offset = 0; // TODO get the timestamp offset from the beginning of the utc hour
+        let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, values, [13_u8; 12]);
+
+        // stateful deltas codec
+        // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);
+
+
+        telemetry::telemeters::lorawan::transmit(payload);
+    }
+
+
+    /*
+
+    
+    # Telemetry Definitions
+
+    Telemetry Transport: A technology used for sending data from the board to the cloud through the internet.  Examples are 
+                         LoRaWAN, MQTT w/ WiFi Backhaul, BLE with internet bridge, serial with internet bridge (via RRIVCTL), etc
+
+    Physical RF Technologies: Radio frequency technologies used for transmitted data from the board wirelessly to a reciever.  Examples
+                              are LoRa, WiFi, BLE, etc.
+
+    A telemetry driver implements communications with a modem implementing a particular physical transport techology _and_ defines how that 
+    modem communicates with the cloud services.
+
+    Datalogger
+    - Telemetry Processor
+        - Codecs
+        - Telemetry Drivers
+            - Telemetry Tranports
+                - Modems
+                   - Physical transport technologies
+
+
+    rrivctl set telemeter lorawan {advanced config}
+    rrivctl set telemeter wifi {}                    // what would this be called??
+
+
+    
+
+
+     */
+
 
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
