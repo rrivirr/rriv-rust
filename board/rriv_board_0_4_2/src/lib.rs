@@ -67,11 +67,6 @@ static mut USB_DEVICE: Option<UsbDevice<UsbBusType>> = None;
 static USART_RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 static USART_TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 
-const USART_RECEIVE_SIZE: usize = 40;
-static mut USART_RECEIVE: [u8; USART_RECEIVE_SIZE] = [0u8; USART_RECEIVE_SIZE];
-static mut USART_RECEIVE_INDEX: usize = 0;
-static mut USART_UNREAD_MESSAGE: bool = false;
-
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 static USART_RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
 
@@ -169,12 +164,7 @@ impl RRIVBoard for Board {
         // rriv_board::RRIVBoard::delay_ms(self, 100);
 
         cortex_m::interrupt::free(|cs| {
-            // clear the receive buffer
-            unsafe { 
-                USART_RECEIVE = [0u8; USART_RECEIVE_SIZE]; 
-                USART_RECEIVE_INDEX = 0;
-            }
-
+            
             // USART
             let bytes = string.as_bytes();
             for char in bytes.iter() {
@@ -201,34 +191,7 @@ impl RRIVBoard for Board {
         // rriv_board::RRIVBoard::delay_ms(self, 70);
     }
 
-    fn unread_usart_message(&self) -> bool {
-        return cortex_m::interrupt::free(|cs| {
-            unsafe { USART_UNREAD_MESSAGE }
-        });
-    }
-
-    fn get_usart_response(&self, message: &mut [u8;USART_RECEIVE_SIZE]) -> usize {
-        return cortex_m::interrupt::free(|cs| {
-            message.clone_from_slice( unsafe { &USART_RECEIVE }); // TODO: this isn't safe
-            let length = unsafe { USART_RECEIVE_INDEX };
-            if message[length-1] == 10 {
-                message[length-1] = 0;
-            }
-            if message[length-2] == 13 {
-                message[length-2] = 0;
-            }
-            // clear the receive buffer
-            unsafe { USART_UNREAD_MESSAGE = false; }
-            unsafe { 
-                USART_RECEIVE = [0u8; USART_RECEIVE_SIZE]; 
-                USART_RECEIVE_INDEX = 0;
-            }
-
-            return length;
-        });
-    }
-
-
+  
     fn usb_serial_send(&self, string: &str) {
         cortex_m::interrupt::free(|cs| {
             // USB
@@ -367,14 +330,6 @@ macro_rules! control_services_impl {
 
         fn usart_send(&mut self, string: &str) {
             rriv_board::RRIVBoard::usart_send(self, string);
-        }
-
-        fn get_usart_response(&self, message: &mut [u8;40]) -> usize {
-            return rriv_board::RRIVBoard::get_usart_response(self, message);
-        }
-
-        fn unread_usart_message(&self) -> bool {
-            rriv_board::RRIVBoard::unread_usart_message(self)
         }
 
         fn serial_debug(&self, string: &str) {

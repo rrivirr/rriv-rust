@@ -1,8 +1,8 @@
 #![cfg_attr(not(test), no_std)]
 #![feature(array_methods)]
 
-mod services;
 mod datalogger_commands;
+mod services;
 
 use bitflags::bitflags;
 use datalogger_commands::*;
@@ -15,7 +15,9 @@ use rriv_board::{
 };
 use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
-use crate::{alloc::string::ToString, services::{*}, telemetry::telemeters::lorawan::RakWireless3172};
+use crate::{
+    alloc::string::ToString, services::*, telemetry::telemeters::lorawan::RakWireless3172,
+};
 use alloc::boxed::Box;
 use alloc::format;
 use rtt_target::rprintln;
@@ -26,8 +28,8 @@ use generic_analog::*;
 use mcp9808::*;
 
 mod protocol;
-mod telemetry;
 mod registry;
+mod telemetry;
 use registry::*;
 
 use serde::de::value;
@@ -121,9 +123,7 @@ impl DataloggerSettings {
     }
 }
 
-
 /* start registry WIP */
-
 
 #[macro_export]
 macro_rules! driver_create_functions {
@@ -230,12 +230,13 @@ pub struct DataLogger {
     calibration_point_values: [Option<Box<[CalibrationPair]>>; EEPROM_TOTAL_SENSOR_SLOTS],
 
     telemeter: telemetry::telemeters::lorawan::RakWireless3172,
-  
 }
 
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
-const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> = None;
-const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::TelemeterDriver>> = None;
+const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> =
+    None;
+const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::TelemeterDriver>> =
+    None;
 const CALIBRATION_REPEAT_VALUE: core::option::Option<Box<[types::CalibrationPair]>> = None;
 
 impl DataLogger {
@@ -250,7 +251,7 @@ impl DataLogger {
             log_raw_data: true,
             mode: DataLoggerMode::Interactive,
             calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
-            telemeter: RakWireless3172::new()
+            telemeter: RakWireless3172::new(),
         }
     }
 
@@ -408,7 +409,7 @@ impl DataLogger {
                                                               // fileSystemWriteCache->flushCache();
                 self.write_last_measurement_to_storage(board);
 
-                self.process_telemetry(); // telemeterize the measured values
+                self.process_telemetry(board); // telemeterize the measured values
 
                 self.last_interactive_log_time = board.timestamp();
             }
@@ -416,27 +417,28 @@ impl DataLogger {
     }
 
     fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+        if !self.telemeter.ready_to_transmit(board) {
+            return;
+        }
 
-        // call the loraw driver only for now
 
+        // TODO: this book-keeping to get the sensor values is not correct / robust / fully functional
         let mut values: [f64; 12] = [0_f64; 12];
         let mut bits: [u8; 12] = [0_u8; 12];
         for i in 0..self.sensor_drivers.len() {
-            for i in 0..self.sensor_drivers.len() {
-                if let Some(ref mut driver) = self.sensor_drivers[i] {
-                    // TODO: iterate values
-                    match driver.get_measured_parameter_value(0){
-                        Ok(value) => values[i] = value,
-                        Err(_) => todo!(),
-                    }
-
-                    // TODO: returning bits instead of full f64 is a way to use less space in the payload
-                    //  Bits is a number of bits that should be used when encoding.
-                    // match driver.get_measured_parameters_bits(0){
-                    //     Ok(bits) => bits[i] = bits,
-                    //     Err(_) => todo!(),
-                    // }
+            if let Some(ref mut driver) = self.sensor_drivers[i] {
+                // TODO: iterate values
+                match driver.get_measured_parameter_value(0) {
+                    Ok(value) => values[i] = value,
+                    Err(_) => rprintln!("error reading value"),
                 }
+
+                // TODO: returning bits instead of full f64 is a way to use less space in the payload
+                //  Bits is a number of bits that should be used when encoding.
+                // match driver.get_measured_parameters_bits(0){
+                //     Ok(bits) => bits[i] = bits,
+                //     Err(_) => todo!(),
+                // }
             }
         }
 
@@ -444,18 +446,15 @@ impl DataLogger {
         let bits = [13_u8; 12];
         // let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, &values, &bits);
 
-        let payload = telemetry::codecs::naive_codec::encode(board.epoch_timestamp(), values);
+        let payload = telemetry::codecs::naive_codec::encode(board.epoch_timestamp(), &values);
 
         // stateful deltas codec
         // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);let p
 
-
         // telemetry::telemeters::lorawan::transmit(payload);
-        
-        self.telemeter.transmit(payload);
+
+        self.telemeter.transmit(board, &payload);
     }
-
-
 
     fn measure_sensor_values(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         for i in 0..self.sensor_drivers.len() {
@@ -1149,17 +1148,19 @@ impl DataLogger {
 
                 board.delay_ms(500);
 
-                let mut response = [0u8; 40];
-                let length = board.get_usart_response(&mut response);
-                if length == 0 {
-                    rprintln!("no usart response");
-                    board.usb_serial_send(
-                        json!({message:"no response received"}).to_string().as_str(),
-                    );
-                    board.usb_serial_send("\n");
-                    return;
-                }
+                let response = match usart_service::take_command(board) {
+                    Ok(message) => message,
+                    Err(_) => {
+                        rprintln!("no usart response");
+                        board.usb_serial_send(
+                            json!({message:"no response received"}).to_string().as_str(),
+                        );
+                        board.usb_serial_send("\n");
+                        return;
+                    }
+                };
 
+                let length = response.len();
                 for b in &response[0..length] {
                     let c = *b as char;
                     rprintln!("{}", c);

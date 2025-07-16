@@ -2,6 +2,7 @@ use core::{borrow::BorrowMut, fmt::Error};
 use alloc::boxed::Box;
 use rriv_board::{RRIVBoard, RXProcessor};
 use rtt_target::rprintln;
+use util::str_from_utf8;
 
 
 const USART_BUFFER_NUM: usize = 3; // Includes an extra empty cell for end marker
@@ -58,12 +59,18 @@ pub fn process_character(message_data: &mut MessageData, character: u8) {
     let pos: usize = message_data.command_pos;
 
     if message_data.cur == message_data.end {
-        // circular buffer is full
+        rprintln!("usart circular buffer is full");
         return;
     }
 
     if character == b'\n' && pos > 0 && message_data.buffer[cur][pos - 1] == b'\r' {
         // command is done
+        let mut message = message_data.buffer[cur].clone();
+        match str_from_utf8(&mut message)  {
+            Ok(message) =>  rprintln!("{}", message),
+            Err(_) => {},
+        }
+       
         message_data.buffer[cur][pos - 1] = 0; // remove the carriage return
         message_data.command_pos = 0;
         message_data.cur = (message_data.cur + 1) % USART_BUFFER_NUM;

@@ -1,4 +1,4 @@
-use std::fmt::format;
+use core::fmt::Write;
 
 use rriv_board::RRIVBoard;
 use rtt_target::rprintln;
@@ -43,7 +43,7 @@ impl RakWireless3172Step {
     }
 
     fn next(self) -> Self {
-        Self::from_integer(self as u8)
+        Self::from_integer((self as u8) + 1)
     }
 
     fn status(&self) -> String {
@@ -61,13 +61,15 @@ impl RakWireless3172Step {
 pub struct RakWireless3172 {
     telemetry_step: RakWireless3172Step,
     usart_send_time: i64,
+    last_transmission: i64
 }
 
 impl RakWireless3172 {
     pub fn new() -> RakWireless3172 {
         return Self {
             telemetry_step: RakWireless3172Step::Begin,
-            usart_send_time: 0
+            usart_send_time: 0,
+            last_transmission: 0
         }
     }
 
@@ -195,12 +197,27 @@ impl RakWireless3172 {
         
         let len = payload.len();
 
-        let command = format!("AT+SEND={}:", len);
+        let mut s = String::with_capacity(payload.len() * 2);
+        for byte in payload {
+            write!(&mut s, "{:02X}", byte);
+        }
+        
+        let command = format!("AT+SEND={}:{}\r\n", payload.len(), s.as_str());
         board.usart_send(command.as_str());
-        for i in 0..len {
+        self.last_transmission = board.timestamp();
+  
+    }
 
+    pub fn ready_to_transmit(&mut self, board: &mut impl RRIVBoard) -> bool{
+        if self.status() != "Joined" {
+            return false;
         }
 
+        if board.timestamp() < self.last_transmission + 10 {
+            false
+        } else {
+            true
+        }
     }
 
 }
