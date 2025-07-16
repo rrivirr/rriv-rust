@@ -62,7 +62,6 @@ impl SensorDriver for GenericAnalog {
             2_usize.. => todo!("other adcs not implemented"),
         }
         self.measured_parameter_values[0] = value.into();
-        self.measured_parameter_values[0] = value.into();
 
     }
 
