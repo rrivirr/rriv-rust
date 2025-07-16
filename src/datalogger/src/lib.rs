@@ -408,7 +408,7 @@ impl DataLogger {
                                                               // fileSystemWriteCache->flushCache();
                 self.write_last_measurement_to_storage(board);
 
-                // self.process_telemetry(); // telemeterize the measured values
+                self.process_telemetry(); // telemeterize the measured values
 
                 self.last_interactive_log_time = board.timestamp();
             }
@@ -442,13 +442,17 @@ impl DataLogger {
 
         let timestamp_hour_offset = 0; // TODO get the timestamp offset from the beginning of the utc hour
         let bits = [13_u8; 12];
-        let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, &values, &bits);
+        // let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, &values, &bits);
+
+        let payload = telemetry::codecs::naive_codec::encode(board.epoch_timestamp(), values);
 
         // stateful deltas codec
-        // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);
+        // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);let p
 
 
         // telemetry::telemeters::lorawan::transmit(payload);
+        
+        self.telemeter.transmit(payload);
     }
 
 

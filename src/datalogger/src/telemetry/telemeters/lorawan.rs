@@ -1,3 +1,5 @@
+use std::fmt::format;
+
 use rriv_board::RRIVBoard;
 use rtt_target::rprintln;
 
@@ -186,6 +188,19 @@ impl RakWireless3172 {
         }
 
         // rprintln!("done setting up lorawan")
+    }
+
+    pub fn transmit(&mut self, board: &mut impl RRIVBoard, payload: &[u8]){
+        // AT+SEND=14:696E746572727570743
+        
+        let len = payload.len();
+
+        let command = format!("AT+SEND={}:", len);
+        board.usart_send(command.as_str());
+        for i in 0..len {
+
+        }
+
     }
 
 }
