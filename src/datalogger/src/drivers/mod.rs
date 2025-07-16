@@ -11,6 +11,6 @@ pub mod generic_analog;
 pub mod ring_temperature;
 pub mod heater;
 pub mod ds18b20;
-pub mod atlas_ec;
+// pub mod atlas_ec;
 mod AHT22;
 
