@@ -1,7 +1,7 @@
 {
     "version": "0.2.0",
     "configurations": [
-        // Build Rust Binary (app)
+        // Build and Debug Rust Binary (app)
         {
             "type": "probe-rs-debug",
             "preLaunchTask": "RRIV: Build App Binary Crate",
@@ -117,7 +117,6 @@
             ],
             "env": {
                 // "RUST_LOG": "trace", // If you set this variable, check the VSCode console log window for the location of the log file.
-                "RUST_BACKTRACE": "1",
             },
             "linux": {
                 "env": {

@@ -3,11 +3,11 @@
 #![feature(alloc_error_handler)]
 #![no_main]
 
-extern crate panic_halt;
+// extern crate panic_halt;
 
-use core::{prelude::rust_2024::*, u8};
+use core::{panic::Location, prelude::rust_2024::*, u8};
 use cortex_m_rt::entry;
-use rtt_target::rtt_init_print;
+use rtt_target::{rprint, rtt_init_print};
 
 pub mod prelude;
 
@@ -18,6 +18,8 @@ use crate::rriv_board::RRIVBoard;
 
 extern crate datalogger;
 use datalogger::DataLogger;
+
+use rtt_target::rprintln;
 
 #[entry]
 fn main() -> ! {
@@ -32,4 +34,18 @@ fn main() -> ! {
         board.run_loop_iteration();
         datalogger.run_loop_iteration(&mut board);
     }
+}
+
+
+use core::panic::PanicInfo;
+
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    rprintln!("Panicked!");
+    if let Some(location) = _info.location() {
+        rprintln!("at {}", location);
+    }
+    
+    rprintln!("with message: {}", _info.message());
+    loop {}
 }

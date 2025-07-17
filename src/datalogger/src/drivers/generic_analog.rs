@@ -56,7 +56,7 @@ impl SensorDriver for GenericAnalog {
             0 => {
                 value = board.query_internal_adc(self.special_config.sensor_port);
             }
-            1 => todo!("exadc not implemented"),
+            1 => todo!("exadc not impl"),
             2_usize.. => todo!("other adcs not implemented"),
         }
         self.measured_parameter_values[0] = value.into();
