@@ -13,10 +13,10 @@ use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
     EEPROM_TOTAL_SENSOR_SLOTS,
 };
-use util::{any_as_u8_slice, check_alphanumeric};
+use util::{any_as_u8_slice, check_alphanumeric, str_from_utf8};
 extern crate alloc;
 use crate::{
-    alloc::string::ToString, services::*, telemetry::telemeters::lorawan::RakWireless3172,
+    alloc::string::ToString, services::{usart_service::take_command, *}, telemetry::telemeters::lorawan::RakWireless3172,
 };
 use alloc::boxed::Box;
 use alloc::format;
@@ -52,7 +52,7 @@ struct DataloggerSettings {
     delay_between_bursts: u16,
     burst_repetitions: u8,
     mode: u8,
-    // external_adc_enabled: u8:1, // how we we handle bitfields?
+    // external_adc_enabled: u8:1, // how we we handle bitfields? -> bitfield_struct crate works well
     // debug_includes_values: u8:1,
     // withold_incomplete_readings: u8:1,
     // low_raw_data: u8:1,
@@ -421,15 +421,30 @@ impl DataLogger {
             return;
         }
 
+        // TODO: this is lorawan chip specific and can be moved into the driver
+        while match usart_service::take_command(board) {
+            Ok(message) => {
+                let mut message = message;
+                let message = str_from_utf8(&mut message);
+                rprintln!("lorawan: {}", message.unwrap_or("invalid message"));
+                true 
+            },
+            Err(_) => false,
+        }{}
+
 
         // TODO: this book-keeping to get the sensor values is not correct / robust / fully functional
-        let mut values: [f64; 12] = [0_f64; 12];
+        let mut values: [f32; 12] = [0_f32; 12];
         let mut bits: [u8; 12] = [0_u8; 12];
+        let mut j = 0; // index of value into the values array
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
                 // TODO: iterate values
                 match driver.get_measured_parameter_value(0) {
-                    Ok(value) => values[i] = value,
+                    Ok(value) => {
+                        values[j] = value as f32;
+                        j = j + 1;
+                    },
                     Err(_) => rprintln!("error reading value"),
                 }
 
@@ -444,14 +459,12 @@ impl DataLogger {
 
         let timestamp_hour_offset = 0; // TODO get the timestamp offset from the beginning of the utc hour
         let bits = [13_u8; 12];
-        // let payload = telemetry::codecs::basic_codec::encode(timestamp_hour_offset, &values, &bits);
 
         let payload = telemetry::codecs::naive_codec::encode(board.epoch_timestamp(), &values);
 
         // stateful deltas codec
         // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);let p
 
-        // telemetry::telemeters::lorawan::transmit(payload);
 
         self.telemeter.transmit(board, &payload);
     }
