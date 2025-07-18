@@ -4,7 +4,7 @@ pub const SENSOR_SETTINGS_PARTITION_SIZE: usize = 32; // partitioning is part of
 pub type SensorGeneralSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
 pub type SensorSpecialSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct SensorDriverGeneralConfiguration {
     pub id: [u8; 6],
     pub sensor_type_id: u16,

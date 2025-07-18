@@ -141,7 +141,7 @@ struct GenericAnalogDriverBitfield {
     unused: usize
 }
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct GenericAnalogSpecialConfiguration {
     m: f64,          //8
     b: f64,          // 8

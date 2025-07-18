@@ -5,7 +5,7 @@ use crate::sensor_name_from_type_id;
 
 use super::types::*;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct MCP9808TemperatureDriverSpecialConfiguration {
     calibration_offset: i16, // TODO: This needs to get stored into the EEPROM, and we don't that yet!
     empty: [u8; 30], // must add to 32

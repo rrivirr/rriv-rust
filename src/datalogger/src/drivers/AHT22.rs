@@ -5,7 +5,7 @@ use crate::sensor_name_from_type_id;
 
 use super::types::*;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct AHT22SpecialConfiguration {
     wait_time: usize,
     empty: [u8; 28],

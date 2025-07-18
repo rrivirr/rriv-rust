@@ -6,7 +6,7 @@ use crate::{any_as_u8_slice, sensor_name_from_type_id};
 
 use super::types::*;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct HeaterSpecialConfiguration {
     on_time_s: usize,
     off_time_s: usize,

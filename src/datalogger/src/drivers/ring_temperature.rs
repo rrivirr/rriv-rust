@@ -14,7 +14,7 @@ use serde_json::json;
 
 // TODO: calibration offsets for all 6 sensors need to be stored and loaded into this driver, and written to EEPROM.
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct RingTemperatureDriverSpecialConfiguration {
     calibration_offset: [i16; 8], // 16
     address_offset: u8, // 1

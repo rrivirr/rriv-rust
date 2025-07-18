@@ -25,7 +25,7 @@ static mut COMMAND_DATA: CommandData = CommandData::default();
 //     // registry: CommandRegistry,
 // }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize)]
 struct CLICommand<'a> {
     object: &'a str,
     action: &'a str,

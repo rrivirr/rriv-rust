@@ -7,7 +7,7 @@ pub const RECALL_EEPROM: u8 = 0xB8;
 //use embedded_hal::blocking::delay::DelayMs;
 
 #[repr(u8)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub enum Resolution {
     Bits9 = 0b00011111,
     Bits10 = 0b00111111,
@@ -53,7 +53,7 @@ use super::types::*;
 pub const EMPTY_SIZE: usize = 32;
 pub const NUMBER_OF_MEASURED_PARAMETERS: usize = 2;
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone)]
 pub struct Ds18b20SpecialConfiguration {
     // calibrate data?
     // power mode
