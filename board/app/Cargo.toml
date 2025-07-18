@@ -18,11 +18,15 @@ panic-halt = "0.2.0"
 unwrap-infallible = "0.1.5"
 rtt-target = "0.4.0"
 embedded-alloc = "0.5.0"
-
-rriv_board = { path = "../rriv_board" }
 rriv_board_0_4_2 = { path = "../rriv_board_0_4_2" }
 datalogger = { path = "../../src/datalogger" }
+rriv_board = { path = "../rriv_board" }
 
 [dependencies.stm32f1xx-hal]
 version = "0.10.0"
 features = ["rt", "stm32f103", "high"]
+
+[features]
+24LC01 = ["dep:rriv_board"]
+24LC08 = ["dep:rriv_board"]
+default = ["24LC01"]

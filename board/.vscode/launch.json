@@ -48,6 +48,13 @@
             },
             "consoleLogLevel": "Console", //Info, Debug
 
+
+            // this is for building with the 24LC08?  not quite working from here
+            // these flags can probably be used with cargo embed?
+            // "cargo": {
+            //     "args": ["build", "--no-default-features", "--features", "24LC08", "-p", "app"]
+            // }
+
         },
         {
             "type": "probe-rs-debug",

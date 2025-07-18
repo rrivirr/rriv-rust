@@ -29,4 +29,3 @@ opt-level = "z"
 [profile.dev.package."*"]
 opt-level = "z"
 
-

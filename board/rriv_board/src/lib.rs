@@ -4,6 +4,11 @@ use alloc::boxed::Box;
 
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
+
+#[cfg(feature = "24LC08")]
+pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 12;
+
+#[cfg(feature = "24LC01")]
 pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 2;
 
 enum AdcSelect {
