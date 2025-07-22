@@ -1099,6 +1099,8 @@ impl BoardBuilder {
         let internal_adc_configuration =
             InternalAdcConfiguration::new(internal_adc_pins, device_peripherals.ADC1);
         let mut internal_adc = internal_adc_configuration.build(&clocks);
+        internal_adc.disable();
+        delay.delay_ms(1000_u32);
         internal_adc.enable(&mut delay);
         self.internal_adc = Some(internal_adc);
 
