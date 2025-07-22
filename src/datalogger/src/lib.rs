@@ -16,7 +16,9 @@ use rriv_board::{
 use util::{any_as_u8_slice, check_alphanumeric, str_from_utf8};
 extern crate alloc;
 use crate::{
-    alloc::string::ToString, services::{usart_service::take_command, *}, telemetry::telemeters::lorawan::RakWireless3172,
+    alloc::string::ToString,
+    services::{usart_service::take_command, *},
+    telemetry::telemeters::lorawan::RakWireless3172,
 };
 use alloc::boxed::Box;
 use alloc::format;
@@ -417,20 +419,12 @@ impl DataLogger {
     }
 
     fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+ 
+        self.telemeter.process_events(board);
+
         if !self.telemeter.ready_to_transmit(board) {
             return;
         }
-
-        // TODO: this is lorawan chip specific and can be moved into the driver
-        while match usart_service::take_command(board) {
-            Ok(message) => {
-                let mut message = message;
-                let message = str_from_utf8(&mut message);
-                rprintln!("lorawan: {}", message.unwrap_or("invalid message"));
-                true 
-            },
-            Err(_) => false,
-        }{}
 
 
         // TODO: this book-keeping to get the sensor values is not correct / robust / fully functional
@@ -444,7 +438,7 @@ impl DataLogger {
                     Ok(value) => {
                         values[j] = value as f32;
                         j = j + 1;
-                    },
+                    }
                     Err(_) => rprintln!("error reading value"),
                 }
 
@@ -464,7 +458,6 @@ impl DataLogger {
 
         // stateful deltas codec
         // let payload = telemetry::codecs::first_differences_codec::encode(timestamp_hour_offset, values, bits);let p
-
 
         self.telemeter.transmit(board, &payload);
     }
@@ -671,19 +664,23 @@ impl DataLogger {
                                     self.write_column_headers_to_serial(board);
                                     self.mode = DataLoggerMode::Watch;
                                     board.set_debug(false);
+                                    self.telemeter.set_watch(true);
                                 }
                                 "watch-debug" => {
                                     self.write_column_headers_to_serial(board);
                                     self.mode = DataLoggerMode::Watch;
                                     board.set_debug(true);
+                                    self.telemeter.set_watch(true);
                                 }
                                 "quiet" => {
                                     self.mode = DataLoggerMode::Quiet;
                                     board.set_debug(false);
+                                    self.telemeter.set_watch(false);
                                 }
                                 _ => {
                                     self.mode = DataLoggerMode::Interactive;
                                     board.set_debug(true);
+                                    self.telemeter.set_watch(false);
                                 }
                             }
                         }
@@ -853,7 +850,11 @@ impl DataLogger {
                     }
                 }
 
-                board.usb_serial_send(json!({"error":"didn't find the sensor"}).to_string().as_str());
+                board.usb_serial_send(
+                    json!({"error":"didn't find the sensor"})
+                        .to_string()
+                        .as_str(),
+                );
             }
             CommandPayload::SensorRemoveCommandPayload(payload) => {
                 let sensor_id = match payload.id {
