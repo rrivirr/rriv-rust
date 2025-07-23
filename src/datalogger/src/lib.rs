@@ -371,8 +371,10 @@ impl DataLogger {
                     self.execute_command(board, command_payload);
                 }
                 Err(error) => {
-                    board.usb_serial_send("Error processing command\n");
-                    board.usb_serial_send(format!("{:?}\n", error).as_str()); // TODO how to get the string from the error
+                    board.usb_serial_send( json!({
+                        "message": "Error processing command",
+                        "error": format!("{:?}\n", error).as_str(),
+                    }).to_string().as_str()); // TODO how to get the string from the error
 
                     // CommandPayload::InvalidPayload() => {
                     //     board.usb_serial_send("invalid payload\n");sensor_type_id
@@ -991,16 +993,16 @@ impl DataLogger {
 
                             let count = driver.get_measured_parameter_count() / 2; // TODO: get_measured_parameter_count, vs get_output_parameter_count
                             let mut values = Box::new([0_f64; 10]); // TODO: max of 10, should we make this dynamic?
-                            for i in 0..count {
-                                rprintln!("{:?}", i);
-                                let value = match driver.get_measured_parameter_value(i * 2) {
+                            for j in 0..count {
+                                rprintln!("{:?}", j);
+                                let value = match driver.get_measured_parameter_value(j * 2) {
                                     Ok(value) => value,
                                     Err(_) => {
                                         // board.usb_serial_send("missing parameter value\n");
                                         0_f64
                                     }
                                 };
-                                values[i] = value;
+                                values[j] = value;
                             }
 
                             // store the point
@@ -1009,9 +1011,20 @@ impl DataLogger {
                                 point: point,
                                 values: values,
                             };
-                            let arr = [calibration_pair];
-                            let arr_box = Box::new(arr);
-                            self.calibration_point_values[i] = Some(arr_box);
+                            if self.calibration_point_values[i].is_some() {
+                                    let pairs: &Option<Box<[CalibrationPair]>> =
+                                        &self.calibration_point_values[i];
+                                    if let Some(pairs) = pairs {
+                                        let arr = [calibration_pair, pairs[0].clone(), ];
+                                        let arr_box = Box::new(arr);
+                                        self.calibration_point_values[i] = Some(arr_box);
+                                    }
+                               
+                            } else {
+                                let arr = [calibration_pair];
+                                let arr_box = Box::new(arr);
+                                self.calibration_point_values[i] = Some(arr_box);
+                            }
                             board.usb_serial_send("stored a single calibration point\n");
                         }
                     } else {
@@ -1022,7 +1035,6 @@ impl DataLogger {
             CommandPayload::SensorCalibrateListPayload(payload) => {
                 board.usb_serial_send("[");
 
-                rprintln!("convert");
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
                     Err(message) => {
@@ -1030,7 +1042,6 @@ impl DataLogger {
                         return;
                     }
                 };
-                rprintln!("did convert");
 
                 // list the values
                 if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
@@ -1108,7 +1119,7 @@ impl DataLogger {
                                     driver.get_configuration_bytes(&mut storage);
 
                                     board.store_sensor_settings(index as u8, &storage);
-                                    board.usb_serial_send("fit ok\n")
+                                    board.usb_serial_send(json!({"message":"fit ok"}).to_string().as_str());
                                 }
                                 Err(_) => board.usb_serial_send("something went wrong\n"),
                             }

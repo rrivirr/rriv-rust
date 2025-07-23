@@ -3,13 +3,17 @@ use crate::sensor_name_from_type_id;
 use super::types::*;
 use bitfield_struct::bitfield;
 use alloc::boxed::Box;
+use rtt_target::rprint;
 use serde_json::json;
+use util::any_as_u8_slice;
 
 
 pub struct GenericAnalog {
     general_config: SensorDriverGeneralConfiguration,
     special_config: GenericAnalogSpecialConfiguration,
     measured_parameter_values: [f64; 2],
+    m: f64,
+    b: f64,
 }
 
 
@@ -37,33 +41,11 @@ impl SensorDriver for GenericAnalog {
     }
 
     fn setup(&mut self) {
-        // todo!()
+        self.m = (self.special_config.m as f64) / 1000_f64;
+        self.b = (self.special_config.b as f64) / 1000_f64;
     }
 
     getters!();
-
-    // fn get_measured_parameter_values(&mut self) -> [f32; 2] {
-    //     return self.measured_parameter_values.clone();
-    // }
-
-    // fn get_measured_parameter_identifiers(&mut self) -> [&str] {
-    //     return ["raw"];
-    // }
-
-    fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        let mut value = 0;
-        match self.special_config.settings.adc_select() {
-            0 => {
-                value = board.query_internal_adc(self.special_config.sensor_port);
-            }
-            1 => {
-                value = board.query_external_adc(self.special_config.sensor_port);
-            }
-            2_usize.. => todo!("other adcs not implemented"),
-        }
-        self.measured_parameter_values[0] = value.into();
-
-    }
 
     fn get_measured_parameter_count(&mut self) -> usize {
         return 2;
@@ -77,32 +59,62 @@ impl SensorDriver for GenericAnalog {
         return single_raw_or_cal_parameter_identifiers(index, None);
     }
 
-    fn update_actuators(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        // not actuators
-    }
-    
-    // fn take_measurement(&mut self, board: Box<&mut impl rriv_board::RRIVBoard>) {
-    //     // implement exadc and intadc
-    //     match self.special_config.settings.adc_select {
-    //         0 => {
-    //             board.query_internal_adc(self.special_config.sensor_port);
-    //         },
-    //         1 => todo!("exadc not implemented"),
-    //     }
-    // }
 
-    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>{
-        let _ = pairs;
-        todo!()
+    fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
+        let mut value = 0;
+        match self.special_config.settings.adc_select() {
+            0 => {
+                value = board.query_internal_adc(self.special_config.sensor_port);
+            }
+            1 => {
+                value = board.query_external_adc(self.special_config.sensor_port);
+            }
+            2_usize.. => todo!("other adcs not implemented"),
+        }
+        self.measured_parameter_values[0] = value.into();
+        self.measured_parameter_values[1] = self.m * value as f64 + self.b;
+
+    }
+
+    fn update_actuators(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
+        // no actuators
     }
     
     fn clear_calibration(&mut self) {
-        todo!()
+        self.m = 0_f64;
+        self.b = 0_f64;
+        self.special_config.m = 0_i32;
+        self.special_config.b = 0_i32;
     }
     
-    fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
-        todo!()
+    fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>{
+        let _ = pairs;
+        if pairs.len() != 2 {
+            return Err(());
+        }
+
+        let cal1 = & pairs[0];
+        let cal2 = & pairs[1];
+
+        self.m = (cal2.point - cal1.point) / (cal2.values[0] - cal1.values[0]);
+        self.b = cal1.point - self.m * cal1.values[0];
+        rprint!("calbiration: {} {}", self.m, self.b);
+        self.special_config.m = (self.m * 1000_f64) as i32;
+        self.special_config.b = (self.b * 1000_f64) as i32;
+        Ok(())
     }
+    
+
+    
+    fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
+        // TODO: this can become a utility or macro function
+        let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&self.general_config) };
+        let special_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&self.special_config) };
+
+        copy_config_into_partition(0, generic_settings_bytes, storage);
+        copy_config_into_partition(1, special_settings_bytes, storage);
+    }
+    
     
   
        
@@ -126,6 +138,8 @@ impl GenericAnalog {
             general_config,
             special_config,
             measured_parameter_values: [0.0; 2],
+            m: 0_f64,
+            b: 0_f64
         }
     }
 }
@@ -143,11 +157,11 @@ struct GenericAnalogDriverBitfield {
 
 #[derive(Copy, Clone)]
 pub struct GenericAnalogSpecialConfiguration {
-    m: f64,          //8
-    b: f64,          // 8
+    m: i32,          // 4
+    b: i32,          // 4
     sensor_port: u8, // 1
-    settings: GenericAnalogDriverBitfield,
-    empty: [u8; 14], // 14
+    settings: GenericAnalogDriverBitfield, // 1
+    empty: [u8; 22], // 22
 }
 
 impl GenericAnalogSpecialConfiguration {
@@ -191,11 +205,11 @@ impl GenericAnalogSpecialConfiguration {
         }
 
         return Self {
-            m: 0.0,
-            b: 0.0,
+            m: 0_i32,
+            b: 0_i32,
             sensor_port: sensor_port,
             settings: bitfield,
-            empty: [b'\0'; 14],
+            empty: [b'\0'; 22],
         };
     }
 

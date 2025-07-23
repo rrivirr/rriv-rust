@@ -39,9 +39,19 @@ impl SensorDriverGeneralConfiguration {
     }
 }
 
+
 pub struct CalibrationPair {
     pub point: f64,         // the reference value
     pub values: Box<[f64]>, // the raw values returned by the sensors
+}
+
+impl CalibrationPair {
+    pub fn clone(&self) -> CalibrationPair{
+        CalibrationPair {
+            point: self.point,
+            values: self.values.clone()
+        }
+    }
 }
 
 pub trait SensorDriver {
@@ -50,7 +60,7 @@ pub trait SensorDriver {
     fn setup(&mut self);
     fn get_id(&self) -> [u8; 6];
     fn get_type_id(&mut self) -> u16;
-    // fn get_measurement_technology(&mut self) -> usize; // TODO: unnecessary for now, unless we split SensorDriverServices into different types of services collections
+
     fn get_measured_parameter_count(&mut self) -> usize;
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()>;
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8; 16];
@@ -60,11 +70,9 @@ pub trait SensorDriver {
 
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>;
     fn clear_calibration(&mut self);
+    // fn get_required_calibration_point_count(&self) -> usize;  // TODO
 }
 
-// pub trait ADCSensorDriver {
-
-// }
 
 pub trait ActuatorDriver {
     fn setup(&mut self);
