@@ -22,8 +22,8 @@ struct ConversionResultRegister {
 }
 
 impl ConversionResultRegister {
-    fn from_bytes(bytes: [u8; 2]) -> ConversionResultRegister {
-        let u16_value: u16 = ((bytes[1] as u16) << 8) | bytes[0] as u16;
+    fn from_be_bytes(bytes: [u8; 2]) -> ConversionResultRegister {
+        let u16_value: u16 = ((bytes[0] as u16) << 8) | bytes[1] as u16;
         ConversionResultRegister::from_bits(u16_value)
     }
 }
@@ -135,36 +135,18 @@ impl ExternalAdc {
             3 => channel_register.set_channel_2(true),
             4 => channel_register.set_channel_3(true),
             _ => {}
-        }
+        };
 
-        // channel_register.set_channel_0(true);
-        // channel_register.set_channel_1(true);
-        // channel_register.set_channel_2(true);
-        // channel_register.set_channel_3(true);
+
         let channel_command = build_channel_register_set_command(channel_register);
         rprintln!("set channel reg: {}", channel_command[1]);
         self.send_i2c(i2c, &channel_command); // writing to the channel register restarts the channel cycle.
-
-        let mut buffer: [u8; 1] = [0; 1];
-        self.read_i2c(i2c, ADC_CHANNEL_REGISTER_ADDRESS, &mut buffer);
-        rprintln!("channel reg: {}", buffer[0]);
-
-        // // the old code always sets the config register here.  is this necessary to make it work??
-        // let configuration_register = ConfigurationRegister::new();
-        // let configuration_command =
-        //     build_configuration_register_set_command(configuration_register);
-        // self.send_i2c(i2c, &configuration_command);
-
-        // let mut buffer: [u8; 2] = [0; 2];
-        // self.read_i2c(i2c, ADC_CONFIGURATION_REGISTER_ADDRESS, &mut buffer);
-        // rprintln!("config reg: {:X?}", buffer);
 
         let mut value: u16 = core::u16::MAX;
         let mut buffer: [u8; 2] = [0; 2];
         self.read_i2c(i2c, ADC_CONVERSION_RESULT_REGISTER_ADDRESS, &mut buffer);
         // MSB and LSB need to be swapped in order to change to little endian
-        let buffer_le: [u8; 2] = [buffer[1], buffer[0]]; //
-        let conversion_result = ConversionResultRegister::from_bytes(buffer_le);
+        let conversion_result = ConversionResultRegister::from_be_bytes(buffer);
         value = conversion_result.conv_result();
         rprintln!(
             "EXADC: conversion result {} : {}   {:?}",
@@ -188,24 +170,7 @@ impl ExternalAdc {
     pub fn configure(&mut self, i2c: &mut BoardI2c1) {
         let configuration_register = ConfigurationRegister::new();
         let configuration_command =
-            build_configuration_register_set_command(configuration_register);
-        self.send_i2c(i2c, &configuration_command);
-        rprintln!("send config reg: {:X?}", configuration_command);
-
-        let mut buffer: [u8; 2] = [0; 2];
-        self.read_i2c(i2c, ADC_CONFIGURATION_REGISTER_ADDRESS, &mut buffer);
-        rprintln!("config reg: {:X?}", buffer);
-
-        let channel_register = ChannelRegister::new();
-        let channel_command = build_channel_register_set_command(channel_register);
-        self.send_i2c(i2c, &channel_command);
-
-        /// TESTS BELOW... delete later
-        rprintln!("TEST REGISTERs");
-
-        let configuration_register = ConfigurationRegister::new();
-        let configuration_command =
-            build_configuration_register_set_command(configuration_register);
+            build_configuration_register_set_command(configuration_register); // swaps to big endian
         self.send_i2c(i2c, &configuration_command);
         rprintln!(
             "send config reg: {:X?} {:08b} {:08b} {:08b}",
@@ -214,54 +179,9 @@ impl ExternalAdc {
             configuration_command[1],
             configuration_command[2]
         );
-
         let mut buffer: [u8; 2] = [0; 2];
         self.read_i2c(i2c, ADC_CONFIGURATION_REGISTER_ADDRESS, &mut buffer);
-        rprintln!(
-            "config reg: {:X?} {:08b} {:08b}",
-            buffer,
-            buffer[0],
-            buffer[1]
-        ); // in this case MSB is in buffer[0]
-
-        let mut channel_register = ChannelRegister::new();
-        channel_register.set_channel_2(true);
-        let channel_command = build_channel_register_set_command(channel_register);
-        rprintln!(
-            "write channel reg: {:X?} {:08b} {:08b}",
-            channel_command,
-            channel_command[0],
-            channel_command[1]
-        );
-        self.send_i2c(i2c, &channel_command);
-
-        let mut buffer: [u8; 1] = [0; 1];
-        self.read_i2c(i2c, ADC_CHANNEL_REGISTER_ADDRESS, &mut buffer);
-        rprintln!("channel reg: {:X?} {:08b}", buffer, buffer[0]);
-
-        let mut value: u16 = core::u16::MAX;
-        for i in 0..4 {
-            let mut buffer: [u8; 2] = [0; 2];
-            self.read_i2c(i2c, ADC_CONVERSION_RESULT_REGISTER_ADDRESS, &mut buffer);
-            rprintln!(
-                "read conv result: {:X?} {:08b} {:08b}",
-                buffer,
-                buffer[0],
-                buffer[1]
-            ); // in this case MSB is in buffer[0]
-               // MSB and LSB need to be swapped
-            let butter_le: [u8; 2] = [buffer[1], buffer[0]];
-            let conversion_result = ConversionResultRegister::from_bytes(butter_le);
-            value = conversion_result.conv_result();
-            rprintln!(
-                "conversion result {} : {}   {:?}",
-                conversion_result.channel(),
-                value,
-                butter_le
-            );
-        }
-
-        rprintln!("TEST DONE");
+        rprintln!("config reg: {:X?}", buffer);
     }
 
     fn send_i2c(&mut self, i2c: &mut BoardI2c1, bytes: &[u8]) {
