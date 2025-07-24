@@ -4,7 +4,6 @@
 mod datalogger_commands;
 mod services;
 
-use bitflags::bitflags;
 use datalogger_commands::*;
 use ds18b20::{Ds18b20, Ds18b20SpecialConfiguration};
 use heater::{Heater, HeaterSpecialConfiguration};
@@ -13,11 +12,10 @@ use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
     EEPROM_TOTAL_SENSOR_SLOTS,
 };
-use util::{any_as_u8_slice, check_alphanumeric, str_from_utf8};
+use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
 use crate::{
-    alloc::string::ToString,
-    services::{usart_service::take_command, *},
+    alloc::string::ToString, protocol::responses, services::*,
     telemetry::telemeters::lorawan::RakWireless3172,
 };
 use alloc::boxed::Box;
@@ -34,10 +32,7 @@ mod registry;
 mod telemetry;
 use registry::*;
 
-use serde::de::value;
 use serde_json::{json, Value};
-
-use core::{ffi::CStr, panic::PanicMessage, str::from_utf8};
 
 const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
 
@@ -371,17 +366,11 @@ impl DataLogger {
                     self.execute_command(board, command_payload);
                 }
                 Err(error) => {
-                    board.usb_serial_send( json!({
-                        "message": "Error processing command",
-                        "error": format!("{:?}\n", error).as_str(),
-                    }).to_string().as_str()); // TODO how to get the string from the error
-
-                    // CommandPayload::InvalidPayload() => {
-                    //     board.usb_serial_send("invalid payload\n");sensor_type_id
-                    // }
-                    // CommandPayload::UnrecognizedCommand() => {
-                    //     board.usb_serial_send("unrecognized command\n");
-                    // }
+                    responses::send_command_response_error(
+                        board,
+                        "Error processing command",
+                        format!("{:?}\n", error).as_str(),
+                    );
                 }
             }
         }
@@ -421,13 +410,11 @@ impl DataLogger {
     }
 
     fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
- 
         self.telemeter.process_events(board);
 
         if !self.telemeter.ready_to_transmit(board) {
             return;
         }
-
 
         // TODO: this book-keeping to get the sensor values is not correct / robust / fully functional
         let mut values: [f32; 12] = [0_f32; 12];
@@ -852,11 +839,7 @@ impl DataLogger {
                     }
                 }
 
-                board.usb_serial_send(
-                    json!({"error":"didn't find the sensor"})
-                        .to_string()
-                        .as_str(),
-                );
+                responses::send_command_response_message(board, "didn't find the sensor");
             }
             CommandPayload::SensorRemoveCommandPayload(payload) => {
                 let sensor_id = match payload.id {
@@ -866,7 +849,7 @@ impl DataLogger {
                         prepared_id
                     }
                     _ => {
-                        board.usb_serial_send("Sensor not found");
+                        responses::send_command_response_message(board, "Sensor not found");
                         return;
                     }
                 };
@@ -893,7 +876,7 @@ impl DataLogger {
                             if let Some(found_u8) = found.try_into().ok() {
                                 board.store_sensor_settings(found_u8, &bytes);
                                 self.sensor_drivers[found] = None;
-                                board.usb_serial_send("{ \"status\" : \"sensor removed\"}\n");
+                                responses::send_command_response_message(board, "sensor removed");
                                 return;
                             }
                         }
@@ -943,15 +926,17 @@ impl DataLogger {
                         let epoch = epoch.as_i64();
                         if let Some(epoch) = epoch {
                             board.set_epoch(epoch);
-                            board.usb_serial_send("Epoch set\n");
+                            responses::send_command_response_message(board, "Epoch set");
                         } else {
-                            board.usb_serial_send("Bad epoch in command\n");
-                            // rprintln!("Bad epoch {:?}", epoch);
+                            responses::send_command_response_message(board, "Bad epoch in command");
                         }
                     }
                     err => {
-                        board.usb_serial_send("Bad epoch in command\n");
-                        // rprintln!("Bad epoch {:?}", err);
+                        responses::send_command_response_error(
+                            board,
+                            "Bad epoch in command",
+                            format!("{:?}", err).as_str(),
+                        );
                         return;
                     }
                 };
@@ -967,7 +952,10 @@ impl DataLogger {
                 let id = match payload.id {
                     serde_json::Value::String(ref payload_id) => payload_id,
                     _ => {
-                        board.usb_serial_send("bad sensor id\n");
+                        responses::send_command_response_message(
+                            board,
+                            "Invalid sensor id specified",
+                        );
                         return;
                     }
                 };
@@ -976,7 +964,10 @@ impl DataLogger {
                 let point = match point {
                     Some(point) => point,
                     None => {
-                        board.usb_serial_send("bad point\n");
+                        responses::send_command_response_message(
+                            board,
+                            "Invalid calibration point specified",
+                        );
                         return;
                     }
                 };
@@ -1012,22 +1003,25 @@ impl DataLogger {
                                 values: values,
                             };
                             if self.calibration_point_values[i].is_some() {
-                                    let pairs: &Option<Box<[CalibrationPair]>> =
-                                        &self.calibration_point_values[i];
-                                    if let Some(pairs) = pairs {
-                                        let arr = [calibration_pair, pairs[0].clone(), ];
-                                        let arr_box = Box::new(arr);
-                                        self.calibration_point_values[i] = Some(arr_box);
-                                    }
-                               
+                                let pairs: &Option<Box<[CalibrationPair]>> =
+                                    &self.calibration_point_values[i];
+                                if let Some(pairs) = pairs {
+                                    let arr = [calibration_pair, pairs[0].clone()];
+                                    let arr_box = Box::new(arr);
+                                    self.calibration_point_values[i] = Some(arr_box);
+                                }
                             } else {
                                 let arr = [calibration_pair];
                                 let arr_box = Box::new(arr);
                                 self.calibration_point_values[i] = Some(arr_box);
                             }
-                            board.usb_serial_send("stored a single calibration point\n");
+                            responses::send_command_response_message(
+                                board,
+                                "Stored a single calibration point",
+                            );
                         }
                     } else {
+                        responses::send_command_response_message(board, "Didn't find the sensor");
                         board.usb_serial_send("didn't find the sensor\n");
                     }
                 }
@@ -1038,7 +1032,10 @@ impl DataLogger {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
                     Err(message) => {
-                        board.usb_serial_send(format!("{}", message).as_str());
+                        responses::send_command_response_message(
+                            board,
+                            format!("{}", message).as_str(),
+                        );
                         return;
                     }
                 };
@@ -1071,11 +1068,13 @@ impl DataLogger {
                 }
 
                 board.usb_serial_send("]\n");
-                board.usb_serial_send("listed values\n");
             }
 
             CommandPayload::SensorCalibrateRemovePayload(payload) => {
-                board.usb_serial_send("not implemented");
+                responses::send_command_response_message(
+                    board,
+                    "This command is not implemented yet",
+                );
                 return;
 
                 // TO DO: implement removal by tag
@@ -1103,25 +1102,46 @@ impl DataLogger {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
                     Err(message) => {
-                        board.usb_serial_send(format!("{}", message).as_str());
+                        responses::send_command_response_message(
+                            board,
+                            format!("{}", message).as_str(),
+                        );
                         return;
                     }
                 };
 
                 if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
-                        let pairs = &self.calibration_point_values[index];
+                        let pairs: &Option<Box<[CalibrationPair]>> =
+                            &self.calibration_point_values[index];
+                        // if let Some(pairs) = pairs {
+                        //     for i in 0..pairs.len() {
+                        //         let pair = &pairs[i];
+                        //         rprintln!("calib pair{:?} {} {}", i, pair.point, pair.values[i]);
+                        //     }
+                        // }
+
                         if let Some(pairs) = pairs {
+                            for i in 0..pairs.len() {
+                                let pair = &pairs[i];
+                                rprintln!("calib pair{:?} {} {}", i, pair.point, pair.values[0]);
+                            }
+                            
                             driver.clear_calibration();
-                            match driver.fit(&pairs) {
+                            match driver.fit(pairs) {
                                 Ok(_) => {
                                     let mut storage = [0u8; EEPROM_SENSOR_SETTINGS_SIZE];
                                     driver.get_configuration_bytes(&mut storage);
 
                                     board.store_sensor_settings(index as u8, &storage);
-                                    board.usb_serial_send(json!({"message":"fit ok"}).to_string().as_str());
+                                    responses::send_command_response_message(board, "Fit OK");
                                 }
-                                Err(_) => board.usb_serial_send("something went wrong\n"),
+                                Err(_) => {
+                                    responses::send_command_response_message(
+                                        board,
+                                        "something went wrong",
+                                    );
+                                }
                             }
                         }
                     }
@@ -1140,17 +1160,19 @@ impl DataLogger {
                 if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         driver.clear_calibration();
-                        board.usb_serial_send("cleared payload\n");
+                        responses::send_command_response_message(board, "Cleared payload");
                     }
                 }
-                board.usb_serial_send("}");
-                board.usb_serial_send("\n");
             }
             CommandPayload::BoardSerialSendPayload(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
-                    Err(message) => {
-                        board.usb_serial_send("problem with message \n");
+                    Err(error) => {
+                        responses::send_command_response_error(
+                            board,
+                            "Problem with message",
+                            error,
+                        );
                         return;
                     }
                 };
@@ -1159,9 +1181,11 @@ impl DataLogger {
                     &payload_values.message[0..payload_values.message_len as usize],
                 ) {
                     Ok(message) => message,
-                    Err(message) => {
-                        board.usb_serial_send(
-                            format!("problem sending message {} \n", message).as_str(),
+                    Err(error) => {
+                        responses::send_command_response_error(
+                            board,
+                            "Problem sending message",
+                            format!(" {} \n", error).as_str(),
                         );
                         return;
                     }
@@ -1182,10 +1206,10 @@ impl DataLogger {
                     Ok(message) => message,
                     Err(_) => {
                         rprintln!("no usart response");
-                        board.usb_serial_send(
-                            json!({message:"no response received"}).to_string().as_str(),
+                        responses::send_command_response_message(
+                            board,
+                            "No response received on serial",
                         );
-                        board.usb_serial_send("\n");
                         return;
                     }
                 };
@@ -1204,12 +1228,13 @@ impl DataLogger {
                             Some(end) => response = &response[0..end],
                             None => {}
                         }
-                        board.usb_serial_send(json!({message:response}).to_string().as_str());
-                        board.usb_serial_send("\n");
+                        responses::send_command_response_message(board, response);
                     }
-                    Err(message) => {
-                        board.usb_serial_send(
-                            format!("problem receiving message {} \n", message).as_str(),
+                    Err(error) => {
+                        responses::send_command_response_error(
+                            board,
+                            "Problem receiving message",
+                            format!(" {} \n", error).as_str(),
                         );
                     }
                 };

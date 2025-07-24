@@ -171,7 +171,7 @@ pub struct SensorCalibrateSubcommand<'a> {
 // TODO: these impls should be derived or ??
 
 impl SensorCalibrateFitPayload {
-    pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> { // TODO: this static lifetime is not good.  Need to pass in some storage or use a box.
+    pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> {
         let id = match self.id {
             serde_json::Value::String(ref payload_id) => {
                 payload_id

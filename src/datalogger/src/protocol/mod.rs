@@ -1,2 +1,2 @@
 pub mod commands;
-pub mod board_response;
+pub mod responses;

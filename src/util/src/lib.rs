@@ -13,7 +13,10 @@ pub fn remove_invalid_utf8(buffer: &mut [u8]) {
 
 pub fn str_from_utf8( buffer: &mut [u8] )-> Result<&str, Utf8Error> {
     remove_invalid_utf8(buffer);
-    core::str::from_utf8(buffer)
+    let nul_range_end = buffer.iter()
+        .position(|&c| c == b'\0')
+        .unwrap_or(buffer.len());
+    core::str::from_utf8(&buffer[0..nul_range_end])
 }
 
 
