@@ -293,7 +293,8 @@ pub enum CommandPayload {
     SensorCalibrateClearPayload(SensorCalibrateClearPayload),
     BoardRtcSetPayload(BoardRtcSetPayload),
     BoardGetPayload(BoardGetPayload),
-    BoardSerialSendPayload(BoardSerialSendPayload)
+    BoardSerialSendPayload(BoardSerialSendPayload),
+    TelemeterGet
 }
 
 

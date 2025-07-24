@@ -219,7 +219,9 @@ fn get_command_payload(
         CommandType::ActuatorList => todo!(),
         CommandType::ActuatorReset => todo!(),
         CommandType::TelemeterSet => todo!(),
-        CommandType::TelemeterGet => todo!(),
+        CommandType::TelemeterGet => {
+            Ok(CommandPayload::TelemeterGet)
+        }
         CommandType::TelemeterRemove => todo!(),
         CommandType::TelemeterList => todo!(),
         CommandType::TelemeterReset => todo!(),

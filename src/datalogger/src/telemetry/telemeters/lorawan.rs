@@ -2,12 +2,12 @@ use core::fmt::Write;
 
 use rriv_board::RRIVBoard;
 use rtt_target::rprintln;
+use serde_json::json;
 use util::str_from_utf8;
 
 use crate::services::usart_service;
 use crate::DataLoggerMode;
-use alloc::string::String;
-
+use alloc::string::{String,ToString};
 use alloc::format;
 
 #[derive(Clone, Copy)]
@@ -264,5 +264,81 @@ impl RakWireless3172 {
             }
             Err(_) => false,
         } {}
+    }
+
+    pub fn get_identity(&mut self, board: &mut impl RRIVBoard) -> Result<String,()>{
+        // get Dev EUI and Join EUI sychronously from the board
+
+        let mut dev_eui: String = String::new(); // TODO: consider handling this in more pure no_std
+        let mut join_eui: String = String::new();
+
+        let message = "AT+DEVEUI=?";
+        let prepared_message = format!("{}\r\n", message);
+        board.usart_send(&prepared_message);
+        board.delay_ms(1000); // let the chip respond
+        while match usart_service::take_command(board) { // because other async stuff could happen in the meantime
+            Ok(message) => {
+                let mut message = message;
+                let message = str_from_utf8(&mut message);
+                let message = message.unwrap_or("invalid message");
+                rprintln!("lorawan2: {}", message);
+
+                let mut continuing: bool = true;
+                // handle the response we are looking for
+                if message.contains("AT+DEVEUI="){
+                    match message.find("=") {
+                        Some(index) => {
+                            let index: usize = index + 1;
+                            dev_eui = message[index..message.len()].to_string();
+                            continuing = false;
+                        },
+                        None => {}, // continue
+                    }
+                   
+                }
+                continuing
+            }
+            Err(_) => return Err(()), // an empty receiving buffer will trigger here
+        } {}
+
+        let message = "AT+APPEUI=?";
+        let prepared_message = format!("{}\r\n", message);
+        board.usart_send(&prepared_message);
+        board.delay_ms(1000); // let the chip respond
+        while match usart_service::take_command(board) { // because other async stuff could happen in the meantime
+            Ok(message) => {
+                let mut message = message;
+                let message = str_from_utf8(&mut message);
+                let message = message.unwrap_or("invalid message");
+                rprintln!("lorawan2: {}", message);
+
+                let mut continuing: bool = true;
+                // handle the response we are looking for
+                if message.contains("AT+APPEUI="){
+                    match message.find("=") {
+                        Some(index) => {
+                            let index: usize = index + 1;
+                            join_eui = message[index..message.len()].to_string();
+                            continuing = false;
+                        },
+                        None => return Err(()),
+                    }
+                   
+                }
+                continuing
+            }
+            Err(_) => return Err(()),
+        } {}
+
+        // TODO: find a way to not put the json serialization directly in this file
+        let identity = json!(
+            {
+                "dev_eui" : dev_eui,
+                "join_eui" : join_eui
+            }
+        ).to_string();
+
+        Ok(identity)
+
     }
 }

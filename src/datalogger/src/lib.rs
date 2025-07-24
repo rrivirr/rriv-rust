@@ -637,610 +637,617 @@ impl DataLogger {
         // rprintln!("executing command {:?}", command_payload);
         match command_payload {
             CommandPayload::DataloggerSetCommandPayload(payload) => {
-                self.update_datalogger_settings(board, payload);
-                board.usb_serial_send("updated datalogger settings\n");
-            }
+                        self.update_datalogger_settings(board, payload);
+                        board.usb_serial_send("updated datalogger settings\n");
+                    }
             CommandPayload::DataloggerGetCommandPayload(_) => {
-                board.usb_serial_send("get datalogger settings not implemented\n");
-            }
+                        board.usb_serial_send("get datalogger settings not implemented\n");
+                    }
             CommandPayload::DataloggerSetModeCommandPayload(payload) => {
-                if let Some(mode) = payload.mode {
-                    match mode {
-                        Value::String(mode) => {
-                            let mode = mode.as_str();
+                        if let Some(mode) = payload.mode {
                             match mode {
-                                "watch" => {
-                                    self.write_column_headers_to_serial(board);
-                                    self.mode = DataLoggerMode::Watch;
-                                    board.set_debug(false);
-                                    self.telemeter.set_watch(true);
+                                Value::String(mode) => {
+                                    let mode = mode.as_str();
+                                    match mode {
+                                        "watch" => {
+                                            self.write_column_headers_to_serial(board);
+                                            self.mode = DataLoggerMode::Watch;
+                                            board.set_debug(false);
+                                            self.telemeter.set_watch(true);
+                                        }
+                                        "watch-debug" => {
+                                            self.write_column_headers_to_serial(board);
+                                            self.mode = DataLoggerMode::Watch;
+                                            board.set_debug(true);
+                                            self.telemeter.set_watch(true);
+                                        }
+                                        "quiet" => {
+                                            self.mode = DataLoggerMode::Quiet;
+                                            board.set_debug(false);
+                                            self.telemeter.set_watch(false);
+                                        }
+                                        _ => {
+                                            self.mode = DataLoggerMode::Interactive;
+                                            board.set_debug(true);
+                                            self.telemeter.set_watch(false);
+                                        }
+                                    }
                                 }
-                                "watch-debug" => {
-                                    self.write_column_headers_to_serial(board);
-                                    self.mode = DataLoggerMode::Watch;
-                                    board.set_debug(true);
-                                    self.telemeter.set_watch(true);
-                                }
-                                "quiet" => {
-                                    self.mode = DataLoggerMode::Quiet;
-                                    board.set_debug(false);
-                                    self.telemeter.set_watch(false);
+                                _ => {}
+                            }
+                        }
+                    }
+            CommandPayload::SensorSetCommandPayload(payload, values) => {
+                        let registry = get_registry();
+                        // let sensor_type: Result<&str, core::str::Utf8Error> = core::str::from_utf8(&payload.r#type);
+                        let sensor_type_id = match payload.r#type {
+                            serde_json::Value::String(sensor_type) => {
+                                registry::sensor_type_id_from_name(&sensor_type)
+                            }
+                            _ => {
+                                board.usb_serial_send("{\"error\": \"sensor type not specified\"}");
+                                return;
+                            } // Ok(sensor_type) => sensor_type_id_from_name(&sensor_type),
+                              // Err(_) => 0,
+                        };
+
+                        if sensor_type_id == 0 {
+                            board.usb_serial_send("{\"error\": \"sensor type not found\"}");
+                            return;
+                        }
+
+                        let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
+                        let mut id_provided: bool = false;
+
+                        if let Some(payload_id) = payload.id {
+                            sensor_id = match payload_id {
+                                serde_json::Value::String(id) => {
+                                    let mut prepared_id: [u8; 6] = [0; 6];
+                                    prepared_id.copy_from_slice(id.as_bytes());
+                                    id_provided = true;
+                                    prepared_id
                                 }
                                 _ => {
-                                    self.mode = DataLoggerMode::Interactive;
-                                    board.set_debug(true);
-                                    self.telemeter.set_watch(false);
+                                    // default to unique id
+                                    sensor_id
                                 }
-                            }
-                        }
-                        _ => {}
-                    }
-                }
-            }
-            CommandPayload::SensorSetCommandPayload(payload, values) => {
-                let registry = get_registry();
-                // let sensor_type: Result<&str, core::str::Utf8Error> = core::str::from_utf8(&payload.r#type);
-                let sensor_type_id = match payload.r#type {
-                    serde_json::Value::String(sensor_type) => {
-                        registry::sensor_type_id_from_name(&sensor_type)
-                    }
-                    _ => {
-                        board.usb_serial_send("{\"error\": \"sensor type not specified\"}");
-                        return;
-                    } // Ok(sensor_type) => sensor_type_id_from_name(&sensor_type),
-                      // Err(_) => 0,
-                };
-
-                if sensor_type_id == 0 {
-                    board.usb_serial_send("{\"error\": \"sensor type not found\"}");
-                    return;
-                }
-
-                let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
-                let mut id_provided: bool = false;
-
-                if let Some(payload_id) = payload.id {
-                    sensor_id = match payload_id {
-                        serde_json::Value::String(id) => {
-                            let mut prepared_id: [u8; 6] = [0; 6];
-                            prepared_id.copy_from_slice(id.as_bytes());
-                            id_provided = true;
-                            prepared_id
-                        }
-                        _ => {
-                            // default to unique id
-                            sensor_id
-                        }
-                    };
-                }
-
-                // create a new unique id
-                if !id_provided {
-                    // get all the current ids
-                    let mut driver_ids: [[u8; 6]; EEPROM_TOTAL_SENSOR_SLOTS] =
-                        [[0; 6]; EEPROM_TOTAL_SENSOR_SLOTS];
-                    for i in 0..self.sensor_drivers.len() {
-                        if let Some(driver) = &mut self.sensor_drivers[i] {
-                            driver_ids[i] = driver.get_id();
-                        }
-                    }
-
-                    let mut unique = false;
-                    while unique == false {
-                        let mut i = 0;
-                        let mut changed = false;
-                        let sensor_id_scan = sensor_id.clone();
-                        while i < driver_ids.len() && changed == false {
-                            let mut same = true;
-                            for (j, (u1, u2)) in
-                                driver_ids[i].iter().zip(sensor_id_scan.iter()).enumerate()
-                            {
-                                // if hey are equal..
-                                if u1 != u2 {
-                                    same = false;
-                                    break;
-                                }
-                            }
-                            if same {
-                                // we need to make a change
-                                sensor_id[sensor_id.len() - 1] = sensor_id[sensor_id.len() - 1] + 1;
-                                changed = true;
-                            }
-                            i = i + 1;
-                        }
-                        unique = !changed;
-                    }
-                }
-
-                // find the slot
-                let mut slot = usize::MAX;
-                let mut empty_slot = usize::MAX;
-                for i in 0..self.sensor_drivers.len() {
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        if sensor_id == driver.get_id() {
-                            slot = i;
-                        }
-                    } else {
-                        if empty_slot == usize::MAX {
-                            empty_slot = i;
-                        }
-                    }
-                }
-
-                if slot == usize::MAX {
-                    slot = empty_slot
-                };
-
-                rprintln!("looking up funcs");
-                let create_function = registry[usize::from(sensor_type_id)];
-
-                if let Some(functions) = create_function {
-                    let general_settings =
-                        SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
-                    rprintln!("calling func 0"); // TODO: crashed here
-                    let (mut driver, special_settings_bytes) =
-                        functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
-                    driver.setup();
-                    self.sensor_drivers[slot] = Some(driver);
-
-                    // get the generic settings as bytes
-                    let generic_settings_bytes: &[u8] =
-                        unsafe { any_as_u8_slice(&general_settings) };
-                    let mut bytes_sized: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
-                        [0; EEPROM_SENSOR_SETTINGS_SIZE];
-                    let copy_size =
-                        if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-                            SENSOR_SETTINGS_PARTITION_SIZE
-                        } else {
-                            generic_settings_bytes.len()
-                        };
-                    bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
-
-                    // get the special settings as bytes
-                    let copy_size =
-                        if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-                            SENSOR_SETTINGS_PARTITION_SIZE
-                        } else {
-                            special_settings_bytes.len()
-                        };
-                    bytes_sized[SENSOR_SETTINGS_PARTITION_SIZE
-                        ..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
-                        .copy_from_slice(&special_settings_bytes[0..copy_size]);
-
-                    board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
-                    board.usb_serial_send("updated sensor configuration\n");
-                }
-            }
-            CommandPayload::SensorGetCommandPayload(payload) => {
-                for i in 0..self.sensor_drivers.len() {
-                    // create json and output it
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        let id_bytes = driver.get_id();
-                        let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
-
-                        match payload.id {
-                            serde_json::Value::String(ref payload_id) => {
-                                if payload_id == id_str {
-                                    //echo the details and return
-
-                                    let configuration_payload = driver.get_configuration_json();
-
-                                    // TODO: get the other sensor values
-
-                                    let string = configuration_payload.to_string();
-                                    let str = string.as_str();
-                                    board.usb_serial_send(str);
-                                    board.usb_serial_send("\n");
-                                    return;
-                                }
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                responses::send_command_response_message(board, "didn't find the sensor");
-            }
-            CommandPayload::SensorRemoveCommandPayload(payload) => {
-                let sensor_id = match payload.id {
-                    serde_json::Value::String(id) => {
-                        let mut prepared_id: [u8; 6] = [0; 6];
-                        prepared_id.copy_from_slice(id.as_bytes());
-                        prepared_id
-                    }
-                    _ => {
-                        responses::send_command_response_message(board, "Sensor not found");
-                        return;
-                    }
-                };
-
-                for i in 0..self.sensor_drivers.len() {
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        let mut found = i;
-
-                        // bytewise comparison of sensor id to delete with sensor id of loaded sensor driver
-                        for (j, (u1, u2)) in
-                            driver.get_id().iter().zip(sensor_id.iter()).enumerate()
-                        {
-                            if u1 != u2 {
-                                found = 256; // 256 mneans not found
-                                break;
-                            }
-                        }
-
-                        // do the removal if we matched, and then return
-                        if usize::from(found) < EEPROM_TOTAL_SENSOR_SLOTS {
-                            // remove the sensor driver and write null to EEPROM
-                            let bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
-                                [0xFF; EEPROM_DATALOGGER_SETTINGS_SIZE];
-                            if let Some(found_u8) = found.try_into().ok() {
-                                board.store_sensor_settings(found_u8, &bytes);
-                                self.sensor_drivers[found] = None;
-                                responses::send_command_response_message(board, "sensor removed");
-                                return;
-                            }
-                        }
-                    }
-                }
-            }
-            CommandPayload::SensorListCommandPayload(_) => {
-                board.usb_serial_send("[");
-                let mut first = true;
-                for i in 0..self.sensor_drivers.len() {
-                    // create json and output it
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        if first {
-                            first = false
-                        } else {
-                            board.usb_serial_send(",");
-                        }
-
-                        let id_bytes = driver.get_id();
-                        // let id = "id";string
-                        // let id = core::str::from_utf8_unchecked(&id_bytes);
-
-                        // let id_cstr = CStr::from_bytes_with_nul(&id_bytes).unwrap_or_default();
-                        // let id_str = id_cstr.to_str().unwrap_or_default();
-
-                        let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
-
-                        let type_id = driver.get_type_id();
-                        let sensor_name_bytes = sensor_name_from_type_id(type_id.into());
-                        let sensor_name_str =
-                            core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
-                        let json = json!({
-                            "id": id_str,
-                            "type": sensor_name_str
-                        });
-                        let string = json.to_string();
-                        let str = string.as_str();
-                        board.usb_serial_send(str);
-                    }
-                }
-                board.usb_serial_send("]");
-                board.usb_serial_send("\n");
-            }
-            CommandPayload::BoardRtcSetPayload(payload) => {
-                match payload.epoch {
-                    serde_json::Value::Number(epoch) => {
-                        let epoch = epoch.as_i64();
-                        if let Some(epoch) = epoch {
-                            board.set_epoch(epoch);
-                            responses::send_command_response_message(board, "Epoch set");
-                        } else {
-                            responses::send_command_response_message(board, "Bad epoch in command");
-                        }
-                    }
-                    err => {
-                        responses::send_command_response_error(
-                            board,
-                            "Bad epoch in command",
-                            format!("{:?}", err).as_str(),
-                        );
-                        return;
-                    }
-                };
-            }
-            CommandPayload::BoardGetPayload(payload) => {
-                protocol::commands::get_board(board, payload);
-            }
-            CommandPayload::SensorCalibratePointPayload(payload) => {
-                // we want to do the book keeping here for point payloads
-                // i guess we use a box again
-                rprintln!("Sensor calibrate point payload");
-
-                let id = match payload.id {
-                    serde_json::Value::String(ref payload_id) => payload_id,
-                    _ => {
-                        responses::send_command_response_message(
-                            board,
-                            "Invalid sensor id specified",
-                        );
-                        return;
-                    }
-                };
-
-                let point = payload.point.as_f64();
-                let point = match point {
-                    Some(point) => point,
-                    None => {
-                        responses::send_command_response_message(
-                            board,
-                            "Invalid calibration point specified",
-                        );
-                        return;
-                    }
-                };
-
-                for i in 0..self.sensor_drivers.len() {
-                    // create json and output it
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        let id_bytes = driver.get_id();
-                        let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
-
-                        if id == id_str {
-                            // read sensor values
-                            driver.take_measurement(board.get_sensor_driver_services());
-
-                            let count = driver.get_measured_parameter_count() / 2; // TODO: get_measured_parameter_count, vs get_output_parameter_count
-                            let mut values = Box::new([0_f64; 10]); // TODO: max of 10, should we make this dynamic?
-                            for j in 0..count {
-                                rprintln!("{:?}", j);
-                                let value = match driver.get_measured_parameter_value(j * 2) {
-                                    Ok(value) => value,
-                                    Err(_) => {
-                                        // board.usb_serial_send("missing parameter value\n");
-                                        0_f64
-                                    }
-                                };
-                                values[j] = value;
-                            }
-
-                            // store the point
-                            // TODO: we are only storing one point for now
-                            let calibration_pair = CalibrationPair {
-                                point: point,
-                                values: values,
                             };
-                            if self.calibration_point_values[i].is_some() {
-                                let pairs: &Option<Box<[CalibrationPair]>> =
-                                    &self.calibration_point_values[i];
-                                if let Some(pairs) = pairs {
-                                    let arr = [calibration_pair, pairs[0].clone()];
-                                    let arr_box = Box::new(arr);
-                                    self.calibration_point_values[i] = Some(arr_box);
+                        }
+
+                        // create a new unique id
+                        if !id_provided {
+                            // get all the current ids
+                            let mut driver_ids: [[u8; 6]; EEPROM_TOTAL_SENSOR_SLOTS] =
+                                [[0; 6]; EEPROM_TOTAL_SENSOR_SLOTS];
+                            for i in 0..self.sensor_drivers.len() {
+                                if let Some(driver) = &mut self.sensor_drivers[i] {
+                                    driver_ids[i] = driver.get_id();
+                                }
+                            }
+
+                            let mut unique = false;
+                            while unique == false {
+                                let mut i = 0;
+                                let mut changed = false;
+                                let sensor_id_scan = sensor_id.clone();
+                                while i < driver_ids.len() && changed == false {
+                                    let mut same = true;
+                                    for (j, (u1, u2)) in
+                                        driver_ids[i].iter().zip(sensor_id_scan.iter()).enumerate()
+                                    {
+                                        // if hey are equal..
+                                        if u1 != u2 {
+                                            same = false;
+                                            break;
+                                        }
+                                    }
+                                    if same {
+                                        // we need to make a change
+                                        sensor_id[sensor_id.len() - 1] = sensor_id[sensor_id.len() - 1] + 1;
+                                        changed = true;
+                                    }
+                                    i = i + 1;
+                                }
+                                unique = !changed;
+                            }
+                        }
+
+                        // find the slot
+                        let mut slot = usize::MAX;
+                        let mut empty_slot = usize::MAX;
+                        for i in 0..self.sensor_drivers.len() {
+                            if let Some(driver) = &mut self.sensor_drivers[i] {
+                                if sensor_id == driver.get_id() {
+                                    slot = i;
                                 }
                             } else {
-                                let arr = [calibration_pair];
-                                let arr_box = Box::new(arr);
-                                self.calibration_point_values[i] = Some(arr_box);
+                                if empty_slot == usize::MAX {
+                                    empty_slot = i;
+                                }
                             }
-                            responses::send_command_response_message(
-                                board,
-                                "Stored a single calibration point",
-                            );
                         }
-                    } else {
-                        responses::send_command_response_message(board, "Didn't find the sensor");
-                        board.usb_serial_send("didn't find the sensor\n");
-                    }
-                }
-            }
-            CommandPayload::SensorCalibrateListPayload(payload) => {
-                board.usb_serial_send("[");
 
-                let payload_values = match payload.convert() {
-                    Ok(payload_values) => payload_values,
-                    Err(message) => {
-                        responses::send_command_response_message(
-                            board,
-                            format!("{}", message).as_str(),
-                        );
-                        return;
-                    }
-                };
+                        if slot == usize::MAX {
+                            slot = empty_slot
+                        };
 
-                // list the values
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
-                    rprintln!("driver index{}", index);
-                    let pairs: &Option<Box<[CalibrationPair]>> =
-                        &self.calibration_point_values[index];
-                    if let Some(pairs) = pairs {
-                        for i in 0..pairs.len() {
-                            rprintln!("calib pair{:?}", i);
-                            let pair = &pairs[i];
-                            board.usb_serial_send(
-                                format!("{{'point': {}, 'values': [", pair.point).as_str(),
-                            );
-                            for i in 0..pair.values.len() {
-                                board.usb_serial_send(format!("{}", pair.values[i]).as_str());
-                                if i < pair.values.len() - 1 {
+                        rprintln!("looking up funcs");
+                        let create_function = registry[usize::from(sensor_type_id)];
+
+                        if let Some(functions) = create_function {
+                            let general_settings =
+                                SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
+                            rprintln!("calling func 0"); // TODO: crashed here
+                            let (mut driver, special_settings_bytes) =
+                                functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
+                            driver.setup();
+                            self.sensor_drivers[slot] = Some(driver);
+
+                            // get the generic settings as bytes
+                            let generic_settings_bytes: &[u8] =
+                                unsafe { any_as_u8_slice(&general_settings) };
+                            let mut bytes_sized: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
+                                [0; EEPROM_SENSOR_SETTINGS_SIZE];
+                            let copy_size =
+                                if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                                    SENSOR_SETTINGS_PARTITION_SIZE
+                                } else {
+                                    generic_settings_bytes.len()
+                                };
+                            bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
+
+                            // get the special settings as bytes
+                            let copy_size =
+                                if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                                    SENSOR_SETTINGS_PARTITION_SIZE
+                                } else {
+                                    special_settings_bytes.len()
+                                };
+                            bytes_sized[SENSOR_SETTINGS_PARTITION_SIZE
+                                ..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
+                                .copy_from_slice(&special_settings_bytes[0..copy_size]);
+
+                            board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
+                            board.usb_serial_send("updated sensor configuration\n");
+                        }
+                    }
+            CommandPayload::SensorGetCommandPayload(payload) => {
+                        for i in 0..self.sensor_drivers.len() {
+                            // create json and output it
+                            if let Some(driver) = &mut self.sensor_drivers[i] {
+                                let id_bytes = driver.get_id();
+                                let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+
+                                match payload.id {
+                                    serde_json::Value::String(ref payload_id) => {
+                                        if payload_id == id_str {
+                                            //echo the details and return
+
+                                            let configuration_payload = driver.get_configuration_json();
+
+                                            // TODO: get the other sensor values
+
+                                            let string = configuration_payload.to_string();
+                                            let str = string.as_str();
+                                            board.usb_serial_send(str);
+                                            board.usb_serial_send("\n");
+                                            return;
+                                        }
+                                    }
+                                    _ => {}
+                                }
+                            }
+                        }
+
+                        responses::send_command_response_message(board, "didn't find the sensor");
+                    }
+            CommandPayload::SensorRemoveCommandPayload(payload) => {
+                        let sensor_id = match payload.id {
+                            serde_json::Value::String(id) => {
+                                let mut prepared_id: [u8; 6] = [0; 6];
+                                prepared_id.copy_from_slice(id.as_bytes());
+                                prepared_id
+                            }
+                            _ => {
+                                responses::send_command_response_message(board, "Sensor not found");
+                                return;
+                            }
+                        };
+
+                        for i in 0..self.sensor_drivers.len() {
+                            if let Some(driver) = &mut self.sensor_drivers[i] {
+                                let mut found = i;
+
+                                // bytewise comparison of sensor id to delete with sensor id of loaded sensor driver
+                                for (j, (u1, u2)) in
+                                    driver.get_id().iter().zip(sensor_id.iter()).enumerate()
+                                {
+                                    if u1 != u2 {
+                                        found = 256; // 256 mneans not found
+                                        break;
+                                    }
+                                }
+
+                                // do the removal if we matched, and then return
+                                if usize::from(found) < EEPROM_TOTAL_SENSOR_SLOTS {
+                                    // remove the sensor driver and write null to EEPROM
+                                    let bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
+                                        [0xFF; EEPROM_DATALOGGER_SETTINGS_SIZE];
+                                    if let Some(found_u8) = found.try_into().ok() {
+                                        board.store_sensor_settings(found_u8, &bytes);
+                                        self.sensor_drivers[found] = None;
+                                        responses::send_command_response_message(board, "sensor removed");
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+            CommandPayload::SensorListCommandPayload(_) => {
+                        board.usb_serial_send("[");
+                        let mut first = true;
+                        for i in 0..self.sensor_drivers.len() {
+                            // create json and output it
+                            if let Some(driver) = &mut self.sensor_drivers[i] {
+                                if first {
+                                    first = false
+                                } else {
                                     board.usb_serial_send(",");
                                 }
-                            }
 
-                            board.usb_serial_send("] }}");
-                            if i < pairs.len() - 1 {
-                                board.usb_serial_send(",");
+                                let id_bytes = driver.get_id();
+                                // let id = "id";string
+                                // let id = core::str::from_utf8_unchecked(&id_bytes);
+
+                                // let id_cstr = CStr::from_bytes_with_nul(&id_bytes).unwrap_or_default();
+                                // let id_str = id_cstr.to_str().unwrap_or_default();
+
+                                let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+
+                                let type_id = driver.get_type_id();
+                                let sensor_name_bytes = sensor_name_from_type_id(type_id.into());
+                                let sensor_name_str =
+                                    core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+                                let json = json!({
+                                    "id": id_str,
+                                    "type": sensor_name_str
+                                });
+                                let string = json.to_string();
+                                let str = string.as_str();
+                                board.usb_serial_send(str);
                             }
                         }
+                        board.usb_serial_send("]");
+                        board.usb_serial_send("\n");
                     }
-                }
-
-                board.usb_serial_send("]\n");
-            }
-
-            CommandPayload::SensorCalibrateRemovePayload(payload) => {
-                responses::send_command_response_message(
-                    board,
-                    "This command is not implemented yet",
-                );
-                return;
-
-                // TO DO: implement removal by tag
-
-                let payload_values = match payload.convert() {
-                    Ok(payload_values) => payload_values,
-                    Err(message) => {
-                        board.usb_serial_send(format!("{}", message).as_str());
-                        return;
-                    }
-                };
-
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
-                    let pairs: &Option<Box<[CalibrationPair]>> =
-                        &self.calibration_point_values[index];
-                    if let Some(pairs) = pairs {
-                        for i in 0..pairs.len() {
-                            let pair: CalibrationPair = pairs[i];
-                        }
-                    }
-                }
-            }
-
-            CommandPayload::SensorCalibrateFitPayload(payload) => {
-                let payload_values = match payload.convert() {
-                    Ok(payload_values) => payload_values,
-                    Err(message) => {
-                        responses::send_command_response_message(
-                            board,
-                            format!("{}", message).as_str(),
-                        );
-                        return;
-                    }
-                };
-
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
-                    if let Some(driver) = &mut self.sensor_drivers[index] {
-                        let pairs: &Option<Box<[CalibrationPair]>> =
-                            &self.calibration_point_values[index];
-                        // if let Some(pairs) = pairs {
-                        //     for i in 0..pairs.len() {
-                        //         let pair = &pairs[i];
-                        //         rprintln!("calib pair{:?} {} {}", i, pair.point, pair.values[i]);
-                        //     }
-                        // }
-
-                        if let Some(pairs) = pairs {
-                            for i in 0..pairs.len() {
-                                let pair = &pairs[i];
-                                rprintln!("calib pair{:?} {} {}", i, pair.point, pair.values[0]);
-                            }
-                            
-                            driver.clear_calibration();
-                            match driver.fit(pairs) {
-                                Ok(_) => {
-                                    let mut storage = [0u8; EEPROM_SENSOR_SETTINGS_SIZE];
-                                    driver.get_configuration_bytes(&mut storage);
-
-                                    board.store_sensor_settings(index as u8, &storage);
-                                    responses::send_command_response_message(board, "Fit OK");
+            CommandPayload::BoardRtcSetPayload(payload) => {
+                        match payload.epoch {
+                            serde_json::Value::Number(epoch) => {
+                                let epoch = epoch.as_i64();
+                                if let Some(epoch) = epoch {
+                                    board.set_epoch(epoch);
+                                    responses::send_command_response_message(board, "Epoch set");
+                                } else {
+                                    responses::send_command_response_message(board, "Bad epoch in command");
                                 }
-                                Err(_) => {
+                            }
+                            err => {
+                                responses::send_command_response_error(
+                                    board,
+                                    "Bad epoch in command",
+                                    format!("{:?}", err).as_str(),
+                                );
+                                return;
+                            }
+                        };
+                    }
+            CommandPayload::BoardGetPayload(payload) => {
+                        protocol::commands::get_board(board, payload);
+                    }
+            CommandPayload::SensorCalibratePointPayload(payload) => {
+                        // we want to do the book keeping here for point payloads
+                        // i guess we use a box again
+                        rprintln!("Sensor calibrate point payload");
+
+                        let id = match payload.id {
+                            serde_json::Value::String(ref payload_id) => payload_id,
+                            _ => {
+                                responses::send_command_response_message(
+                                    board,
+                                    "Invalid sensor id specified",
+                                );
+                                return;
+                            }
+                        };
+
+                        let point = payload.point.as_f64();
+                        let point = match point {
+                            Some(point) => point,
+                            None => {
+                                responses::send_command_response_message(
+                                    board,
+                                    "Invalid calibration point specified",
+                                );
+                                return;
+                            }
+                        };
+
+                        for i in 0..self.sensor_drivers.len() {
+                            // create json and output it
+                            if let Some(driver) = &mut self.sensor_drivers[i] {
+                                let id_bytes = driver.get_id();
+                                let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+
+                                if id == id_str {
+                                    // read sensor values
+                                    driver.take_measurement(board.get_sensor_driver_services());
+
+                                    let count = driver.get_measured_parameter_count() / 2; // TODO: get_measured_parameter_count, vs get_output_parameter_count
+                                    let mut values = Box::new([0_f64; 10]); // TODO: max of 10, should we make this dynamic?
+                                    for j in 0..count {
+                                        rprintln!("{:?}", j);
+                                        let value = match driver.get_measured_parameter_value(j * 2) {
+                                            Ok(value) => value,
+                                            Err(_) => {
+                                                // board.usb_serial_send("missing parameter value\n");
+                                                0_f64
+                                            }
+                                        };
+                                        values[j] = value;
+                                    }
+
+                                    // store the point
+                                    // TODO: we are only storing one point for now
+                                    let calibration_pair = CalibrationPair {
+                                        point: point,
+                                        values: values,
+                                    };
+                                    if self.calibration_point_values[i].is_some() {
+                                        let pairs: &Option<Box<[CalibrationPair]>> =
+                                            &self.calibration_point_values[i];
+                                        if let Some(pairs) = pairs {
+                                            let arr = [calibration_pair, pairs[0].clone()];
+                                            let arr_box = Box::new(arr);
+                                            self.calibration_point_values[i] = Some(arr_box);
+                                        }
+                                    } else {
+                                        let arr = [calibration_pair];
+                                        let arr_box = Box::new(arr);
+                                        self.calibration_point_values[i] = Some(arr_box);
+                                    }
                                     responses::send_command_response_message(
                                         board,
-                                        "something went wrong",
+                                        "Stored a single calibration point",
                                     );
+                                }
+                            } else {
+                                responses::send_command_response_message(board, "Didn't find the sensor");
+                                board.usb_serial_send("didn't find the sensor\n");
+                            }
+                        }
+                    }
+            CommandPayload::SensorCalibrateListPayload(payload) => {
+                        board.usb_serial_send("[");
+
+                        let payload_values = match payload.convert() {
+                            Ok(payload_values) => payload_values,
+                            Err(message) => {
+                                responses::send_command_response_message(
+                                    board,
+                                    format!("{}", message).as_str(),
+                                );
+                                return;
+                            }
+                        };
+
+                        // list the values
+                        if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                            rprintln!("driver index{}", index);
+                            let pairs: &Option<Box<[CalibrationPair]>> =
+                                &self.calibration_point_values[index];
+                            if let Some(pairs) = pairs {
+                                for i in 0..pairs.len() {
+                                    rprintln!("calib pair{:?}", i);
+                                    let pair = &pairs[i];
+                                    board.usb_serial_send(
+                                        format!("{{'point': {}, 'values': [", pair.point).as_str(),
+                                    );
+                                    for i in 0..pair.values.len() {
+                                        board.usb_serial_send(format!("{}", pair.values[i]).as_str());
+                                        if i < pair.values.len() - 1 {
+                                            board.usb_serial_send(",");
+                                        }
+                                    }
+
+                                    board.usb_serial_send("] }}");
+                                    if i < pairs.len() - 1 {
+                                        board.usb_serial_send(",");
+                                    }
+                                }
+                            }
+                        }
+
+                        board.usb_serial_send("]\n");
+                    }
+            CommandPayload::SensorCalibrateRemovePayload(payload) => {
+                        responses::send_command_response_message(
+                            board,
+                            "This command is not implemented yet",
+                        );
+                        return;
+
+                        // TO DO: implement removal by tag
+
+                        let payload_values = match payload.convert() {
+                            Ok(payload_values) => payload_values,
+                            Err(message) => {
+                                board.usb_serial_send(format!("{}", message).as_str());
+                                return;
+                            }
+                        };
+
+                        if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                            let pairs: &Option<Box<[CalibrationPair]>> =
+                                &self.calibration_point_values[index];
+                            if let Some(pairs) = pairs {
+                                for i in 0..pairs.len() {
+                                    let pair: CalibrationPair = pairs[i];
                                 }
                             }
                         }
                     }
-                }
-            }
+            CommandPayload::SensorCalibrateFitPayload(payload) => {
+                        let payload_values = match payload.convert() {
+                            Ok(payload_values) => payload_values,
+                            Err(message) => {
+                                responses::send_command_response_message(
+                                    board,
+                                    format!("{}", message).as_str(),
+                                );
+                                return;
+                            }
+                        };
 
-            CommandPayload::SensorCalibrateClearPayload(payload) => {
-                let payload_values = match payload.convert() {
-                    Ok(payload_values) => payload_values,
-                    Err(message) => {
-                        board.usb_serial_send(format!("{}", message).as_str());
-                        return;
-                    }
-                };
+                        if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                            if let Some(driver) = &mut self.sensor_drivers[index] {
+                                let pairs: &Option<Box<[CalibrationPair]>> =
+                                    &self.calibration_point_values[index];
+                                // if let Some(pairs) = pairs {
+                                //     for i in 0..pairs.len() {
+                                //         let pair = &pairs[i];
+                                //         rprintln!("calib pair{:?} {} {}", i, pair.point, pair.values[i]);
+                                //     }
+                                // }
 
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
-                    if let Some(driver) = &mut self.sensor_drivers[index] {
-                        driver.clear_calibration();
-                        responses::send_command_response_message(board, "Cleared payload");
-                    }
-                }
-            }
-            CommandPayload::BoardSerialSendPayload(payload) => {
-                let payload_values = match payload.convert() {
-                    Ok(payload_values) => payload_values,
-                    Err(error) => {
-                        responses::send_command_response_error(
-                            board,
-                            "Problem with message",
-                            error,
-                        );
-                        return;
-                    }
-                };
+                                if let Some(pairs) = pairs {
+                                    for i in 0..pairs.len() {
+                                        let pair = &pairs[i];
+                                        rprintln!("calib pair{:?} {} {}", i, pair.point, pair.values[0]);
+                                    }
+                            
+                                    driver.clear_calibration();
+                                    match driver.fit(pairs) {
+                                        Ok(_) => {
+                                            let mut storage = [0u8; EEPROM_SENSOR_SETTINGS_SIZE];
+                                            driver.get_configuration_bytes(&mut storage);
 
-                let message = match core::str::from_utf8(
-                    &payload_values.message[0..payload_values.message_len as usize],
-                ) {
-                    Ok(message) => message,
-                    Err(error) => {
-                        responses::send_command_response_error(
-                            board,
-                            "Problem sending message",
-                            format!(" {} \n", error).as_str(),
-                        );
-                        return;
-                    }
-                };
-
-                let prepared_message = format!("{}\r\n", message);
-                let prepared_message = prepared_message.as_str();
-                rprintln!("message {}", prepared_message);
-                board.usart_send(prepared_message);
-                // rprintln!("{}", "\r\n");
-                // board.usart_send("\r\n");
-                // rprintln!("just line feed");
-                // board.usart_send("\r");
-
-                board.delay_ms(500);
-
-                let response = match usart_service::take_command(board) {
-                    Ok(message) => message,
-                    Err(_) => {
-                        rprintln!("no usart response");
-                        responses::send_command_response_message(
-                            board,
-                            "No response received on serial",
-                        );
-                        return;
-                    }
-                };
-
-                let length = response.len();
-                for b in &response[0..length] {
-                    let c = *b as char;
-                    rprintln!("{}", c);
-                }
-
-                match core::str::from_utf8(&response) {
-                    Ok(response) => {
-                        let end = response.find("\0");
-                        let mut response = response;
-                        match end {
-                            Some(end) => response = &response[0..end],
-                            None => {}
+                                            board.store_sensor_settings(index as u8, &storage);
+                                            responses::send_command_response_message(board, "Fit OK");
+                                        }
+                                        Err(_) => {
+                                            responses::send_command_response_message(
+                                                board,
+                                                "something went wrong",
+                                            );
+                                        }
+                                    }
+                                }
+                            }
                         }
-                        responses::send_command_response_message(board, response);
                     }
-                    Err(error) => {
-                        responses::send_command_response_error(
-                            board,
-                            "Problem receiving message",
-                            format!(" {} \n", error).as_str(),
-                        );
-                    }
-                };
+            CommandPayload::SensorCalibrateClearPayload(payload) => {
+                        let payload_values = match payload.convert() {
+                            Ok(payload_values) => payload_values,
+                            Err(message) => {
+                                board.usb_serial_send(format!("{}", message).as_str());
+                                return;
+                            }
+                        };
 
-                return;
-            }
+                        if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                            if let Some(driver) = &mut self.sensor_drivers[index] {
+                                driver.clear_calibration();
+                                responses::send_command_response_message(board, "Cleared payload");
+                            }
+                        }
+                    }
+            CommandPayload::BoardSerialSendPayload(payload) => {
+                        let payload_values = match payload.convert() {
+                            Ok(payload_values) => payload_values,
+                            Err(error) => {
+                                responses::send_command_response_error(
+                                    board,
+                                    "Problem with message",
+                                    error,
+                                );
+                                return;
+                            }
+                        };
+
+                        let message = match core::str::from_utf8(
+                            &payload_values.message[0..payload_values.message_len as usize],
+                        ) {
+                            Ok(message) => message,
+                            Err(error) => {
+                                responses::send_command_response_error(
+                                    board,
+                                    "Problem sending message",
+                                    format!(" {} \n", error).as_str(),
+                                );
+                                return;
+                            }
+                        };
+
+                        let prepared_message = format!("{}\r\n", message);
+                        let prepared_message = prepared_message.as_str();
+                        rprintln!("message {}", prepared_message);
+                        board.usart_send(prepared_message);
+                        // rprintln!("{}", "\r\n");
+                        // board.usart_send("\r\n");
+                        // rprintln!("just line feed");
+                        // board.usart_send("\r");
+
+                        board.delay_ms(500);
+
+                        let response = match usart_service::take_command(board) {
+                            Ok(message) => message,
+                            Err(_) => {
+                                rprintln!("no usart response");
+                                responses::send_command_response_message(
+                                    board,
+                                    "No response received on serial",
+                                );
+                                return;
+                            }
+                        };
+
+                        let length = response.len();
+                        for b in &response[0..length] {
+                            let c = *b as char;
+                            rprintln!("{}", c);
+                        }
+
+                        match core::str::from_utf8(&response) {
+                            Ok(response) => {
+                                let end = response.find("\0");
+                                let mut response = response;
+                                match end {
+                                    Some(end) => response = &response[0..end],
+                                    None => {}
+                                }
+                                responses::send_command_response_message(board, response);
+                            }
+                            Err(error) => {
+                                responses::send_command_response_error(
+                                    board,
+                                    "Problem receiving message",
+                                    format!(" {} \n", error).as_str(),
+                                );
+                            }
+                        };
+
+                        return;
+                    }
+            CommandPayload::TelemeterGet => {
+                match self.telemeter.get_identity(board) {
+                    Ok(message) => {
+                        board.usb_serial_send(format!("{}\n", message.as_str()).as_str());
+                    },
+                    Err(_) => {
+                        responses::send_command_response_message(board, "Failed to get identifiers");
+                    }
+                }
+            },
         }
     }
 
