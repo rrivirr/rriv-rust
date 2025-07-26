@@ -243,7 +243,6 @@ impl RRIVBoard for Board {
             let slice = &mut buffer[slot * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE
                 ..(slot + 1) * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
             read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice);
-            util::remove_invalid_utf8(slice);
         }
     }
 
