@@ -1,4 +1,4 @@
-const SENSOR_NAMES: [&str; 8] = [
+const SENSOR_NAMES: [&str; 9] = [
     "no_match",
     "generic_analog",
     "atlas_ec",
@@ -7,6 +7,7 @@ const SENSOR_NAMES: [&str; 8] = [
     "ring_temperature",
     "heater",
     "ds18b20",
+    "k30_co2",
 ];
 
 pub fn sensor_type_id_from_name(name: &str) -> u16 {

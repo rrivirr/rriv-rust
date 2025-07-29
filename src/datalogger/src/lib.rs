@@ -15,8 +15,7 @@ use rriv_board::{
 use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
 use crate::{
-    alloc::string::ToString, protocol::responses, services::*,
-    telemetry::telemeters::lorawan::RakWireless3172,
+    alloc::string::ToString, drivers::k30_co2::{K30CO2SpecialConfiguration, K30CO2}, protocol::responses, services::*, telemetry::telemeters::lorawan::RakWireless3172
 };
 use alloc::boxed::Box;
 use alloc::format;
@@ -195,6 +194,10 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
     driver_create_functions[7] = Some(driver_create_functions!(
         Ds18b20,
         Ds18b20SpecialConfiguration
+    ));
+     driver_create_functions[8] = Some(driver_create_functions!(
+        K30CO2,
+        K30CO2SpecialConfiguration
     ));
     // driver_create_functions[2] = Some(driver_create_function!(AHT22));
 
@@ -703,7 +706,7 @@ impl DataLogger {
                             sensor_id = match payload_id {
                                 serde_json::Value::String(id) => {
                                     let mut prepared_id: [u8; 6] = [0; 6];
-                                    prepared_id.copy_from_slice(id.as_bytes());
+                                    prepared_id[0..id.len()].copy_from_slice(id.as_bytes());
                                     id_provided = true;
                                     prepared_id
                                 }
@@ -895,19 +898,19 @@ impl DataLogger {
                                     board.usb_serial_send(",");
                                 }
 
-                                let id_bytes = driver.get_id();
-                                // let id = "id";string
-                                // let id = core::str::from_utf8_unchecked(&id_bytes);
-
-                                // let id_cstr = CStr::from_bytes_with_nul(&id_bytes).unwrap_or_default();
-                                // let id_str = id_cstr.to_str().unwrap_or_default();
-
-                                let id_str = core::str::from_utf8(&id_bytes).unwrap_or_default();
+                                let mut id_bytes = driver.get_id();
+                                let id_str = match util::str_from_utf8(&mut id_bytes){
+                                    Ok(str) => str,
+                                    Err(_) => "error",
+                                };
 
                                 let type_id = driver.get_type_id();
-                                let sensor_name_bytes = sensor_name_from_type_id(type_id.into());
-                                let sensor_name_str =
-                                    core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+                                let mut sensor_name_bytes = sensor_name_from_type_id(type_id.into());
+                                let sensor_name_str = match util::str_from_utf8(&mut sensor_name_bytes){
+                                    Ok(str) => str,
+                                    Err(_) => "error",
+                                };
+
                                 let json = json!({
                                     "id": id_str,
                                     "type": sensor_name_str
