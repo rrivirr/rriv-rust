@@ -1,4 +1,4 @@
-const SENSOR_NAMES: [&str; 8] = [
+const SENSOR_NAMES: [&str; 9] = [
     "no_match",
     "generic_analog",
     "atlas_ec",
@@ -7,6 +7,7 @@ const SENSOR_NAMES: [&str; 8] = [
     "ring_temperature",
     "heater",
     "ds18b20",
+    "k30_co2",
 ];
 
 pub fn sensor_type_id_from_name(name: &str) -> u16 {
@@ -20,7 +21,7 @@ pub fn sensor_type_id_from_name(name: &str) -> u16 {
 
 pub fn sensor_name_from_type_id(id: usize) -> [u8; 16] {
     let mut rval = [b'\0'; 16];
-    let name = SENSOR_NAMES[id].clone();
+    let name = SENSOR_NAMES[id];
     rval[..name.len()].copy_from_slice(name.as_bytes());
     rval
 }

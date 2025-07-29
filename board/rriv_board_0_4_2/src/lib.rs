@@ -51,7 +51,7 @@ use rriv_board::{
     SensorDriverServices, TelemetryDriverServices, EEPROM_TOTAL_SENSOR_SLOTS,
 };
 
-use ds323x::{DateTimeAccess, Ds323x, NaiveDate, NaiveDateTime, NaiveTime};
+use ds323x::{DateTimeAccess, Ds323x, NaiveDateTime};
 use stm32f1xx_hal::rtc::Rtc;
 
 use one_wire_bus::{crc::check_crc8, Address, OneWire, SearchState};
@@ -371,12 +371,11 @@ impl SensorDriverServices for Board {
         match self.internal_adc.read(channel) {
             Ok(value) => return value,
             Err(error) => {
-                let mut error_string = "unhandled error";
-                match error {
-                    AdcError::NBError(_) => error_string = "Internal ADC NBError",
-                    AdcError::NotConfigured => error_string = "Internal ADC Not Configured",
-                    AdcError::ReadError => error_string = "Internal ADC Read Error",
-                }
+                let mut error_string = match error {
+                    AdcError::NBError(_) => "Internal ADC NBError",
+                    AdcError::NotConfigured =>  "Internal ADC Not Configured",
+                    AdcError::ReadError => "Internal ADC Read Error",
+                };
                 rriv_board::RRIVBoard::usb_serial_send(self, &error_string);
                 return 0;
             }
@@ -397,13 +396,9 @@ impl SensorDriverServices for Board {
         match self.i2c2.read(addr, buffer) {
             Ok(_) => return Ok(()),
             Err(e) => {
-                rprintln!("{:?}", e);
-                // rprintln!(&format!("Problem reading I2C2 {}\n", addr))
-                // let error_msg  = &format!("Problem reading I2C2 {}\n", addr);
-                // rprintln!(error_msg);
                 rriv_board::RRIVBoard::serial_debug(
                     self,
-                    &format!("Problem reading I2C2 {}\n", addr),
+                    &format!("Problem reading I2C2 {:X?} {:?}\n", addr, e),
                 );
                 for i in 0..buffer.len() {
                     buffer[i] = 0b11111111; // error value
@@ -425,11 +420,30 @@ impl SensorDriverServices for Board {
                     stm32f1xx_hal::i2c::Error::Timeout => "tout",
                     _ => "none",
                 };
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {} {}", addr, kind));
+                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {:X?} {}", addr, kind));
                 return Err(());
             }
         }
     }
+
+    fn ic2_write_read(&mut self, addr: u8, message: &[u8], buffer: &mut [u8]) -> Result<(), ()> {
+        match self.i2c2.write_read(addr, message, buffer) {
+            Ok(_) => return Ok(()),
+            Err(e) => {
+                let kind = match e {
+                    stm32f1xx_hal::i2c::Error::Bus => "bus",
+                    stm32f1xx_hal::i2c::Error::Arbitration => "arb",
+                    stm32f1xx_hal::i2c::Error::Acknowledge => "ack",
+                    stm32f1xx_hal::i2c::Error::Overrun => "ovr",
+                    stm32f1xx_hal::i2c::Error::Timeout => "tout",
+                    _ => "none",
+                };
+                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {:X?} {}", addr, kind));
+                return Err(());
+            } 
+        }
+    }
+
 
     // fn borrow_one_wire_bus(&mut self) -> &mut dyn rriv_board::OneWireBusInterface  {
 
@@ -453,10 +467,10 @@ impl SensorDriverServices for Board {
         let gpio = match pin {
             0 => {
                 // self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
-                if (value) {
-                    self.gpio.gpio1.set_high();
+                if value {
+                    let _ = self.gpio.gpio1.set_high();
                 } else {
-                    self.gpio.gpio1.set_low();
+                    let _ = self.gpio.gpio1.set_low();
                 }
             }
             // 1 => &mut self.gpio.gpio2,
@@ -895,17 +909,17 @@ impl BoardBuilder {
     ) -> BoardI2c2 {
         let scl2 = pins.i2c2_scl.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
         let sda2 = pins.i2c2_sda.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
-        let mut x = BlockingI2c::i2c2(
+        let x = BlockingI2c::i2c2(
             i2c2,
             (scl2, sda2),
             Mode::Standard {
                 frequency: 100.kHz(), // slower to same some energy?
-            },
+            },  
             *clocks,
             1000,
             10,
-            1000,
-            1000,
+            1000000,
+            1000000,
         );
 
         // this works, so moving out and putting back could conceivably work.
@@ -944,9 +958,9 @@ impl BoardBuilder {
         let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
 
         // Set up pins
-        let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
+        let (pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
         let (
-            mut external_adc_pins,
+            external_adc_pins,
             internal_adc_pins,
             battery_level_pins,
             dynamic_gpio_pins,
@@ -956,7 +970,7 @@ impl BoardBuilder {
             mut power_pins,
             rgb_led_pins,
             serial_pins,
-            spi1_pins,
+            _spi1_pins,
             spi2_pins,
             usb_pins,
         ) = pin_groups::build(pins, &mut gpio_cr, delay);
@@ -1032,15 +1046,25 @@ impl BoardBuilder {
         );
         rprintln!("set up i2c1 done");
 
+        // rprintln!("skipping unhang I2C2 if hung");
+
         rprintln!("unhang I2C2 if hung");
         
         let mut scl2 = i2c2_pins.i2c2_scl.into_open_drain_output(&mut gpio_cr.gpiob_crh);
         let mut sda2= i2c2_pins.i2c2_sda.into_open_drain_output(&mut gpio_cr.gpiob_crh);
         sda2.set_high(); // remove signal from the master
 
-        match  try_unhang_i2c(&mut scl2, &sda2, &mut delay, 100_000, i2c_hung_fix::RECOMMENDED_MAX_CLOCK_CYCLES){
-            Ok(_) => {},
-            Err(_) => loop{}, // wiat for IDWP to reset.   actually we can just hardware reset here?
+        match try_unhang_i2c(&mut scl2, &sda2, &mut delay, 100_000, i2c_hung_fix::RECOMMENDED_MAX_CLOCK_CYCLES){
+            Ok(ok) => {
+                match ok {
+                    i2c_hung_fix::Sucess::BusNotHung => {},
+                    i2c_hung_fix::Sucess::FixedHungBus => {
+                        rprintln!("Fixed hung bus");
+                        loop {}; // wait for IDWD to reset
+                    },
+                }
+            },
+            Err(_) => loop{}, // wait for IDWD to reset.   actually we can just hardware reset here?
         }
 
         let i2c2_pins = I2c2Pins::rebuild(scl2, sda2, &mut gpio_cr);
@@ -1048,6 +1072,18 @@ impl BoardBuilder {
         let mut i2c2 =
             BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
         rprintln!("set up i2c2 done");
+
+        rprintln!("i2c2 scanning for k30...");
+        // loop {
+            let mut buf = [b'\0'; 1];
+            let addr = 0x68; //7F - all
+            if i2c2.write(addr, &mut buf).is_ok() {  // Has to be a write in order to respond...
+                rprintln!("{:02x} good", addr);
+                delay.delay_ms(2000_u16);
+            }
+        //     delay.delay_ms(50_u16);
+        // }
+
 
         rprintln!("i2c1 scanning...");
 
@@ -1077,6 +1113,7 @@ impl BoardBuilder {
             delay.delay_ms(10_u32);
         }
         rprintln!("scan is done");
+
 
 
         watchdog.feed();

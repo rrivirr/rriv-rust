@@ -5,9 +5,9 @@
 
 // extern crate panic_halt;
 
-use core::{panic::Location, prelude::rust_2024::*, u8};
+use core::prelude::rust_2024::*;
 use cortex_m_rt::entry;
-use rtt_target::{rprint, rtt_init_print};
+use rtt_target::{rtt_init_print};
 
 pub mod prelude;
 
