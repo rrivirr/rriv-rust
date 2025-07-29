@@ -371,12 +371,11 @@ impl SensorDriverServices for Board {
         match self.internal_adc.read(channel) {
             Ok(value) => return value,
             Err(error) => {
-                let mut error_string = "unhandled error";
-                match error {
-                    AdcError::NBError(_) => error_string = "Internal ADC NBError",
-                    AdcError::NotConfigured => error_string = "Internal ADC Not Configured",
-                    AdcError::ReadError => error_string = "Internal ADC Read Error",
-                }
+                let mut error_string = match error {
+                    AdcError::NBError(_) => "Internal ADC NBError",
+                    AdcError::NotConfigured =>  "Internal ADC Not Configured",
+                    AdcError::ReadError => "Internal ADC Read Error",
+                };
                 rriv_board::RRIVBoard::usb_serial_send(self, &error_string);
                 return 0;
             }
@@ -910,7 +909,7 @@ impl BoardBuilder {
     ) -> BoardI2c2 {
         let scl2 = pins.i2c2_scl.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
         let sda2 = pins.i2c2_sda.into_alternate_open_drain(&mut cr.gpiob_crh); // i2c
-        let mut x = BlockingI2c::i2c2(
+        let x = BlockingI2c::i2c2(
             i2c2,
             (scl2, sda2),
             Mode::Standard {
@@ -959,9 +958,9 @@ impl BoardBuilder {
         let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
 
         // Set up pins
-        let (mut pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
+        let (pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
         let (
-            mut external_adc_pins,
+            external_adc_pins,
             internal_adc_pins,
             battery_level_pins,
             dynamic_gpio_pins,
@@ -971,7 +970,7 @@ impl BoardBuilder {
             mut power_pins,
             rgb_led_pins,
             serial_pins,
-            spi1_pins,
+            _spi1_pins,
             spi2_pins,
             usb_pins,
         ) = pin_groups::build(pins, &mut gpio_cr, delay);

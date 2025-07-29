@@ -142,12 +142,11 @@ impl ExternalAdc {
         rprintln!("set channel reg: {}", channel_command[1]);
         self.send_i2c(i2c, &channel_command); // writing to the channel register restarts the channel cycle.
 
-        let mut value: u16 = core::u16::MAX;
         let mut buffer: [u8; 2] = [0; 2];
         self.read_i2c(i2c, ADC_CONVERSION_RESULT_REGISTER_ADDRESS, &mut buffer);
         // MSB and LSB need to be swapped in order to change to little endian
         let conversion_result = ConversionResultRegister::from_be_bytes(buffer);
-        value = conversion_result.conv_result();
+        let value = conversion_result.conv_result();
         rprintln!(
             "EXADC: conversion result {} : {}   {:?}",
             conversion_result.channel(),

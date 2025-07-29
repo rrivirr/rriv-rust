@@ -95,7 +95,6 @@ macro_rules! getters {
 }
 
 pub(crate) use getters;
-
 pub fn single_raw_or_cal_parameter_identifiers(index: usize, prefix: Option<u8>) -> [u8; 16] {
     let mut buf = [0u8; 16];
     let identifiers = ["raw", "cal"];

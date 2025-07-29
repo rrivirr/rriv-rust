@@ -1,3 +1,5 @@
+use core::num::Wrapping;
+
 use crate::sensor_name_from_type_id;
 
 use super::types::*;
@@ -45,7 +47,11 @@ impl SensorDriver for K30CO2 {
     getters!();
 
     fn get_measured_parameter_count(&mut self) -> usize {
-        return 2;
+        if self.m != 0.0 && self.b != 0.0 {
+            return 2;
+        } else {
+            return 1;
+        }
     }
 
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
@@ -53,20 +59,27 @@ impl SensorDriver for K30CO2 {
     }
 
     fn get_measured_parameter_identifier(&mut self, index: usize) -> [u8; 16] {
-        return single_raw_or_cal_parameter_identifiers(index, None);
+        let mut identifier =  single_raw_or_cal_parameter_identifiers(index, None);
+        let nul_range_end = identifier.iter()
+        .position(|&c| c == b'\0')
+        .unwrap_or(identifier.len());
+        if nul_range_end <= identifier.len() - 5 {
+            identifier[nul_range_end..nul_range_end + 4].copy_from_slice(b"_ppm");
+        }
+        identifier
     }
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
 
-        rprintln!("i2c2 scanning for k30...");
+        // rprintln!("i2c2 scanning for k30...");
 
-            let mut buf = [b'\0'; 1];
-            let addr = 0x68; //7F - all
-            if board.ic2_write(addr, &mut buf).is_ok() {
-                rprintln!("{:02x} good", addr);
-                board.delay_ms(500);
-            }
-            board.delay_ms(50_u16);
+        //     let mut buf = [b'\0'; 1];
+        //     let addr = 0x68; //7F - all
+        //     if board.ic2_write(addr, &mut buf).is_ok() {
+        //         rprintln!("{:02x} good", addr);
+        //         board.delay_ms(500);
+        //     }
+        //     board.delay_ms(50_u16);
             
 
 
@@ -75,18 +88,22 @@ impl SensorDriver for K30CO2 {
        const READ_RAM_COMMAND: u8 = 0x2;
        const NUMBER_OF_BYTES: u8 = 2;
        const CO2_VALUE_ADDRESS: u8 = 0x08;
+
+       const READ_COMPLETE_STATUS: u8 = 0x21;
+        //    const READ_INCOMPLETE_STATUS: u8 = 0x20;
        
         // << 1; // 0x68 in 7 bits
 
         let mut command: [u8; 4] = [0; 4];
         command[0] = (READ_RAM_COMMAND << 4) + NUMBER_OF_BYTES;
-        command[1] = CO2_VALUE_ADDRESS; // LSM of RAM address
-        command[2] = 0; // MSB of RAM address is 0;
-        let checksum: u8 = command[0] + command[1] + command[2];
-        command[3] = checksum;
+        command[1] = 0; // MSB of RAM address
+        command[2] = CO2_VALUE_ADDRESS; // MSB of RAM address is 0;
+        let checksum: Wrapping<u8> = Wrapping(command[0]) + Wrapping(command[1]) + Wrapping(command[2]);
+        command[3] = checksum.0;
         rprintln!("command {:X?}", command);
 
         let mut response: [u8; 4] = [0; 4];
+        self.measured_parameter_values[0] = -1 as f64;
 
         match board.ic2_write(I2C_ADDRESS, &command) {
             Ok(_) => rprintln!("request sent ok"),
@@ -97,12 +114,33 @@ impl SensorDriver for K30CO2 {
             }
 ,
         }
+
+        board.delay_ms(40); // 20ms is 'typical' in the datasheet.
         
         match board.ic2_read(I2C_ADDRESS, &mut response){
             Ok(_) => {
                 rprintln!("response {:X?}", response);
-                let value: u16 = ((response[1] as u16) << 1) + (response[0] as u16);
-                self.measured_parameter_values[0] = value as f64;
+                // check if read is complete
+                if response[0] != READ_COMPLETE_STATUS { // read is incomplete
+                    rprintln!("Read incomplete");
+                    return; // TODO: retry the read
+                }
+
+                // validate checksum
+                let checksum: Wrapping<u8> = Wrapping(response[0]) + Wrapping(response[1]) + Wrapping(response[2]);
+                if response[3] != checksum.0 {
+                    rprintln!("Invalid checksum");
+                    return; // TODO: retry the read
+                }
+
+                // 2 bytes signed integer
+                // MSB at lower address.  
+                // response[1] MSB, response[2] LSB: Big Endian
+
+                // Convert to i16
+                let value_bytes: [u8; 2] = [response[1], response[2]];
+                let value: u16 = u16::from_be_bytes(value_bytes); // datasheet claims this should be i16, but seem like this is (u16 / 100) ppm
+                self.measured_parameter_values[0] = value as f64; // / 100_f64;
             },
             Err(err) => { 
                 rprintln!("i2c err: {:?}", err);
