@@ -64,7 +64,6 @@ pub trait RRIVBoard: Send {
     control_services!();
 
     fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices;
-    fn get_actuator_driver_services(&mut self) -> &mut dyn ActuatorDriverServices;
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices;
 
     // low level board functionality
@@ -80,10 +79,6 @@ pub trait RRIVBoard: Send {
 //     modbus,
 // }
 
-// pub trait ActuatorInterfaces {
-//     i2c,
-//     modbug
-// }
 
 // pub trait TelemeterInterfaces {
 //     spi
@@ -99,6 +94,7 @@ pub trait OneWireBusInterface {
 }
 
 
+// TODO: this isn't a great construct or way of doing things
 pub trait SensorDriverServices {
     // future functions for ADC interface
     // fn get_adc_capabilities(&mut self); // minimum functionality return of adcs
@@ -128,11 +124,7 @@ pub trait SensorDriverServices {
     fn one_wire_bus_search(&mut self) -> Option<u64>;
 
     control_services!();
-
-}
-
-pub trait ActuatorDriverServices {
-    control_services!();
+    
 }
 
 pub trait TelemetryDriverServices {

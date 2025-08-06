@@ -2,7 +2,7 @@ const SENSOR_NAMES: [&str; 9] = [
     "no_match",
     "generic_analog",
     "atlas_ec",
-    "aht22",
+    "aht20",
     "mcp_9808",
     "ring_temperature",
     "heater",

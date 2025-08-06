@@ -39,7 +39,7 @@ impl SensorDriver for K30CO2 {
         })
     }
 
-    fn setup(&mut self) {
+    fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         self.m = self.special_config.m as f64;
         self.b = self.special_config.b as f64;
     }

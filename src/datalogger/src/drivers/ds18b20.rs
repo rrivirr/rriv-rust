@@ -97,8 +97,8 @@ impl Ds18b20 {
 }
 
 impl SensorDriver for Ds18b20 {
-    fn setup(&mut self) {
-        todo!()
+    fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
+        // todo!()
     }
 
     getters!();

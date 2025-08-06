@@ -57,7 +57,7 @@ impl CalibrationPair {
 pub trait SensorDriver {
     fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]); // derivable
     fn get_configuration_json(&mut self) -> serde_json::Value;
-    fn setup(&mut self);
+    fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
     fn get_id(&self) -> [u8; 6];
     fn get_type_id(&mut self) -> u16;
 

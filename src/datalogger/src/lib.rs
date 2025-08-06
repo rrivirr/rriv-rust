@@ -16,7 +16,7 @@ use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
 use crate::{
     alloc::string::ToString,
-    drivers::k30_co2::{K30CO2SpecialConfiguration, K30CO2},
+    drivers::{aht20::{AHT20SpecialConfiguration, AHT20}, k30_co2::{K30CO2SpecialConfiguration, K30CO2}},
     protocol::responses,
     services::*,
     telemetry::telemeters::lorawan::RakWireless3172,
@@ -183,13 +183,16 @@ fn get_registry() -> [DriverCreateFunctions; 256] {
     driver_create_functions[1] = Some(driver_create_functions!(
         GenericAnalog,
         GenericAnalogSpecialConfiguration
-    )); //distinct settings? characteristic settings?
+    )); 
     driver_create_functions[2] = None;
-    driver_create_functions[3] = None;
+    driver_create_functions[3] = Some(driver_create_functions!(
+        AHT20,
+        AHT20SpecialConfiguration
+    ));
     driver_create_functions[4] = Some(driver_create_functions!(
         MCP9808TemperatureDriver,
         MCP9808TemperatureDriverSpecialConfiguration
-    )); //distinct settings? characteristic settings?
+    )); 
     driver_create_functions[5] = Some(driver_create_functions!(
         RingTemperatureDriver,
         RingTemperatureDriverSpecialConfiguration
@@ -362,7 +365,7 @@ impl DataLogger {
                     [0; SENSOR_SETTINGS_PARTITION_SIZE];
                 s.clone_from_slice(special_settings_slice); // explicitly define the size of the arra
                 let mut driver = functions.1(settings, &s);
-                driver.setup();
+                driver.setup(board.get_sensor_driver_services());
                 self.sensor_drivers[i] = Some(driver);
             }
         }
@@ -799,7 +802,7 @@ impl DataLogger {
                     rprintln!("calling func 0"); // TODO: crashed here
                     let (mut driver, special_settings_bytes) =
                         functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
-                    driver.setup();
+                    driver.setup(board.get_sensor_driver_services());
                     self.sensor_drivers[slot] = Some(driver);
 
                     // get the generic settings as bytes
@@ -852,7 +855,7 @@ impl DataLogger {
                 let sensor_id = match payload.id {
                     serde_json::Value::String(id) => {
                         let mut prepared_id: [u8; 6] = [0; 6];
-                        prepared_id.copy_from_slice(id.as_bytes());
+                        prepared_id[0..id.as_bytes().len()].copy_from_slice(id.as_bytes());
                         prepared_id
                     }
                     _ => {

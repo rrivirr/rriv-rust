@@ -47,7 +47,7 @@ use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use rriv_board::{
-    ActuatorDriverServices, OneWireBusInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor,
+    OneWireBusInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor,
     SensorDriverServices, TelemetryDriverServices, EEPROM_TOTAL_SENSOR_SLOTS,
 };
 
@@ -304,10 +304,6 @@ impl RRIVBoard for Board {
         return self;
     }
 
-    fn get_actuator_driver_services(&mut self) -> &mut dyn ActuatorDriverServices {
-        return self;
-    }
-
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices {
         return self;
     }
@@ -547,10 +543,6 @@ impl SensorDriverServices for Board {
             },
         } 
     }
-}
-
-impl ActuatorDriverServices for Board {
-    control_services_impl!();
 }
 
 impl TelemetryDriverServices for Board {

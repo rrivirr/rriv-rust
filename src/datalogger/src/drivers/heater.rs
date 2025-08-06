@@ -93,7 +93,7 @@ impl Heater {
 }
 
 impl SensorDriver for Heater {
-    fn setup(&mut self) {
+    fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         // todo!()
     }
 

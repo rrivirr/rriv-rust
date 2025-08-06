@@ -70,7 +70,7 @@ impl SensorDriver for MCP9808TemperatureDriver {
         })
     }
 
-    fn setup(&mut self) {
+    fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         self.calibration_offset = (self.special_config.calibration_offset as f64) / 1000_f64;
     }
 
