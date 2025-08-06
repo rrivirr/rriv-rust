@@ -62,7 +62,7 @@ impl DataloggerSettings {
             logger_name: [b'\0'; 8],
             site_name: [b'\0'; 8],
             deployment_timestamp: 0,
-            interval: 60,
+            interval: 1,
             burst_repetitions: 1,
             start_up_delay: 0,
             delay_between_bursts: 0,
@@ -230,21 +230,23 @@ impl DataLogger {
 
         // rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
-        // rprintln!("retrieved settings {:?}", self.settings);
+        rprintln!("retrieved settings {:?}", self.settings);
 
         // setup each service
         command_service::setup(board);
         usart_service::setup(board);
 
         // For smaller EERPOM, this would overwrite sensor drivers config
-        // self.settings = DataloggerSettings::new();
+        // #[cfg(feature = "24LC08")]
+
+        self.settings = DataloggerSettings::new();
         // self.settings.deployment_identifier = [
         //     b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e', b'n', b'a', b'm', b'e', b'e', b'e',
         //     b'e', b'e',
         // ];
         // self.settings.logger_name = [b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e'];
         // rprintln!("attempting to store settings for test purposes");
-        // self.store_settings(board);
+        self.store_settings(board);
 
         // read all the sensors from EEPROM
         let registry = get_registry();
@@ -321,7 +323,7 @@ impl DataLogger {
         self.update_actuators(board);
         let interactive_mode_logging = true;
         if interactive_mode_logging {
-            if board.timestamp() > self.last_interactive_log_time + 1 {
+            if board.timestamp() >= self.last_interactive_log_time + self.settings.interval as i64 {
                 // need to separate logic here.
                 // notify(F("interactive log"));
                 unsafe {
