@@ -5,9 +5,7 @@ mod datalogger_commands;
 mod services;
 
 use datalogger_commands::*;
-use ds18b20::{Ds18b20, Ds18b20SpecialConfiguration};
-use heater::{Heater, HeaterSpecialConfiguration};
-use ring_temperature::{RingTemperatureDriver, RingTemperatureDriverSpecialConfiguration};
+
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
     EEPROM_TOTAL_SENSOR_SLOTS,
@@ -16,7 +14,6 @@ use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
 use crate::{
     alloc::string::ToString,
-    drivers::{aht20::{AHT20SpecialConfiguration, AHT20}, k30_co2::{K30CO2SpecialConfiguration, K30CO2}},
     protocol::responses,
     services::*,
     telemetry::telemeters::lorawan::RakWireless3172,
@@ -27,8 +24,6 @@ use rtt_target::rprintln;
 
 mod drivers;
 use drivers::{types::*, *};
-use generic_analog::*;
-use mcp9808::*;
 
 mod protocol;
 mod registry;
@@ -123,92 +118,7 @@ impl DataloggerSettings {
     }
 }
 
-/* start registry WIP */
 
-#[macro_export]
-macro_rules! driver_create_functions {
-    ($driver:ty, $special_settings_type:ty) => {
-        (
-            |general_settings: SensorDriverGeneralConfiguration,
-             special_settings_values: serde_json::Value|
-             -> (Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE]) {
-                let special_settings =
-                    <$special_settings_type>::new_from_values(special_settings_values); // ok
-                let driver = <$driver>::new(general_settings, special_settings); // seems ok
-
-                let bytes: &[u8] = unsafe { any_as_u8_slice(&special_settings) }; // must be this one, maybe size comes back wrong
-                if bytes.len() != SENSOR_SETTINGS_PARTITION_SIZE {
-                    // special_settings_type does not confrm to expected size.  this is a development fault
-                    rprintln!("{} is wrong size {}", "<$special_settings_type>", bytes.len());
-                    // causes crash later.  other way to gracefully handle?
-                    panic!();
-                }
-                let mut bytes_sized: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
-                    [0; SENSOR_SETTINGS_PARTITION_SIZE];
-                let copy_size = if bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE { // this was supposed to make it safe...
-                    SENSOR_SETTINGS_PARTITION_SIZE
-                } else {
-                    bytes.len()
-                };
-                bytes_sized[..SENSOR_SETTINGS_PARTITION_SIZE].copy_from_slice(&bytes[0..copy_size]);
-
-                (Box::new(driver), bytes_sized)
-            },
-            |general_settings: SensorDriverGeneralConfiguration,
-             special_settings_slice: &[u8]|
-             -> Box<dyn SensorDriver> {
-                let mut bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
-                    [0; SENSOR_SETTINGS_PARTITION_SIZE];
-                bytes.clone_from_slice(special_settings_slice);
-                let special_settings = <$special_settings_type>::new_from_bytes(bytes);
-                let driver = <$driver>::new(general_settings, special_settings);
-                Box::new(driver)
-            },
-        )
-    };
-}
-
-type DriverCreateFunctions = Option<(
-    fn(
-        SensorDriverGeneralConfiguration,
-        serde_json::Value,
-    ) -> (Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE]),
-    fn(SensorDriverGeneralConfiguration, &[u8]) -> Box<dyn SensorDriver>,
-)>;
-
-fn get_registry() -> [DriverCreateFunctions; 256] {
-    const ARRAY_INIT_VALUE: DriverCreateFunctions = None;
-    let mut driver_create_functions: [DriverCreateFunctions; 256] = [ARRAY_INIT_VALUE; 256];
-    driver_create_functions[0] = None;
-    driver_create_functions[1] = Some(driver_create_functions!(
-        GenericAnalog,
-        GenericAnalogSpecialConfiguration
-    )); 
-    driver_create_functions[2] = None;
-    driver_create_functions[3] = Some(driver_create_functions!(
-        AHT20,
-        AHT20SpecialConfiguration
-    ));
-    driver_create_functions[4] = Some(driver_create_functions!(
-        MCP9808TemperatureDriver,
-        MCP9808TemperatureDriverSpecialConfiguration
-    )); 
-    driver_create_functions[5] = Some(driver_create_functions!(
-        RingTemperatureDriver,
-        RingTemperatureDriverSpecialConfiguration
-    ));
-    driver_create_functions[6] = Some(driver_create_functions!(Heater, HeaterSpecialConfiguration));
-    driver_create_functions[7] = Some(driver_create_functions!(
-        Ds18b20,
-        Ds18b20SpecialConfiguration
-    ));
-    driver_create_functions[8] = Some(driver_create_functions!(K30CO2, K30CO2SpecialConfiguration));
-    // driver_create_functions[2] = Some(driver_create_function!(AHT22));
-
-    driver_create_functions
-}
-
-/* end registry WIP */
 
 pub enum DataLoggerMode {
     Interactive,
