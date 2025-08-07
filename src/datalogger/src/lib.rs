@@ -13,9 +13,7 @@ use rriv_board::{
 use util::{any_as_u8_slice, check_alphanumeric};
 extern crate alloc;
 use crate::{
-    alloc::string::ToString,
-    protocol::responses,
-    services::*,
+    alloc::string::ToString, protocol::responses, services::*,
     telemetry::telemeters::lorawan::RakWireless3172,
 };
 use alloc::boxed::Box;
@@ -45,7 +43,7 @@ struct DataloggerSettings {
     interval: u16,
     start_up_delay: u16,
     delay_between_bursts: u16,
-    burst_repetitions: u8,
+    bursts_per_measurement_cycle: u8,
     mode: u8,
     // external_adc_enabled: u8:1, // how we we handle bitfields? -> bitfield_struct crate works well
     // debug_includes_values: u8:1,
@@ -63,7 +61,7 @@ impl DataloggerSettings {
             site_name: [b'\0'; 8],
             deployment_timestamp: 0,
             interval: 1,
-            burst_repetitions: 1,
+            bursts_per_measurement_cycle: 1,
             start_up_delay: 0,
             delay_between_bursts: 0,
             mode: b'i',
@@ -85,8 +83,8 @@ impl DataloggerSettings {
     }
 
     pub fn configure_defaults(&mut self) {
-        if self.burst_repetitions == 0 || self.burst_repetitions > 20 {
-            self.burst_repetitions = 1;
+        if self.bursts_per_measurement_cycle == 0 || self.bursts_per_measurement_cycle > 20 {
+            self.bursts_per_measurement_cycle = 1;
         }
 
         if self.delay_between_bursts > 300_u16 {
@@ -118,12 +116,12 @@ impl DataloggerSettings {
     }
 }
 
-
-
 pub enum DataLoggerMode {
     Interactive,
     Watch,
     Quiet,
+    Field, // aka "Field", or "Active"
+    HibernateUntil
 }
 
 pub struct DataLogger {
@@ -239,14 +237,15 @@ impl DataLogger {
         // For smaller EERPOM, this would overwrite sensor drivers config
         // #[cfg(feature = "24LC08")]
 
-        self.settings = DataloggerSettings::new();
+        // this code was for testing initial settings creation
+        // self.settings = DataloggerSettings::new();
         // self.settings.deployment_identifier = [
         //     b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e', b'n', b'a', b'm', b'e', b'e', b'e',
         //     b'e', b'e',
         // ];
         // self.settings.logger_name = [b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e'];
         // rprintln!("attempting to store settings for test purposes");
-        self.store_settings(board);
+        // self.store_settings(board);
 
         // read all the sensors from EEPROM
         let registry = get_registry();
@@ -321,26 +320,85 @@ impl DataLogger {
         // implement interactive mode logging first
 
         self.update_actuators(board);
-        let interactive_mode_logging = true;
-        if interactive_mode_logging {
-            if board.timestamp() >= self.last_interactive_log_time + self.settings.interval as i64 {
-                // need to separate logic here.
-                // notify(F("interactive log"));
-                unsafe {
-                    EPOCH_TIMESTAMP = board.epoch_timestamp();
+
+        match self.mode {
+            DataLoggerMode::Interactive | DataLoggerMode::Watch | DataLoggerMode::Quiet => {
+                
+                // process CLI
+                // process telemetry
+                // process actuators
+                
+                if board.timestamp() >= self.last_interactive_log_time + 2 {
+                    
+                    // process a single measurement
+                    // is this called a 'single measurement cycle' ?
+                    unsafe {
+                        EPOCH_TIMESTAMP = board.epoch_timestamp();
+                    }
+                    self.measure_sensor_values(board); // measureSensorValues(false);
+                    self.write_last_measurement_to_serial(board); //outputLastMeasurement();
+                                                                  // Serial2.print(F("CMD >> "));
+                                                                  // writeRawMeasurementToLogFile();
+                                                                  // fileSystemWriteCache->flushCache();
+                    self.write_raw_measurement_to_storage(board);
+
+                    self.process_telemetry(board); // telemeterize the measured values
+
+                    self.last_interactive_log_time = board.timestamp();
                 }
-                self.measure_sensor_values(board); // measureSensorValues(false);
-                self.write_last_measurement_to_serial(board); //outputLastMeasurement();
-                                                              // Serial2.print(F("CMD >> "));
-                                                              // writeRawMeasurementToLogFile();
-                                                              // fileSystemWriteCache->flushCache();
-                self.write_last_measurement_to_storage(board);
-
-                self.process_telemetry(board); // telemeterize the measured values
-
-                self.last_interactive_log_time = board.timestamp();
             }
+            DataLoggerMode::Field => {
+
+                // run measurement cycle
+                // maybe we have sleep_interval (minutes) and interactive_logged_interval (seconds)
+
+                self.run_measurement_cycle(board);
+                // if self.measurement_cycle_completed() {
+                //     // go to sleep until the next in interval (in minutes)
+                    
+                //     // start the next measurement cycle
+                //     self.initialize_measurement_cycle();
+                // }
+            },
+            DataLoggerMode::HibernateUntil => { 
+                // this block is processed when we start up, don't get an interactive mode interrupt, and are in HibernateUntil mode
+                // or when we have just entered this mode
+                // TODO: hibernate until the requested wake time
+            }
+            
         }
+    }
+
+    fn initialize_measurement_cycle(&mut self, board: &mut impl rriv_board::RRIVBoard){
+        unsafe {
+            EPOCH_TIMESTAMP = board.epoch_timestamp();
+        }
+        // board.
+    }
+
+
+    fn run_measurement_cycle(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+
+       
+        // get next raw reading
+        self.measure_sensor_values(board);
+
+        // output raw data to serial?
+        let output_raw_data_to_serial  = false;
+        if output_raw_data_to_serial {
+            self.write_last_measurement_to_serial(board)
+        }
+
+        // write raw data to storage
+        self.write_raw_measurement_to_storage(board);
+
+        // store values into the summarizer
+
+        // check on progress
+    }
+
+    fn measurement_cycle_completed(&self) {
+        // check each sensor to see if all required measurements have been made.
     }
 
     fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
@@ -441,7 +499,7 @@ impl DataLogger {
     }
 
     fn write_column_headers_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
-        board.write_log_file("timestamp,");
+        board.write_log_file("type,timestamp,");
 
         let mut first = true;
         for i in 0..self.sensor_drivers.len() {
@@ -481,7 +539,8 @@ impl DataLogger {
 
     fn write_measured_parameters_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         let epoch = board.epoch_timestamp();
-        let output = format!("{},", epoch);
+        let millis = board.get_millis();
+        let output = format!("{}.{},", epoch, millis);
         board.usb_serial_send(&output);
 
         let mut first = true;
@@ -515,9 +574,9 @@ impl DataLogger {
         board.usb_serial_send("\n");
     }
 
-    fn write_last_measurement_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
+    fn write_raw_measurement_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         let epoch = board.epoch_timestamp();
-        let output = format!("{},", epoch);
+        let output = format!("raw,{},", epoch);
         board.write_log_file(&output);
 
         let mut first = true;
@@ -748,13 +807,12 @@ impl DataLogger {
             CommandPayload::SensorGetCommandPayload(payload) => {
                 if let Some(index) = self.get_driver_index_by_id_value(payload.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
-                        
                         let configuration_payload = driver.get_configuration_json();
 
                         // TODO: get the other sensor values
 
                         let string = configuration_payload.to_string();
-                                    let str = string.as_str();
+                        let str = string.as_str();
                         board.usb_serial_send(str);
                         board.usb_serial_send("\n");
                         return;
@@ -1200,8 +1258,8 @@ impl DataLogger {
             self.settings.interval = interval;
         }
 
-        if let Some(burst_repetitions) = set_command_payload.burst_repetitions {
-            self.settings.burst_repetitions = burst_repetitions;
+        if let Some(bursts_per_cycle) = set_command_payload.bursts_per_cycle {
+            self.settings.bursts_per_measurement_cycle = bursts_per_cycle;
         }
 
         if let Some(start_up_delay) = set_command_payload.start_up_delay {

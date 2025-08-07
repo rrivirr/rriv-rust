@@ -9,7 +9,7 @@ pub struct SensorDriverGeneralConfiguration {
     pub id: [u8; 6],
     pub sensor_type_id: u16,
     pub warmup: u16,
-    pub burst_repetitions: u8,
+    pub readings_per_burst: u8,
 }
 
 impl SensorDriverGeneralConfiguration {
@@ -18,7 +18,7 @@ impl SensorDriverGeneralConfiguration {
             id: id,
             sensor_type_id: sensor_type_id,
             warmup: 0,
-            burst_repetitions: 1,
+            readings_per_burst: 1,
         }
     }
 
@@ -34,7 +34,7 @@ impl SensorDriverGeneralConfiguration {
             id: [0u8; 6],
             sensor_type_id: 0,
             warmup: 0,
-            burst_repetitions: 0,
+            readings_per_burst: 0,
         }
     }
 }
