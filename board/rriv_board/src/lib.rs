@@ -59,6 +59,7 @@ pub trait RRIVBoard: Send {
     // Time
     fn set_epoch(&mut self, epoch: i64);
     fn epoch_timestamp(&mut self) -> i64;
+    fn get_millis(&mut self) -> u32;
 
     // Board Services Used by Control Logic and Drivers
     control_services!();

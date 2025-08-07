@@ -22,9 +22,10 @@ const _EEPROM_SENSOR_SETTINGS_START: u8 = 80;
 
 pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address: u8, bytes: &[u8]) {
     let device_address = EEPROM_I2C_ADDRESS + block;
-    let mut address = start_address;
+    let address = start_address;
+    let mut offset: u8 = 0;
     for byte in bytes {
-        let bytes_to_send = [address, *byte];
+        let bytes_to_send = [address + offset, *byte];
         match board
             .i2c1
             .as_mut()
@@ -39,7 +40,7 @@ pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address:
                 rprintln!("write error: {:?}", error);
             }
         }
-        address = address + 1;
+        offset = offset + 1; // Last byte will crash
     }
     rprintln!("done with EEPROM writes");
 }

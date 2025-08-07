@@ -23,11 +23,11 @@ use cortex_m::{
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, watchdog::IndependentWatchdog};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, timer::{Counter, CounterHz, CounterMs}, watchdog::IndependentWatchdog};
 use stm32f1xx_hal::{serial::StopBits};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
-use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, USART2, USB};
+use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, TIM4, USART2, USB};
 use stm32f1xx_hal::spi::Spi;
 
 use rtt_target::rprintln;
@@ -104,7 +104,8 @@ pub struct Board {
     pub file_epoch: i64,
     pub one_wire_bus: OneWire<OneWirePin>,
     one_wire_search_state: Option<SearchState>,
-    pub watchdog: IndependentWatchdog
+    pub watchdog: IndependentWatchdog,
+    pub counter: CounterMs<TIM4>
 }
 
 impl Board {
@@ -298,6 +299,12 @@ impl RRIVBoard for Board {
     // crystal time, systick
     fn timestamp(&mut self) -> i64 {
         return self.internal_rtc.current_time().into(); // internal RTC
+    }
+
+    fn get_millis(&mut self) -> u32 {
+        let millis = self.counter.now();
+        let millis = millis.ticks();
+        millis
     }
 
     fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices {
@@ -543,6 +550,9 @@ impl SensorDriverServices for Board {
             },
         } 
     }
+
+
+
 }
 
 impl TelemetryDriverServices for Board {
@@ -685,7 +695,8 @@ pub struct BoardBuilder {
     pub i2c2: Option<BoardI2c2>,
     pub internal_rtc: Option<Rtc>,
     pub storage: Option<Storage>,
-    pub watchdog: Option<IndependentWatchdog>
+    pub watchdog: Option<IndependentWatchdog>,
+    pub counter: Option<CounterMs<TIM4>>
 }
 
 impl BoardBuilder {
@@ -704,7 +715,8 @@ impl BoardBuilder {
             oscillator_control: None,
             internal_rtc: None,
             storage: None,
-            watchdog: None
+            watchdog: None,
+            counter: None
         }
     }
 
@@ -767,7 +779,8 @@ impl BoardBuilder {
             file_epoch: 0,
             one_wire_bus: one_wire,
             one_wire_search_state: None,
-            watchdog: self.watchdog.unwrap()
+            watchdog: self.watchdog.unwrap(),
+            counter: self.counter.unwrap()
         }
     }
 
@@ -1177,6 +1190,15 @@ impl BoardBuilder {
         // );
 
         self.delay = Some(delay);
+
+        // the millis counter
+        let mut counter: CounterMs<TIM4> = device_peripherals.TIM4.counter_ms(&clocks);
+        match counter.start(1.secs()) {
+            Ok(_) => rprintln!("Millis counter start ok"),
+            Err(err) => rprintln!("Millis counter start not ok {:?}", err),
+        }
+        counter.now();
+        self.counter = Some(counter);
 
         watchdog.feed();
 

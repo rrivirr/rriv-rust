@@ -12,7 +12,7 @@ pub struct DataloggerSetCommandPayload {
     pub site_name: Option<Value>,
     pub deployment_identifier: Option<Value>,
     pub interval: Option<u16>,
-    pub burst_repetitions: Option<u8>,
+    pub bursts_per_cycle: Option<u8>,
     pub start_up_delay: Option<u16>
     // pub user_note: Option<Value>, // not implemented for now
     // pub user_value: Option<i16>
