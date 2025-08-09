@@ -1193,11 +1193,10 @@ impl BoardBuilder {
 
         // the millis counter
         let mut counter: CounterMs<TIM4> = device_peripherals.TIM4.counter_ms(&clocks);
-        match counter.start(1.secs()) {
+        match counter.start( (u16::MAX as u32).millis()) {
             Ok(_) => rprintln!("Millis counter start ok"),
             Err(err) => rprintln!("Millis counter start not ok {:?}", err),
         }
-        counter.now();
         self.counter = Some(counter);
 
         watchdog.feed();

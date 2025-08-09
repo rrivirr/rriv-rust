@@ -62,12 +62,6 @@ impl RrivTimeSource {
 
 static mut EPOCH_TIMESTAMP: i64 = 0;
 
-pub fn update_time_source(timestamp: i64) {
-  unsafe {
-    EPOCH_TIMESTAMP = timestamp;
-  }
-}
-
 impl TimeSource for RrivTimeSource {
     fn get_timestamp(&self) -> embedded_sdmmc::Timestamp {
 
@@ -234,6 +228,7 @@ impl Storage {
 
     // todo: what is data.len() is greater than the CACHE_SIZE
 
+    // A hack to get the timestamp in to the SDCard library
     unsafe {
       EPOCH_TIMESTAMP = timestamp; // or function set_write_timestamp
     }
