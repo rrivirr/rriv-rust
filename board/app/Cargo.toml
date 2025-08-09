@@ -20,7 +20,7 @@ rtt-target = "0.4.0"
 embedded-alloc = "0.5.0"
 rriv_board_0_4_2 = { path = "../rriv_board_0_4_2" }
 datalogger = { path = "../../src/datalogger" }
-rriv_board = { path = "../rriv_board", features = ["24LC08"]}
+rriv_board = { path = "../rriv_board", features = ["24LC01"]}
 
 [dependencies.stm32f1xx-hal]
 version = "0.10.0"
