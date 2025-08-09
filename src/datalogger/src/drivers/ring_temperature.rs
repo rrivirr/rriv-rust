@@ -169,14 +169,14 @@ impl SensorDriver for RingTemperatureDriver {
             self.sensor_drivers[sensor_index].get_measured_parameter_identifier(parameter_index);
 
         let mut buf2: [u8; 16] = [0; 16];
-        let name = "RING_".as_bytes();
-        // rprint!(core::str::from_utf8(&buf2).unwrap());
-        // buf2[0..5].copy_from_slice(&name[0..5]);
-        // rprint!(core::str::from_utf8(&buf2).unwrap());
-        // rprint!(core::str::from_utf8(&buf[0..12]).unwrap());
         buf2[0..10].copy_from_slice(&buf[0..10]);
-        buf2[11] = INDEX_TO_BYTE_CHAR[sensor_index];
-        buf2[12] = b'\0';
+        let mut end = buf2
+                        .iter()
+                        .position(|&x| x == b'\0')
+                        .unwrap_or_else(|| 1);
+        if end >= 14 { end = 14 }
+        buf2[end] = INDEX_TO_BYTE_CHAR[sensor_index];
+        buf2[end+1] = b'\0';
         return buf2;
     }
 
