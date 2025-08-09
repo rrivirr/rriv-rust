@@ -246,7 +246,7 @@ impl DataLogger {
         // ];
         // self.settings.logger_name = [b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e'];
         // rprintln!("attempting to store settings for test purposes");
-        self.store_settings(board);
+        // self.store_settings(board);
 
         // read all the sensors from EEPROM
         let registry = get_registry();
