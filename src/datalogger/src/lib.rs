@@ -32,7 +32,6 @@ use serde_json::{json, Value};
 
 const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
 
-static mut EPOCH_TIMESTAMP: i64 = 0;
 
 #[derive(Debug, Clone, Copy)]
 struct DataloggerSettings {
@@ -142,6 +141,10 @@ pub struct DataLogger {
     calibration_point_values: [Option<Box<[CalibrationPair]>>; EEPROM_TOTAL_SENSOR_SLOTS],
 
     telemeter: telemetry::telemeters::lorawan::RakWireless3172,
+
+    // measurement cycle
+    completed_bursts: u8,
+    readings_completed_in_current_burst: u8
 }
 
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
@@ -164,6 +167,8 @@ impl DataLogger {
             mode: DataLoggerMode::Interactive,
             calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
             telemeter: RakWireless3172::new(),
+            completed_bursts: 0,
+            readings_completed_in_current_burst: 0
         }
     }
 
@@ -332,9 +337,7 @@ impl DataLogger {
                     
                     // process a single measurement
                     // is this called a 'single measurement cycle' ?
-                    unsafe {
-                        EPOCH_TIMESTAMP = board.epoch_timestamp();
-                    }
+                  
                     self.measure_sensor_values(board); // measureSensorValues(false);
                     self.write_last_measurement_to_serial(board); //outputLastMeasurement();
                                                                   // Serial2.print(F("CMD >> "));
@@ -353,12 +356,12 @@ impl DataLogger {
                 // maybe we have sleep_interval (minutes) and interactive_logged_interval (seconds)
 
                 self.run_measurement_cycle(board);
-                // if self.measurement_cycle_completed() {
+                if self.measurement_cycle_completed() {
                 //     // go to sleep until the next in interval (in minutes)
                     
                 //     // start the next measurement cycle
-                //     self.initialize_measurement_cycle();
-                // }
+                    self.initialize_measurement_cycle();
+                }
             },
             DataLoggerMode::HibernateUntil => { 
                 // this block is processed when we start up, don't get an interactive mode interrupt, and are in HibernateUntil mode
@@ -369,22 +372,30 @@ impl DataLogger {
         }
     }
 
-    fn initialize_measurement_cycle(&mut self, board: &mut impl rriv_board::RRIVBoard){
-        unsafe {
-            EPOCH_TIMESTAMP = board.epoch_timestamp();
-        }
-        // board.
+    fn initialize_measurement_cycle(&mut self){
+        self.completed_bursts = 0;
+        self.readings_completed_in_current_burst = 0;
+    }
+
+    fn measurement_cycle_completed(&self) -> bool {
+        self.completed_bursts >= self.settings.bursts_per_measurement_cycle
     }
 
 
     fn run_measurement_cycle(&mut self, board: &mut impl rriv_board::RRIVBoard) {
 
+        // calculate the total number of readings per burst, max of readings requests on each sensor.
+        // allow burst length to be set per sensors OR overwridden
+
+        let readings_per_burst = 10; // TODO get it from settings
+
        
         // get next raw reading
         self.measure_sensor_values(board);
+        self.readings_completed_in_current_burst = self.readings_completed_in_current_burst + 1;
 
         // output raw data to serial?
-        let output_raw_data_to_serial  = false;
+        let output_raw_data_to_serial  = true;
         if output_raw_data_to_serial {
             self.write_last_measurement_to_serial(board)
         }
@@ -395,10 +406,9 @@ impl DataLogger {
         // store values into the summarizer
 
         // check on progress
-    }
-
-    fn measurement_cycle_completed(&self) {
-        // check each sensor to see if all required measurements have been made.
+        if(true){
+            self.completed_bursts = self.completed_bursts + 1;
+        }
     }
 
     fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
@@ -539,7 +549,7 @@ impl DataLogger {
 
     fn write_measured_parameters_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         let epoch = board.epoch_timestamp();
-        let millis = board.get_millis();
+        let millis = board.get_millis() % 1000;
         let output = format!("{}.{},", epoch, millis);
         board.usb_serial_send(&output);
 
@@ -576,7 +586,8 @@ impl DataLogger {
 
     fn write_raw_measurement_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         let epoch = board.epoch_timestamp();
-        let output = format!("raw,{},", epoch);
+        let millis = board.get_millis() % 1000;
+        let output = format!("raw,{}.{},", epoch, millis);
         board.write_log_file(&output);
 
         let mut first = true;
@@ -641,6 +652,8 @@ impl DataLogger {
                     match mode {
                         Value::String(mode) => {
                             let mode = mode.as_str();
+                            // TODO: perhaps watch should be separate from mode, so you can watch any mode
+                            // TODO: and rrivctl can still accept commands when in watch mode
                             match mode {
                                 "watch" => {
                                     self.write_column_headers_to_serial(board);
@@ -658,7 +671,16 @@ impl DataLogger {
                                     self.mode = DataLoggerMode::Quiet;
                                     board.set_debug(false);
                                     self.telemeter.set_watch(false);
-                                }
+                                },
+                                // TODO: this doesn't work.
+                                // "field" => {
+                                //     self.mode = DataLoggerMode::Field;
+                                // },
+                                // "watch-field" => {
+                                //     self.mode = DataLoggerMode::Field;
+                                //     board.set_debug(false);
+                                //     self.telemeter.set_watch(true);
+                                // }
                                 _ => {
                                     self.mode = DataLoggerMode::Interactive;
                                     board.set_debug(true);
