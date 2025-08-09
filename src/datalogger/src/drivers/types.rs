@@ -107,8 +107,8 @@ pub fn single_raw_or_cal_parameter_identifiers(index: usize, prefix: Option<u8>)
         start = 1;
         buf[0] = prefix;
     }
-    for i in start..identifier.len() {
-        buf[i] = identifier.as_bytes()[i-start];
+    for i in 0..identifier.len() {
+        buf[i+start] = identifier.as_bytes()[i];
     }
     return buf;
 }
