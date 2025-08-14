@@ -91,7 +91,7 @@ pub trait OutputDevice {
   fn write(data: &[u8]);
 }
 
-const CACHE_SIZE: usize = 50;
+const CACHE_SIZE: usize = 100;
 
 
 pub struct Storage {

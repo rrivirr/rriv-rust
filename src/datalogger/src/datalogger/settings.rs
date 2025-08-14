@@ -4,7 +4,7 @@ use util::{any_as_u8_slice, check_alphanumeric};
 use crate::datalogger::commands::DataloggerSettingsValues;
 
 
-const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
+const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 14;
 
 #[derive(Debug, Clone, Copy)]
 pub struct DataloggerSettings {
@@ -12,7 +12,8 @@ pub struct DataloggerSettings {
     pub logger_name: [u8; 8],
     pub site_name: [u8; 8],
     pub deployment_timestamp: u64,
-    pub interval: u16,
+    pub interactive_logging_interval: u16, //seconds
+    pub sleep_interval: u16, // minutes
     pub start_up_delay: u16,
     pub delay_between_bursts: u16,
     pub bursts_per_measurement_cycle: u8,
@@ -32,7 +33,8 @@ impl DataloggerSettings {
             logger_name: [b'\0'; 8],
             site_name: [b'\0'; 8],
             deployment_timestamp: 0,
-            interval: 1,
+            interactive_logging_interval: 1,
+            sleep_interval: 15,
             bursts_per_measurement_cycle: 1,
             start_up_delay: 0,
             delay_between_bursts: 0,
@@ -66,9 +68,14 @@ impl DataloggerSettings {
             settings.delay_between_bursts = 0_u16
         }
 
-        if self.interval > 60_u16 * 24_u16 {
-            settings.interval = 15_u16;
+        if self.interactive_logging_interval > 60_u16 {
+            settings.interactive_logging_interval = 1_u16;
         }
+
+        if self.sleep_interval > 60_u16 * 4 {
+            settings.interactive_logging_interval = 15_u16;
+        }
+
 
         if self.start_up_delay > 60_u16 {
             settings.start_up_delay = 0;
@@ -112,7 +119,8 @@ impl DataloggerSettings {
         settings.logger_name = values.logger_name.unwrap_or(self.logger_name);
         settings.site_name = values.site_name.unwrap_or(self.site_name);
         settings.deployment_timestamp = values.deployment_timestamp.unwrap_or(self.deployment_timestamp);
-        settings.interval = values.interval.unwrap_or(self.interval);
+        settings.interactive_logging_interval = values.interactive_logging_interval.unwrap_or(self.interactive_logging_interval);
+        settings.sleep_interval = values.sleep_interval.unwrap_or(self.interactive_logging_interval);
         settings.bursts_per_measurement_cycle = values.bursts_per_measurement_cycle.unwrap_or(self.bursts_per_measurement_cycle);
         settings.start_up_delay = values.start_up_delay.unwrap_or(self.start_up_delay);
         settings.delay_between_bursts = values.delay_between_bursts.unwrap_or(self.delay_between_bursts);

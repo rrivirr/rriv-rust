@@ -7,7 +7,6 @@ use alloc::format;
 
 
 use crate::protocol::responses;
-use crate::DataLoggerMode;
 
 const LOGGER_NAME_LENGTH : usize = 8;
 const SITE_NAME_LENGTH : usize = 8;
@@ -19,7 +18,8 @@ pub struct DataloggerSettingsValues {
     pub logger_name: Option<[u8; 8]>,
     pub site_name: Option<[u8; 8]>,
     pub deployment_timestamp: Option<u64>,
-    pub interval: Option<u16>,
+    pub interactive_logging_interval: Option<u16>,
+    pub sleep_interval: Option<u16>,
     pub start_up_delay: Option<u16>,
     pub delay_between_bursts: Option<u16>,
     pub bursts_per_measurement_cycle: Option<u8>,
@@ -33,9 +33,11 @@ pub struct DataloggerSetCommandPayload {
     pub logger_name: Option<Value>,
     pub site_name: Option<Value>,
     pub deployment_identifier: Option<Value>,
-    pub interval: Option<u16>,
+    pub interactive_logging_interval: Option<u16>,
+    pub sleep_interval: Option<u16>,
     pub bursts_per_cycle: Option<u8>,
-    pub start_up_delay: Option<u16>
+    pub start_up_delay: Option<u16>,
+    pub mode: Option<Value>,
     // pub user_note: Option<Value>, // not implemented for now
     // pub user_value: Option<i16>
 }
@@ -103,9 +105,14 @@ impl DataloggerSetCommandPayload {
             }
         }
 
-        if let Some(interval) = self.interval {
-            datalogger_settings_values.interval = Some(interval);
+        if let Some(interactive_logging_interval) = self.interactive_logging_interval {
+            datalogger_settings_values.interactive_logging_interval = Some(interactive_logging_interval);
         }
+
+        if let Some(sleep_interval) = self.sleep_interval {
+            datalogger_settings_values.sleep_interval = Some(sleep_interval);
+        }
+
 
         if let Some(bursts_per_cycle) = self.bursts_per_cycle {
             datalogger_settings_values.bursts_per_measurement_cycle = Some(bursts_per_cycle);
@@ -430,16 +437,6 @@ pub fn get_id(id: &serde_json::Value) -> Result<(&alloc::string::String), (&str)
 
 }
 
-
-pub fn mode_text(mode: &DataLoggerMode) -> &'static str {
-    match mode {
-        DataLoggerMode::Interactive => "interactive",
-        DataLoggerMode::Watch => "watch",
-        DataLoggerMode::Quiet => "quiet",
-        DataLoggerMode::Field => "field",
-        DataLoggerMode::HibernateUntil => "hibernate",
-    }
-}
 
 
 // TODO: this is a command implementation, probably doesn't below in this file

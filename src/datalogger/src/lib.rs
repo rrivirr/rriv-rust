@@ -14,6 +14,8 @@ use rriv_board::{
 };
 use util::{any_as_u8_slice};
 extern crate alloc;
+use crate::datalogger::modes::DataLoggerMode;
+use crate::datalogger::modes::DataLoggerSerialTxMode;
 use crate::{
     alloc::string::ToString, protocol::responses, services::*, telemetry::telemeters::lorawan::RakWireless3172
 };
@@ -33,15 +35,6 @@ use serde_json::{json, Value};
 
 
 
-
-pub enum DataLoggerMode {
-    Interactive,
-    Watch,
-    Quiet,
-    Field, // aka "Field", or "Active"
-    HibernateUntil
-}
-
 pub struct DataLogger {
     settings: DataloggerSettings,
     sensor_drivers: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
@@ -54,6 +47,7 @@ pub struct DataLogger {
     log_raw_data: bool, // both raw and summary data writting to storage
 
     mode: DataLoggerMode,
+    serial_tx_mode: DataLoggerSerialTxMode,
 
     // naive calibration value book keeping
     // not memory efficient
@@ -85,6 +79,7 @@ impl DataLogger {
             debug_values: true,
             log_raw_data: true,
             mode: DataLoggerMode::Interactive,
+            serial_tx_mode: DataLoggerSerialTxMode::Normal,
             calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
             telemeter: RakWireless3172::new(),
             completed_bursts: 0,
@@ -226,13 +221,13 @@ impl DataLogger {
         self.update_actuators(board);
 
         match self.mode {
-            DataLoggerMode::Interactive | DataLoggerMode::Watch | DataLoggerMode::Quiet => {
+            DataLoggerMode::Interactive  => {
                 
                 // process CLI
                 // process telemetry
                 // process actuators
                 
-                if board.timestamp() >= self.last_interactive_log_time + 2 {
+                if board.timestamp() >= self.last_interactive_log_time + self.settings.interactive_logging_interval as i64 {
                     
                     // process a single measurement
                     // is this called a 'single measurement cycle' ?
@@ -257,6 +252,7 @@ impl DataLogger {
                 self.run_measurement_cycle(board);
                 if self.measurement_cycle_completed() {
                 //     // go to sleep until the next in interval (in minutes)
+                    board.delay_ms(self.settings.interactive_logging_interval); // TODO: using interactive while developing.
                     
                 //     // start the next measurement cycle
                     self.initialize_measurement_cycle();
@@ -286,9 +282,8 @@ impl DataLogger {
         // calculate the total number of readings per burst, max of readings requests on each sensor.
         // allow burst length to be set per sensors OR overwridden
 
-        let readings_per_burst = 10; // TODO get it from settings
+        let readings_per_burst = 10; // TODO get it from settings (need to be added there)
 
-       
         // get next raw reading
         self.measure_sensor_values(board);
         self.readings_completed_in_current_burst = self.readings_completed_in_current_burst + 1;
@@ -305,7 +300,7 @@ impl DataLogger {
         // store values into the summarizer
 
         // check on progress
-        if(true){
+        if(self.readings_completed_in_current_burst >= readings_per_burst){
             self.completed_bursts = self.completed_bursts + 1;
         }
     }
@@ -535,18 +530,56 @@ impl DataLogger {
 
     fn write_last_measurement_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         // first output the column headers
-        match self.mode {
-            DataLoggerMode::Interactive => self.write_column_headers_to_serial(board),
+        match self.serial_tx_mode {
+            DataLoggerSerialTxMode::Normal => self.write_column_headers_to_serial(board),
             _ => {}
         }
 
         // then output the last measurement values
-        match self.mode {
-            DataLoggerMode::Interactive | DataLoggerMode::Watch => {
+        match self.serial_tx_mode {
+            DataLoggerSerialTxMode::Watch => {
                 self.write_measured_parameters_to_serial(board)
             }
             _ => {}
         }
+    }
+
+    pub fn set_mode(&mut self, board: &mut impl RRIVBoard, mode: Value) {
+        match mode {
+                        Value::String(mode) => {
+                            let mode = mode.as_str();
+                            // TODO: perhaps watch should be separate from mode, so you can watch any mode
+                            // TODO: and rrivctl can still accept commands when in watch mode
+                            match mode {
+                                "watch" => {
+                                    self.write_column_headers_to_serial(board);
+                                    self.serial_tx_mode = DataLoggerSerialTxMode::Watch;
+                                    board.set_debug(false);
+                                    self.telemeter.set_watch(true);
+                                }
+                                "watch-debug" => {
+                                    self.write_column_headers_to_serial(board);
+                                    self.serial_tx_mode = DataLoggerSerialTxMode::Watch;
+                                    board.set_debug(true);
+                                    self.telemeter.set_watch(true);
+                                }
+                                "quiet" => {
+                                    self.serial_tx_mode = DataLoggerSerialTxMode::Quiet;
+                                    board.set_debug(false);
+                                    self.telemeter.set_watch(false);
+                                },
+                                "field" => {
+                                    self.mode = DataLoggerMode::Field;
+                                },
+                                _ => {
+                                    self.mode = DataLoggerMode::Interactive;
+                                    board.set_debug(true);
+                                    self.telemeter.set_watch(false);
+                                }
+                            }
+                        }
+                        _ => {}
+                    }
     }
 
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
@@ -562,58 +595,22 @@ impl DataLogger {
                    "logger_name" : util::str_from_utf8(&mut self.settings.logger_name).unwrap_or_default(),
                    "deployment_identifier" : util::str_from_utf8(&mut self.settings.deployment_identifier).unwrap_or_default(),
                    "deployment_timestamp" : self.settings.deployment_timestamp,
-                   "interval" : self.settings.interval,
+                   "interactive_logging_interval" : self.settings.interactive_logging_interval,
+                   "sleep_interval" : self.settings.sleep_interval,
                    "start_up_delay" : self.settings.start_up_delay,
                    "delay_between_bursts" : self.settings.delay_between_bursts,
                    "bursts_per_measurement_cycle" : self.settings.bursts_per_measurement_cycle,
-                   "mode" : datalogger::commands::mode_text(&self.mode)
+                   "mode" : datalogger::modes::mode_text(&self.mode)
                 });
                 responses::send_command_response_message(board, values.to_string().as_str());
             }
             CommandPayload::DataloggerSetModeCommandPayload(payload) => {
                 if let Some(mode) = payload.mode {
-                    match mode {
-                        Value::String(mode) => {
-                            let mode = mode.as_str();
-                            // TODO: perhaps watch should be separate from mode, so you can watch any mode
-                            // TODO: and rrivctl can still accept commands when in watch mode
-                            match mode {
-                                "watch" => {
-                                    self.write_column_headers_to_serial(board);
-                                    self.mode = DataLoggerMode::Watch;
-                                    board.set_debug(false);
-                                    self.telemeter.set_watch(true);
-                                }
-                                "watch-debug" => {
-                                    self.write_column_headers_to_serial(board);
-                                    self.mode = DataLoggerMode::Watch;
-                                    board.set_debug(true);
-                                    self.telemeter.set_watch(true);
-                                }
-                                "quiet" => {
-                                    self.mode = DataLoggerMode::Quiet;
-                                    board.set_debug(false);
-                                    self.telemeter.set_watch(false);
-                                },
-                                // TODO: this doesn't work.
-                                // "field" => {
-                                //     self.mode = DataLoggerMode::Field;
-                                // },
-                                // "watch-field" => {
-                                //     self.mode = DataLoggerMode::Field;
-                                //     board.set_debug(false);
-                                //     self.telemeter.set_watch(true);
-                                // }
-                                _ => {
-                                    self.mode = DataLoggerMode::Interactive;
-                                    board.set_debug(true);
-                                    self.telemeter.set_watch(false);
-                                }
-                            }
-                        }
-                        _ => {}
-                    }
+                    self.set_mode(board, mode);
                 }
+                
+                responses::send_command_response_message(board, "mode set");
+
             }
             CommandPayload::SensorSetCommandPayload(payload, values) => {
                 let registry = get_registry();
@@ -1171,8 +1168,12 @@ impl DataLogger {
         board: &mut impl RRIVBoard,
         set_command_payload: DataloggerSetCommandPayload,
     ) {
+        let mode = set_command_payload.mode.clone(); // TODO: clean this up
         let values = set_command_payload.values();
         self.settings = self.settings.with_values(values);
+         if let Some(mode) = mode {
+            self.set_mode(board, mode);
+        }
         self.store_settings(board)
     }
 }
