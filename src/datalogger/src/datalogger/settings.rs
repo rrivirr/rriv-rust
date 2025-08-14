@@ -1,7 +1,7 @@
 use rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE;
 use util::{any_as_u8_slice, check_alphanumeric};
 
-use crate::datalogger_commands::DataloggerSettingsValues;
+use crate::datalogger::commands::DataloggerSettingsValues;
 
 
 const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;

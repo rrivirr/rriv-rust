@@ -1,12 +1,12 @@
 #![cfg_attr(not(test), no_std)]
 #![feature(array_methods)]
 
-mod datalogger_commands;
 mod services;
 mod datalogger;
 
-use datalogger_commands::*;
 use datalogger::settings::*;
+use datalogger::commands::*;
+
 
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
@@ -566,7 +566,7 @@ impl DataLogger {
                    "start_up_delay" : self.settings.start_up_delay,
                    "delay_between_bursts" : self.settings.delay_between_bursts,
                    "bursts_per_measurement_cycle" : self.settings.bursts_per_measurement_cycle,
-                   "mode" : datalogger_commands::mode_text(&self.mode)
+                   "mode" : datalogger::commands::mode_text(&self.mode)
                 });
                 responses::send_command_response_message(board, values.to_string().as_str());
             }
@@ -862,7 +862,7 @@ impl DataLogger {
                 };
             }
             CommandPayload::BoardGetPayload(payload) => {
-                protocol::commands::get_board(board, payload);
+                datalogger::commands::get_board(board, payload);
             }
             CommandPayload::SensorCalibratePointPayload(payload) => {
                 // we want to do the book keeping here for point payloads
