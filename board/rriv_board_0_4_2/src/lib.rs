@@ -966,6 +966,7 @@ impl BoardBuilder {
         let device_peripherals = pac::Peripherals::take().unwrap();
 
         let uid = Uid::fetch();
+        rprintln!("uid: {:X?}", uid.bytes());
         self.uid = Some(uid.bytes());
 
         // mcu device registers
