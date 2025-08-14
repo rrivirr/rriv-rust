@@ -1,0 +1,124 @@
+use rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE;
+use util::{any_as_u8_slice, check_alphanumeric};
+
+use crate::datalogger_commands::DataloggerSettingsValues;
+
+
+const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
+
+#[derive(Debug, Clone, Copy)]
+pub struct DataloggerSettings {
+    pub deployment_identifier: [u8; 16],
+    pub logger_name: [u8; 8],
+    pub site_name: [u8; 8],
+    pub deployment_timestamp: u64,
+    pub interval: u16,
+    pub start_up_delay: u16,
+    pub delay_between_bursts: u16,
+    pub bursts_per_measurement_cycle: u8,
+    pub mode: u8,
+    // external_adc_enabled: u8:1, // how we we handle bitfields? -> bitfield_struct crate works well
+    // debug_includes_values: u8:1,
+    // withold_incomplete_readings: u8:1,
+    // low_raw_data: u8:1,
+    // reserved: u8:4
+    reserved: [u8; DATALOGGER_SETTINGS_UNUSED_BYTES],
+}
+
+impl DataloggerSettings {
+    pub fn new() -> Self {
+        DataloggerSettings {
+            deployment_identifier: [b'\0'; 16],
+            logger_name: [b'\0'; 8],
+            site_name: [b'\0'; 8],
+            deployment_timestamp: 0,
+            interval: 1,
+            bursts_per_measurement_cycle: 1,
+            start_up_delay: 0,
+            delay_between_bursts: 0,
+            mode: b'i',
+            reserved: [b'\0'; DATALOGGER_SETTINGS_UNUSED_BYTES],
+        }
+    }
+
+    pub fn new_from_bytes(bytes: [u8; EEPROM_DATALOGGER_SETTINGS_SIZE]) -> DataloggerSettings {
+        let settings = bytes.as_ptr().cast::<DataloggerSettings>();
+        unsafe { *settings }
+    }
+
+    pub fn get_bytes(&mut self) -> [u8; EEPROM_DATALOGGER_SETTINGS_SIZE] {
+        let mut bytes: [u8; EEPROM_DATALOGGER_SETTINGS_SIZE] =
+            [0; EEPROM_DATALOGGER_SETTINGS_SIZE];
+        let bytes_ref = unsafe { any_as_u8_slice(self) };
+        bytes.clone_from_slice(bytes_ref);
+        bytes
+    }
+
+    pub fn configure_defaults(self) -> DataloggerSettings {
+
+        let mut settings = self.clone();
+
+        if self.bursts_per_measurement_cycle == 0 || self.bursts_per_measurement_cycle > 20 {
+            settings.bursts_per_measurement_cycle = 1;
+        }
+
+        if self.delay_between_bursts > 300_u16 {
+            settings.delay_between_bursts = 0_u16
+        }
+
+        if self.interval > 60_u16 * 24_u16 {
+            settings.interval = 15_u16;
+        }
+
+        if self.start_up_delay > 60_u16 {
+            settings.start_up_delay = 0;
+        }
+
+        if !check_alphanumeric(&self.logger_name) {
+            let default = "MyLogger";
+            settings.logger_name[0..default.len()].clone_from_slice(default.as_bytes());
+        }
+
+        if !check_alphanumeric(&self.site_name) {
+            let default = "site";
+            settings.site_name[0..default.len()].clone_from_slice(default.as_bytes());
+        }
+
+        if !check_alphanumeric(&self.deployment_identifier) {
+            let default = "deployment";
+            settings.deployment_identifier[0..default.len()].clone_from_slice(default.as_bytes());
+        }
+
+
+        settings
+    }
+
+    pub fn get_site_name(&mut self) -> &str {
+        util::str_from_utf8(&mut self.site_name).unwrap()
+    }
+
+    pub fn get_logger_name(&mut self) -> &str {
+        util::str_from_utf8(&mut self.logger_name).unwrap()
+    }
+
+    pub fn get_deployment_identifier(&mut self) -> &str {
+        util::str_from_utf8(&mut self.deployment_identifier).unwrap()
+    }
+
+
+    pub fn with_values(self, values: DataloggerSettingsValues ) -> DataloggerSettings{
+        let mut settings = DataloggerSettings::new();
+        settings.deployment_identifier = values.deployment_identifier.unwrap_or(self.deployment_identifier);
+        settings.logger_name = values.logger_name.unwrap_or(self.logger_name);
+        settings.site_name = values.site_name.unwrap_or(self.site_name);
+        settings.deployment_timestamp = values.deployment_timestamp.unwrap_or(self.deployment_timestamp);
+        settings.interval = values.interval.unwrap_or(self.interval);
+        settings.bursts_per_measurement_cycle = values.bursts_per_measurement_cycle.unwrap_or(self.bursts_per_measurement_cycle);
+        settings.start_up_delay = values.start_up_delay.unwrap_or(self.start_up_delay);
+        settings.delay_between_bursts = values.delay_between_bursts.unwrap_or(self.delay_between_bursts);
+        settings.mode = values.mode.unwrap_or(self.mode);
+        settings
+    }
+
+   
+}

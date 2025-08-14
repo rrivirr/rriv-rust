@@ -3,18 +3,19 @@
 
 mod datalogger_commands;
 mod services;
+mod datalogger;
 
 use datalogger_commands::*;
+use datalogger::settings::*;
 
 use rriv_board::{
     RRIVBoard, EEPROM_DATALOGGER_SETTINGS_SIZE, EEPROM_SENSOR_SETTINGS_SIZE,
     EEPROM_TOTAL_SENSOR_SLOTS,
 };
-use util::{any_as_u8_slice, check_alphanumeric};
+use util::{any_as_u8_slice};
 extern crate alloc;
 use crate::{
-    alloc::string::ToString, protocol::responses, services::*,
-    telemetry::telemeters::lorawan::RakWireless3172,
+    alloc::string::ToString, protocol::responses, services::*, telemetry::telemeters::lorawan::RakWireless3172
 };
 use alloc::boxed::Box;
 use alloc::format;
@@ -30,90 +31,8 @@ use registry::*;
 
 use serde_json::{json, Value};
 
-const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 16;
 
 
-#[derive(Debug, Clone, Copy)]
-struct DataloggerSettings {
-    deployment_identifier: [u8; 16],
-    logger_name: [u8; 8],
-    site_name: [u8; 8],
-    deployment_timestamp: u64,
-    interval: u16,
-    start_up_delay: u16,
-    delay_between_bursts: u16,
-    bursts_per_measurement_cycle: u8,
-    mode: u8,
-    // external_adc_enabled: u8:1, // how we we handle bitfields? -> bitfield_struct crate works well
-    // debug_includes_values: u8:1,
-    // withold_incomplete_readings: u8:1,
-    // low_raw_data: u8:1,
-    // reserved: u8:4
-    reserved: [u8; DATALOGGER_SETTINGS_UNUSED_BYTES],
-}
-
-impl DataloggerSettings {
-    pub fn new() -> Self {
-        let mut settings = DataloggerSettings {
-            deployment_identifier: [b'\0'; 16],
-            logger_name: [b'\0'; 8],
-            site_name: [b'\0'; 8],
-            deployment_timestamp: 0,
-            interval: 1,
-            bursts_per_measurement_cycle: 1,
-            start_up_delay: 0,
-            delay_between_bursts: 0,
-            mode: b'i',
-            reserved: [b'\0'; DATALOGGER_SETTINGS_UNUSED_BYTES],
-        };
-        let deployment_identifier_default = "bcdefghijklmnopq".as_bytes();
-        settings
-            .deployment_identifier
-            .copy_from_slice(deployment_identifier_default);
-
-        let logger_name_types = "MyLogger".as_bytes();
-        settings.logger_name.copy_from_slice(logger_name_types);
-        settings
-    }
-
-    pub fn new_from_bytes(bytes: [u8; EEPROM_DATALOGGER_SETTINGS_SIZE]) -> DataloggerSettings {
-        let settings = bytes.as_ptr().cast::<DataloggerSettings>();
-        unsafe { *settings }
-    }
-
-    pub fn configure_defaults(&mut self) {
-        if self.bursts_per_measurement_cycle == 0 || self.bursts_per_measurement_cycle > 20 {
-            self.bursts_per_measurement_cycle = 1;
-        }
-
-        if self.delay_between_bursts > 300_u16 {
-            self.delay_between_bursts = 0_u16
-        }
-
-        if self.interval > 60_u16 * 24_u16 {
-            self.interval = 15_u16;
-        }
-
-        if self.start_up_delay > 60_u16 {
-            self.start_up_delay = 0;
-        }
-
-        if !check_alphanumeric(&self.logger_name) {
-            let default = "logger";
-            self.logger_name[0..default.len()].clone_from_slice(default.as_bytes());
-        }
-
-        if !check_alphanumeric(&self.site_name) {
-            let default = "site";
-            self.site_name[0..default.len()].clone_from_slice(default.as_bytes());
-        }
-
-        if !check_alphanumeric(&self.deployment_identifier) {
-            let default = "site";
-            self.deployment_identifier[0..default.len()].clone_from_slice(default.as_bytes());
-        }
-    }
-}
 
 pub enum DataLoggerMode {
     Interactive,
@@ -144,7 +63,8 @@ pub struct DataLogger {
 
     // measurement cycle
     completed_bursts: u8,
-    readings_completed_in_current_burst: u8
+    readings_completed_in_current_burst: u8,
+
 }
 
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
@@ -168,7 +88,7 @@ impl DataLogger {
             calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
             telemeter: RakWireless3172::new(),
             completed_bursts: 0,
-            readings_completed_in_current_burst: 0
+            readings_completed_in_current_burst: 0,
         }
     }
 
@@ -177,25 +97,17 @@ impl DataLogger {
             [b'\0'; EEPROM_DATALOGGER_SETTINGS_SIZE];
         board.retrieve_datalogger_settings(&mut bytes);
         rprintln!("retrieved {:?}", bytes);
-        let mut settings: DataloggerSettings = DataloggerSettings::new_from_bytes(bytes); // convert the bytes pack into a DataloggerSettings
+        let settings: DataloggerSettings = DataloggerSettings::new_from_bytes(bytes); // convert the bytes pack into a DataloggerSettings
 
-        settings.configure_defaults();
+        let settings = settings.configure_defaults();
 
         settings
     }
 
-    fn store_settings(&self, board: &mut impl RRIVBoard) {
-        let bytes: &[u8] = unsafe { any_as_u8_slice(&self.settings) };
-        let mut bytes_sized: [u8; EEPROM_DATALOGGER_SETTINGS_SIZE] =
-            [0; EEPROM_DATALOGGER_SETTINGS_SIZE];
-        let copy_size = if bytes.len() >= EEPROM_DATALOGGER_SETTINGS_SIZE {
-            EEPROM_DATALOGGER_SETTINGS_SIZE
-        } else {
-            bytes.len()
-        };
-        bytes_sized[..bytes.len()].copy_from_slice(&bytes[0..copy_size]);
-        board.store_datalogger_settings(&bytes_sized);
-        rprintln!("stored {:?}", bytes_sized);
+    fn store_settings(&mut self, board: &mut impl RRIVBoard) {
+        let bytes = unsafe { self.settings.get_bytes() };
+        board.store_datalogger_settings(&bytes);
+        rprintln!("stored {:?}", bytes);
     }
 
     fn get_driver_index_by_id(&self, id: &str) -> Option<usize> {
@@ -238,19 +150,6 @@ impl DataLogger {
         // setup each service
         command_service::setup(board);
         usart_service::setup(board);
-
-        // For smaller EERPOM, this would overwrite sensor drivers config
-        // #[cfg(feature = "24LC08")]
-
-        // this code was for testing initial settings creation
-        // self.settings = DataloggerSettings::new();
-        // self.settings.deployment_identifier = [
-        //     b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e', b'n', b'a', b'm', b'e', b'e', b'e',
-        //     b'e', b'e',
-        // ];
-        // self.settings.logger_name = [b'n', b'a', b'm', b'e', b'e', b'e', b'e', b'e'];
-        // rprintln!("attempting to store settings for test purposes");
-        // self.store_settings(board);
 
         // read all the sensors from EEPROM
         let registry = get_registry();
@@ -509,7 +408,7 @@ impl DataLogger {
     }
 
     fn write_column_headers_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
-        board.write_log_file("type,timestamp,");
+        board.write_log_file("type,site,logger,deployment,deployed_at,uid,time.s,battery.V,");
 
         let mut first = true;
         for i in 0..self.sensor_drivers.len() {
@@ -547,6 +446,8 @@ impl DataLogger {
         board.write_log_file("\n");
     }
 
+
+    // TODO: this function and the next one can be DRY by passing a closure
     fn write_measured_parameters_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         let epoch = board.epoch_timestamp();
         let millis = board.get_millis() % 1000;
@@ -587,7 +488,17 @@ impl DataLogger {
     fn write_raw_measurement_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         let epoch = board.epoch_timestamp();
         let millis = board.get_millis() % 1000;
-        let output = format!("raw,{}.{},", epoch, millis);
+        // board.write_log_file("type,site,logger,deployment,deployed_at,uuid,time.s,battery.V");
+        
+
+        let output = format!("raw,{},{},{},-,{:X?},{}.{},{},",
+            util::str_from_utf8(&mut self.settings.site_name).unwrap_or_default(),
+            util::str_from_utf8(&mut self.settings.logger_name).unwrap_or_default(),
+            util::str_from_utf8(&mut self.settings.deployment_identifier).unwrap_or_default(),
+            util::str_from_utf8(&mut board.get_uid()).unwrap_or_default(),
+            epoch, millis,
+            board.get_battery_level()
+        );
         board.write_log_file(&output);
 
         let mut first = true;
@@ -642,10 +553,21 @@ impl DataLogger {
         match command_payload {
             CommandPayload::DataloggerSetCommandPayload(payload) => {
                 self.update_datalogger_settings(board, payload);
-                board.usb_serial_send("updated datalogger settings\n");
+                responses::send_command_response_message(board, "updated datalogger settings");
             }
             CommandPayload::DataloggerGetCommandPayload(_) => {
-                board.usb_serial_send("get datalogger settings not implemented\n");
+                let values = json!({
+                   "site_name": util::str_from_utf8(&mut self.settings.site_name).unwrap_or_default(),
+                   "logger_name" : util::str_from_utf8(&mut self.settings.logger_name).unwrap_or_default(),
+                   "deployment_identifier" : util::str_from_utf8(&mut self.settings.deployment_identifier).unwrap_or_default(),
+                   "deployment_timestamp" : self.settings.deployment_timestamp,
+                   "interval" : self.settings.interval,
+                   "start_up_delay" : self.settings.start_up_delay,
+                   "delay_between_bursts" : self.settings.delay_between_bursts,
+                   "bursts_per_measurement_cycle" : self.settings.bursts_per_measurement_cycle,
+                   "mode" : datalogger_commands::mode_text(&self.mode)
+                });
+                responses::send_command_response_message(board, values.to_string().as_str());
             }
             CommandPayload::DataloggerSetModeCommandPayload(payload) => {
                 if let Some(mode) = payload.mode {
@@ -700,14 +622,13 @@ impl DataLogger {
                         registry::sensor_type_id_from_name(&sensor_type)
                     }
                     _ => {
-                        board.usb_serial_send("{\"error\": \"sensor type not specified\"}");
+                        responses::send_command_response_message(board, "ensor type not specified");
                         return;
-                    } // Ok(sensor_type) => sensor_type_id_from_name(&sensor_type),
-                      // Err(_) => 0,
+                    }
                 };
 
                 if sensor_type_id == 0 {
-                    board.usb_serial_send("{\"error\": \"sensor type not found\"}");
+                    responses::send_command_response_message(board, "sensor type not found");
                     return;
                 }
 
@@ -823,20 +744,16 @@ impl DataLogger {
                         .copy_from_slice(&special_settings_bytes[0..copy_size]);
 
                     board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
-                    board.usb_serial_send("updated sensor configuration\n");
+                    responses::send_command_response_message(board, "updated sensor configuration");
                 }
             }
             CommandPayload::SensorGetCommandPayload(payload) => {
                 if let Some(index) = self.get_driver_index_by_id_value(payload.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         let configuration_payload = driver.get_configuration_json();
-
-                        // TODO: get the other sensor values
-
                         let string = configuration_payload.to_string();
                         let str = string.as_str();
-                        board.usb_serial_send(str);
-                        board.usb_serial_send("\n");
+                        responses::send_command_response_message(board, str);
                         return;
                     }
                 }
@@ -1253,41 +1170,8 @@ impl DataLogger {
         board: &mut impl RRIVBoard,
         set_command_payload: DataloggerSetCommandPayload,
     ) {
-        if let Some(logger_name) = set_command_payload.logger_name {
-            match serde_json::from_value(logger_name) {
-                Ok(logger_name) => self.settings.logger_name = logger_name,
-                Err(_) => todo!(),
-            }
-        }
-
-        if let Some(site_name) = set_command_payload.site_name {
-            match serde_json::from_value(site_name) {
-                Ok(site_name) => self.settings.site_name = site_name,
-                Err(_) => todo!(),
-            }
-        }
-
-        if let Some(deployment_identifier) = set_command_payload.deployment_identifier {
-            match serde_json::from_value(deployment_identifier) {
-                Ok(deployment_identifier) => {
-                    self.settings.deployment_identifier = deployment_identifier
-                }
-                Err(_) => todo!(),
-            }
-        }
-
-        if let Some(interval) = set_command_payload.interval {
-            self.settings.interval = interval;
-        }
-
-        if let Some(bursts_per_cycle) = set_command_payload.bursts_per_cycle {
-            self.settings.bursts_per_measurement_cycle = bursts_per_cycle;
-        }
-
-        if let Some(start_up_delay) = set_command_payload.start_up_delay {
-            self.settings.start_up_delay = start_up_delay;
-        }
-
+        let values = set_command_payload.values();
+        self.settings = self.settings.with_values(values);
         self.store_settings(board)
     }
 }

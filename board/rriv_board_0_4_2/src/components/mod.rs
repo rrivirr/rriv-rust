@@ -21,3 +21,6 @@ pub use external_adc::*;
 
 pub mod eeprom;
 pub use eeprom::*;
+
+pub mod uid;
+pub use uid::*;

@@ -23,8 +23,9 @@ pub fn str_from_utf8( buffer: &mut [u8] )-> Result<&str, Utf8Error> {
 
 pub fn check_alphanumeric(array: &[u8]) -> bool {
     let checks = array.iter();
-    let checks = checks.map(|x| (*x as char).is_alphanumeric());
-    checks.fold(true, |acc, check| if !check || !acc { false } else { true })
+    let checks = checks.map(|x| (*x as char).is_alphanumeric() || *x == 0);
+    let rval = checks.fold(true, |acc, check| if !check || !acc { false } else { true });
+    rval && (array[0] != 0)
 }
 
 pub unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {

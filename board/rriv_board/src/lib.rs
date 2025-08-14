@@ -67,23 +67,15 @@ pub trait RRIVBoard: Send {
     fn get_sensor_driver_services(&mut self) -> &mut dyn SensorDriverServices;
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices;
 
+    fn get_battery_level(&mut self) -> i16;
+
     // low level board functionality
     // for debugging and basic operation
     fn dump_eeprom(&mut self);
+    fn get_uid(&mut self) -> [u8; 12];
 
 }
 
-
-// pub trait SensorMeasurementInterfaces {
-//     adc,
-//     i2c,
-//     modbus,
-// }
-
-
-// pub trait TelemeterInterfaces {
-//     spi
-// }
 
 pub trait OneWireBusInterface {
     // fn send_command(

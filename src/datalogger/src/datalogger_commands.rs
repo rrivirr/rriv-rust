@@ -1,8 +1,27 @@
+use rtt_target::rprintln;
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 use alloc::fmt::Debug;
 use alloc::boxed::Box;
 
+use crate::DataLoggerMode;
+
+const LOGGER_NAME_LENGTH : usize = 8;
+const SITE_NAME_LENGTH : usize = 8;
+const DEPLOYMENT_IDENTIFIER_LENGTH : usize = 16;
+
+#[derive(Default)]
+pub struct DataloggerSettingsValues {
+    pub deployment_identifier: Option<[u8; 16]>,
+    pub logger_name: Option<[u8; 8]>,
+    pub site_name: Option<[u8; 8]>,
+    pub deployment_timestamp: Option<u64>,
+    pub interval: Option<u16>,
+    pub start_up_delay: Option<u16>,
+    pub delay_between_bursts: Option<u16>,
+    pub bursts_per_measurement_cycle: Option<u8>,
+    pub mode: Option<u8>,
+}
 
 #[derive(Serialize, Deserialize)]
 pub struct DataloggerSetCommandPayload {
@@ -16,6 +35,86 @@ pub struct DataloggerSetCommandPayload {
     pub start_up_delay: Option<u16>
     // pub user_note: Option<Value>, // not implemented for now
     // pub user_value: Option<i16>
+}
+
+fn value_length( target: &[u8], value: &[u8]) -> usize {
+    if value.len() > target.len() { target.len() } else { value.len() }
+}
+
+// fn match_and_set(source: Option<Value>, target: &mut [u8]) -> Option<[u8]> {
+//     if let Some(value) = source {
+//             match value {
+//                 serde_json::Value::String(value) => {
+//                     let value = value.as_bytes();
+//                     target.clone_from_slice(&value[0..value_length(target, value)]);
+//                     // has to set here somehow
+//                 },
+//                 _ => {
+
+//                 },
+//             }
+//     }
+// }
+
+impl DataloggerSetCommandPayload {
+    pub fn values(self) -> DataloggerSettingsValues {
+
+        let mut datalogger_settings_values = DataloggerSettingsValues::default();
+
+        if let Some(value) = self.logger_name {
+            match value {
+                serde_json::Value::String(value) => {
+                    let value = value.as_bytes();
+                    let mut target = [0u8; LOGGER_NAME_LENGTH];
+                    let len = value_length(&target, value);
+                    target[0..len].clone_from_slice(&value[0..len]);
+                    datalogger_settings_values.logger_name = Some(target);
+                },
+                _ => {},
+            }
+        }
+
+        if let Some(value) = self.site_name {
+            match value {
+                serde_json::Value::String(value) => {
+                    let value = value.as_bytes();
+                    let mut target = [0u8; SITE_NAME_LENGTH];
+                    let len = value_length(&target, value);
+                    target[0..len].clone_from_slice(&value[0..len]);
+                    datalogger_settings_values.site_name = Some(target);
+                },
+                _ => {},
+            }
+        }
+        
+        if let Some(value) = self.deployment_identifier {
+            match value {
+                serde_json::Value::String(value) => {
+                    let value = value.as_bytes();
+                    let mut target = [0u8; DEPLOYMENT_IDENTIFIER_LENGTH];
+                    let len = value_length(&target, value);
+                    target[0..len].clone_from_slice(&value[0..len]);
+                    datalogger_settings_values.deployment_identifier = Some(target);
+                },
+                _ => {},
+            }
+        }
+
+        if let Some(interval) = self.interval {
+            datalogger_settings_values.interval = Some(interval);
+        }
+
+        if let Some(bursts_per_cycle) = self.bursts_per_cycle {
+            datalogger_settings_values.bursts_per_measurement_cycle = Some(bursts_per_cycle);
+        }
+
+        if let Some(start_up_delay) = self.start_up_delay {
+            datalogger_settings_values.start_up_delay = Some(start_up_delay);
+        }
+
+        datalogger_settings_values
+
+    }
 }
 
 
@@ -326,4 +425,15 @@ pub fn get_id(id: &serde_json::Value) -> Result<(&alloc::string::String), (&str)
         }
     };
 
+}
+
+
+pub fn mode_text(mode: &DataLoggerMode) -> &'static str {
+    match mode {
+        DataLoggerMode::Interactive => "interactive",
+        DataLoggerMode::Watch => "watch",
+        DataLoggerMode::Quiet => "quiet",
+        DataLoggerMode::Field => "field",
+        DataLoggerMode::HibernateUntil => "hibernate",
+    }
 }
