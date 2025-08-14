@@ -1,9 +1,12 @@
+use rriv_board::RRIVBoard;
 use rtt_target::rprintln;
 use serde::{Deserialize, Serialize};
-use serde_json::{Number, Value};
+use serde_json::{json, Number, Value};
 use alloc::fmt::Debug;
-use alloc::boxed::Box;
+use alloc::format;
 
+
+use crate::protocol::responses;
 use crate::DataLoggerMode;
 
 const LOGGER_NAME_LENGTH : usize = 8;
@@ -436,4 +439,59 @@ pub fn mode_text(mode: &DataLoggerMode) -> &'static str {
         DataLoggerMode::Field => "field",
         DataLoggerMode::HibernateUntil => "hibernate",
     }
+}
+
+
+// TODO: this is a command implementation, probably doesn't below in this file
+pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
+
+    // let mut board_response = BoardResponse::new();
+    
+    if let Some(param) = payload.parameter {
+        match param {
+            serde_json::Value::String(param) => {
+                rprintln!("{:?}", param.as_str());
+                match param.as_str() {
+                    "epoch" => {
+                        let epoch = board.epoch_timestamp();
+                        board.usb_serial_send(format!("{:}\n", epoch).as_str());
+                    }
+                    "version" => {
+                        let mut branch = "none";
+                        if let Some(found_branch) = option_env!("GIT_BRANCH") {
+                            branch = found_branch;
+                        }
+                         let mut gitref = "none";
+                        if let Some(found_ref) = option_env!("GIT_REF") {
+                            gitref = found_ref;
+                        }
+
+                        let response = json!({
+                            "hv":"0.4.2",
+                            "fv":"0.5.0",
+                            "br":branch,
+                            "ref":gitref
+                        });
+                        responses::send_command_response_message(board, format!("{}\n", response).as_str());
+                    }
+                    "eeprom" => {
+                        board.dump_eeprom();
+                    },
+                    _ => {
+                        responses::send_command_response_message(board, "Unsupported param in command");
+                    }
+                }
+            }
+            err => {
+                responses::send_command_response_message(board, "Bad param in command");
+                rprintln!("Bad epoch {:?}", err);
+                return;
+            }
+
+        }
+    } else {
+        let epoch = board.epoch_timestamp();
+        board.usb_serial_send(format!("{:}", epoch).as_str());                
+    }
+
 }

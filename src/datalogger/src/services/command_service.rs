@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use rtt_target::rprintln;
 
 
-use crate::datalogger_commands::*;
+use crate::datalogger::commands::*;
 
 static mut COMMAND_DATA: CommandData = CommandData::default();
 
