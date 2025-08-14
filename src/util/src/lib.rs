@@ -23,7 +23,7 @@ pub fn str_from_utf8( buffer: &mut [u8] )-> Result<&str, Utf8Error> {
 
 pub fn check_alphanumeric(array: &[u8]) -> bool {
     let checks = array.iter();
-    let checks = checks.map(|x| (*x as char).is_alphanumeric() || *x == 0);
+    let checks = checks.map(|x| (*x as char).is_alphanumeric() || *x == 0 || *x == b'_');
     let rval = checks.fold(true, |acc, check| if !check || !acc { false } else { true });
     rval && (array[0] != 0)
 }

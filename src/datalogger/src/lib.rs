@@ -488,14 +488,15 @@ impl DataLogger {
     fn write_raw_measurement_to_storage(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         let epoch = board.epoch_timestamp();
         let millis = board.get_millis() % 1000;
-        // board.write_log_file("type,site,logger,deployment,deployed_at,uuid,time.s,battery.V");
+        // "type,site,logger,deployment,deployed_at,uid,time.s,battery.V"
         
-
-        let output = format!("raw,{},{},{},-,{:X?},{}.{},{},",
+        // TODO: find a better way to print this uid, or generate and use a UUID that doesn't come from the MCU's uid
+        let uid = board.get_uid();
+        let output = format!("raw,{},{},{},-,{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?},{}.{},{},",
             util::str_from_utf8(&mut self.settings.site_name).unwrap_or_default(),
             util::str_from_utf8(&mut self.settings.logger_name).unwrap_or_default(),
             util::str_from_utf8(&mut self.settings.deployment_identifier).unwrap_or_default(),
-            util::str_from_utf8(&mut board.get_uid()).unwrap_or_default(),
+            uid[0],uid[1],uid[2],uid[3],uid[4],uid[5],uid[6],uid[7],uid[8],uid[9],uid[10],uid[11],
             epoch, millis,
             board.get_battery_level()
         );
