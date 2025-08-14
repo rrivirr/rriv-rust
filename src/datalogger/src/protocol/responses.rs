@@ -1,9 +1,11 @@
 use rriv_board::RRIVBoard;
+use rtt_target::rprintln;
 use serde_json::json;
 
 use crate::alloc::string::ToString;
 
 pub fn send_command_response_message(board: &mut impl RRIVBoard, message: &str) {
+    rprintln!("{}", message);
     board.usb_serial_send(json!({"message":message}).to_string().as_str());
     board.usb_serial_send("\n");
 }

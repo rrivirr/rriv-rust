@@ -7,14 +7,7 @@ use alloc::format;
 use i2c_hung_fix::try_unhang_i2c;
 
 use core::{
-    any::Any,
-    cell::RefCell,
-    concat,
-    default::Default,
-    format_args,
-    ops::DerefMut,
-    option::Option::{self, *},
-    result::Result::*,
+    any::Any, cell::RefCell, concat, default::Default, fmt::Error, format_args, ops::DerefMut, option::Option::{self, *}, result::Result::*
 };
 use core::{mem, result};
 use cortex_m::{
@@ -87,6 +80,7 @@ type BoardI2c1 = BlockingI2c<I2C1, (pin_groups::I2c1Scl, pin_groups::I2c1Sda)>;
 type BoardI2c2 = BlockingI2c<I2C2, (pin_groups::I2c2Scl, pin_groups::I2c2Sda)>;
 
 pub struct Board {
+    pub uid: [u8; 12],
     pub delay: DelayUs<TIM3>,
     // // pub power_control: PowerControl,
     pub gpio: DynamicGpioPins,
@@ -204,7 +198,17 @@ impl RRIVBoard for Board {
         cortex_m::interrupt::free(|cs| {
             // USB
             let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
-            serial.write(string.as_bytes()).ok();
+            let bytes = string.as_bytes();
+            let mut written = 0;
+
+            while written < bytes.len() {
+                match serial.write(&bytes[written..bytes.len()]){
+                    Ok(bytes_written) => {
+                        written = written + bytes_written;
+                    },
+                    Err(_) => {},
+                }
+            }
         });
     }
 
@@ -221,17 +225,14 @@ impl RRIVBoard for Board {
         &mut self,
         bytes: &[u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
-        // who knows the eeprom bytes to use? - the board doeas
         eeprom::write_datalogger_settings_to_eeprom(self, bytes);
     }
 
     fn retrieve_datalogger_settings(
-        // let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         &mut self,
         buffer: &mut [u8; rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE],
     ) {
         eeprom::read_datalogger_settings_from_eeprom(self, buffer);
-        util::remove_invalid_utf8(buffer);
     }
 
     fn retrieve_sensor_settings(
@@ -315,6 +316,14 @@ impl RRIVBoard for Board {
         return self;
     }
 
+    fn get_battery_level(&mut self) -> i16 {
+        match self.battery_level.measure_battery_level(&mut self.internal_adc,&mut self.delay) {
+            Ok(value) => return value as i16,
+            Err(err) => return -1,
+        }
+    }
+
+
     fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
     }
@@ -340,6 +349,10 @@ impl RRIVBoard for Board {
            rriv_board::RRIVBoard::usb_serial_send(self,format!("{}", &buffer[i]).as_str()); 
         }
         rriv_board::RRIVBoard::usb_serial_send(self,"}\n"); // } ends the transmissions
+    }
+
+    fn get_uid(&mut self) -> [u8; 12] {
+        return self.uid;
     }
 }
 
@@ -677,6 +690,8 @@ impl OutputPin for OneWirePin {
 }
 
 pub struct BoardBuilder {
+    pub uid: Option<[u8; 12]>,
+
     // chip features
     pub delay: Option<DelayUs<TIM3>>,
 
@@ -702,6 +717,7 @@ pub struct BoardBuilder {
 impl BoardBuilder {
     pub fn new() -> Self {
         BoardBuilder {
+            uid: None,
             i2c1: None,
             i2c2: None,
             delay: None,
@@ -716,7 +732,8 @@ impl BoardBuilder {
             internal_rtc: None,
             storage: None,
             watchdog: None,
-            counter: None
+            counter: None,
+
         }
     }
 
@@ -762,6 +779,7 @@ impl BoardBuilder {
         // };
 
         Board {
+            uid: self.uid.unwrap(),
             i2c1: self.i2c1,
             i2c2: self.i2c2.unwrap(),
             delay: self.delay.unwrap(),
@@ -939,11 +957,16 @@ impl BoardBuilder {
         return x;
     }
 
+
+
     fn setup(&mut self) {
         rprintln!("board new");
 
         let mut core_peripherals = cortex_m::Peripherals::take().unwrap();
         let device_peripherals = pac::Peripherals::take().unwrap();
+
+        let uid = Uid::fetch();
+        self.uid = Some(uid.bytes());
 
         // mcu device registers
         let rcc = device_peripherals.RCC.constrain();
