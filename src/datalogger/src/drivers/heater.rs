@@ -7,15 +7,15 @@ use crate::{any_as_u8_slice, sensor_name_from_type_id};
 use super::types::*;
 
 #[derive(Copy, Clone)]
-pub struct HeaterSpecialConfiguration {
+pub struct TimedSwitchSpecialConfiguration {
     on_time_s: usize,
     off_time_s: usize,
     empty: [u8; 24],
 }
 
-impl HeaterSpecialConfiguration {
+impl TimedSwitchSpecialConfiguration {
 
-    pub fn new_from_values(value: serde_json::Value) -> HeaterSpecialConfiguration {
+    pub fn new_from_values(value: serde_json::Value) -> TimedSwitchSpecialConfiguration {
         // should we return a Result object here? because we are parsing?  parse_from_values?
         let mut on_time_s: usize = 10;
         match &value["on_time_s"] {
@@ -65,25 +65,25 @@ impl HeaterSpecialConfiguration {
 
     pub fn new_from_bytes(
         bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE],
-    ) -> HeaterSpecialConfiguration {
-        let settings = bytes.as_ptr().cast::<HeaterSpecialConfiguration>();
+    ) -> TimedSwitchSpecialConfiguration {
+        let settings = bytes.as_ptr().cast::<TimedSwitchSpecialConfiguration>();
         unsafe { *settings }
     }
 }
 
-pub struct Heater {
+pub struct TimedSwitch {
     general_config: SensorDriverGeneralConfiguration,
-    special_config: HeaterSpecialConfiguration,
+    special_config: TimedSwitchSpecialConfiguration,
     state: u8, // 0: off, 1: on, other: invalid for now
     last_state_updated_at: i64
 }
 
-impl Heater {
+impl TimedSwitch {
     pub fn new(
         general_config: SensorDriverGeneralConfiguration,
-        special_config: HeaterSpecialConfiguration,
+        special_config: TimedSwitchSpecialConfiguration,
     ) -> Self {
-        Heater {
+        TimedSwitch {
             general_config,
             special_config,
             state: 0,
@@ -92,7 +92,7 @@ impl Heater {
     }
 }
 
-impl SensorDriver for Heater {
+impl SensorDriver for TimedSwitch {
     fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         // todo!()
     }

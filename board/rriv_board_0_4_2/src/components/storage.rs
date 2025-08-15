@@ -1,7 +1,5 @@
 
 
-use core::{ffi::CStr, time};
-
 use alloc::format;
 
 use ds323x::{Datelike, Timelike};
@@ -80,7 +78,7 @@ impl TimeSource for RrivTimeSource {
       );
       match timestamp {
         Ok(timestamp) => timestamp,
-        Err(err) => Timestamp::from_calendar(0, 0, 0, 0, 0, 0).unwrap()
+        Err(_err) => Timestamp::from_calendar(0, 0, 0, 0, 0, 0).unwrap()
       }
       
     }
@@ -211,14 +209,17 @@ impl Storage {
 
       let cache_data: &[u8] = &self.cache[0..self.next_position];
       match self.volume_manager.write(file, cache_data) {
-        Ok(ret) => rprintln!("OK: {:?}", ret),
+        Ok(ret) => rprintln!("wrote: {:?}", ret),
         Err(err) => rprintln!("Err: {:?}", err),
       }
 
-      self.volume_manager.close_file(file);
+      match self.volume_manager.close_file(file) {
+        Ok(_) => {},
+        Err(err) => rprintln!("Err: {:?}", err),
+      }
       self.reopen_file();
       self.next_position = 0;
-
+      rprintln!("flushed");
     }
 
 
@@ -243,6 +244,7 @@ impl Storage {
 
       while data.len() - write_start > 0 {
           let mut write_length = data.len() - write_start;
+          // rprintln!("writing {}", write_length);
           if write_length > CACHE_SIZE - self.next_position {
             write_length = CACHE_SIZE - self.next_position;
           }
