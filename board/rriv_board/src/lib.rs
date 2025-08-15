@@ -11,11 +11,6 @@ pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 12;
 #[cfg(feature = "24LC01")]
 pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 2;
 
-enum AdcSelect {
-    Internal,
-    External
-}
-
 pub trait RXProcessor: Send + Sync {
     fn process_character(&'static self, character: u8);
 }
@@ -23,10 +18,10 @@ pub trait RXProcessor: Send + Sync {
 // Board Services Used by Control Logic and Drivers
 macro_rules! control_services {
     () => {
-        fn usb_serial_send(&self, string: &str); // TODO: give his a more unique name specifying that it's used to talk with the serial rrivctl interface
+        fn usb_serial_send(&mut self, string: &str); // TODO: give his a more unique name specifying that it's used to talk with the serial rrivctl interface
                                                  // maybe rrivctl_send
         fn usart_send(&mut self, string: &str);
-        fn serial_debug(&self, string: &str);    
+        fn serial_debug(&mut self, string: &str);    
         fn delay_ms(&mut self, ms: u16);
         fn timestamp(&mut self) -> i64;
     };
@@ -68,6 +63,8 @@ pub trait RRIVBoard: Send {
     fn get_telemetry_driver_services(&mut self) -> &mut dyn TelemetryDriverServices;
 
     fn get_battery_level(&mut self) -> i16;
+
+    fn sleep(&mut self);
 
     // low level board functionality
     // for debugging and basic operation

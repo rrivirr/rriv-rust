@@ -7,16 +7,16 @@ use alloc::format;
 use i2c_hung_fix::try_unhang_i2c;
 
 use core::{
-    any::Any, cell::RefCell, concat, default::Default, fmt::Error, format_args, ops::DerefMut, option::Option::{self, *}, result::Result::*
+    cell::RefCell, default::Default, ops::DerefMut, option::Option::{self, *}, result::Result::*
 };
-use core::{mem, result};
+use core::{mem};
 use cortex_m::{
     asm::{delay, dmb, dsb},
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Cr, Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, timer::{Counter, CounterHz, CounterMs}, watchdog::IndependentWatchdog};
+use stm32f1xx_hal::{afio::MAPR, gpio::{Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, timer::CounterMs, watchdog::IndependentWatchdog};
 use stm32f1xx_hal::{serial::StopBits};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
@@ -40,7 +40,7 @@ use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use rriv_board::{
-    OneWireBusInterface, RRIVBoard, RRIVBoardBuilder, RXProcessor,
+    RRIVBoard, RXProcessor,
     SensorDriverServices, TelemetryDriverServices, EEPROM_TOTAL_SENSOR_SLOTS,
 };
 
@@ -185,7 +185,7 @@ impl RRIVBoard for Board {
         });
 
         rriv_board::RRIVBoard::delay_ms(self, 2);
-        self.gpio.gpio6.set_low(); // origi
+        let _ = self.gpio.gpio6.set_low(); // origi
         // self.gpio.gpio6.set_high();
 
 
@@ -194,26 +194,47 @@ impl RRIVBoard for Board {
     }
 
   
-    fn usb_serial_send(&self, string: &str) {
-        cortex_m::interrupt::free(|cs| {
+    fn usb_serial_send(&mut self, string: &str) {
+        cortex_m::interrupt::free(|_cs| {
             // USB
             let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
             let bytes = string.as_bytes();
             let mut written = 0;
 
+            let mut would_block_count = 0;
             while written < bytes.len() {
                 match serial.write(&bytes[written..bytes.len()]){
                     Ok(bytes_written) => {
+                        // rprintln!("usb bytes written {}", bytes_written);
                         written = written + bytes_written;
                     },
-                    Err(_) => {},
+                    Err(err) => {
+                        match err {
+                            UsbError::WouldBlock => {
+                                if would_block_count > 100 {
+                                    rprintln!("USBWouldBlock limit exceeded");
+                                    return;
+                                }
+                                would_block_count = would_block_count + 1; // handle hung blocking condition.  possibly caused by client not reading and buffer full.
+                                rriv_board::RRIVBoard::delay_ms(self, 1);
+                            },
+                            _ => { rprintln!("{:?}", err); }
+                            // UsbError::ParseError => todo!(),
+                            // UsbError::BufferOverflow => todo!(),
+                            // UsbError::EndpointOverflow => todo!(),
+                            // UsbError::EndpointMemoryOverflow => todo!(),
+                            // UsbError::InvalidEndpoint => todo!(),
+                            // UsbError::Unsupported => todo!(),
+                            // UsbError::InvalidState => todo!(),
+                        }
+                    },
                 }
             }
         });
     }
 
     // outputs to serial and also echos to rtt
-    fn serial_debug(&self, string: &str) {
+    fn serial_debug(&mut self, string: &str) {
         rprintln!("{:?}", string);
         if self.debug {
             rriv_board::RRIVBoard::usb_serial_send(self, string);
@@ -323,6 +344,11 @@ impl RRIVBoard for Board {
         }
     }
 
+    fn sleep(&mut self) {
+        // need to extend IndependentWatchdog to sleep the watch dog
+        // self.watchdog.acc
+        self.watchdog.feed();
+    }
 
     fn set_debug(&mut self, debug: bool) {
         self.debug = debug;
@@ -358,7 +384,7 @@ impl RRIVBoard for Board {
 
 macro_rules! control_services_impl {
     () => {
-        fn usb_serial_send(&self, string: &str) {
+        fn usb_serial_send(&mut self, string: &str) {
             rriv_board::RRIVBoard::usb_serial_send(self, string);
         }
 
@@ -366,7 +392,7 @@ macro_rules! control_services_impl {
             rriv_board::RRIVBoard::usart_send(self, string);
         }
 
-        fn serial_debug(&self, string: &str) {
+        fn serial_debug(&mut self, string: &str) {
             rriv_board::RRIVBoard::serial_debug(self, string);
         }
 
@@ -527,11 +553,11 @@ impl SensorDriverServices for Board {
 
     fn one_wire_match_address(&mut self, address: u64) {
         let address = Address(address);
-        self.one_wire_bus.match_address(&address, &mut self.delay);
+        _ = self.one_wire_bus.match_address(&address, &mut self.delay);
     }
 
     fn one_wire_read_bytes(&mut self, output: &mut [u8]) {
-        self.one_wire_bus.read_bytes(output, &mut self.delay);
+        let _ = self.one_wire_bus.read_bytes(output, &mut self.delay);
         // TODO
         match check_crc8::<one_wire_bus::OneWireError<OneWireGpio1>>(output) {
             Ok(_) => return,
@@ -763,7 +789,7 @@ impl BoardBuilder {
             };
         }
 
-        if (one_wire_option.is_none()) {
+        if one_wire_option.is_none() {
             rprintln!("bad one wire creation");
         }
         let one_wire = one_wire_option.unwrap();
@@ -1025,6 +1051,8 @@ impl BoardBuilder {
         );
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
 
+        
+
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
         self.external_adc.as_mut().unwrap().disable(&mut delay);
 
@@ -1234,3 +1262,43 @@ impl BoardBuilder {
 unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
 }
+
+
+ fn _usb_serial_send(string: &str, delay: impl DelayMs) {
+        cortex_m::interrupt::free(|_cs| {
+            // USB
+            let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
+            let bytes = string.as_bytes();
+            let mut written = 0;
+
+            let mut would_block_count = 0;
+            while written < bytes.len() {
+                match serial.write(&bytes[written..bytes.len()]){
+                    Ok(bytes_written) => {
+                        // rprintln!("usb bytes written {}", bytes_written);    
+                        written = written + bytes_written;
+                    },
+                    Err(err) => {
+                        match err {
+                            UsbError::WouldBlock => {
+                                if would_block_count > 100 {
+                                    rprintln!("USBWouldBlock limit exceeded");
+                                    return;
+                                }
+                                would_block_count = would_block_count + 1; // handle hung blocking condition.  possibly caused by client not reading and buffer full.
+                                delay.delay_ms
+                            },
+                            _ => { rprintln!("{:?}", err); }
+                            // UsbError::ParseError => todo!(),
+                            // UsbError::BufferOverflow => todo!(),
+                            // UsbError::EndpointOverflow => todo!(),
+                            // UsbError::EndpointMemoryOverflow => todo!(),
+                            // UsbError::InvalidEndpoint => todo!(),
+                            // UsbError::Unsupported => todo!(),
+                            // UsbError::InvalidState => todo!(),
+                        }
+                    },
+                }
+            }
+        });
+    }

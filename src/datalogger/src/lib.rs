@@ -37,8 +37,8 @@ use serde_json::{json, Value};
 
 pub struct DataLogger {
     settings: DataloggerSettings,
-    sensor_drivers: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-    actuator_drivers: [Option<Box<dyn ActuatorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+    sensor_drivers: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],  // TODO: this could be called 'sensor_configs'. modules, (composable modules)
+    // actuator_drivers: [Option<Box<dyn ActuatorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
     telemeter_drivers: [Option<Box<dyn TelemeterDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
 
     last_interactive_log_time: i64,
@@ -73,7 +73,6 @@ impl DataLogger {
         DataLogger {
             settings: DataloggerSettings::new(),
             sensor_drivers: [SENSOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-            actuator_drivers: [ACTUATOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             last_interactive_log_time: 0,
             debug_values: true,
@@ -95,7 +94,7 @@ impl DataLogger {
         let settings: DataloggerSettings = DataloggerSettings::new_from_bytes(bytes); // convert the bytes pack into a DataloggerSettings
 
         let settings = settings.configure_defaults();
-
+        
         settings
     }
 
@@ -141,6 +140,7 @@ impl DataLogger {
         // rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
         rprintln!("retrieved settings {:?}", self.settings);
+        self.mode = DataLoggerMode::from_u8(self.settings.mode);
 
         // setup each service
         command_service::setup(board);
@@ -183,16 +183,26 @@ impl DataLogger {
 
         self.write_column_headers_to_storage(board);
         rprintln!("done with setup");
+
+        // match self.mode {
+        //     DataLoggerMode::Field => {
+        //         board.usb_serial_send("!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+        //         board.usb_serial_send("Datalogger entering field mode\n");
+        //         board.usb_serial_send("Type 'i' to exit to interactive mode\n");
+        //         for i in 5..0 {
+        //            board.usb_serial_send(format!("{}\n",i).as_str()); 
+        //         }
+        //     },
+        //     _ => {}
+        // }
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
         //
         // Process incoming commands
         //
-
-        //todo: refactor to use Result<T,E>
-        let get_command_result = command_service::get_pending_command(board);
-        if let Some(get_command_result) = get_command_result {
+        let mut command = command_service::get_pending_command(board);  //todo: refactor to use Result<T,E>
+        while let Some(get_command_result) = command {
             match get_command_result {
                 Ok(command_payload) => {
                     self.execute_command(board, command_payload);
@@ -205,6 +215,8 @@ impl DataLogger {
                     );
                 }
             }
+        
+          command = command_service::get_pending_command(board); 
         }
 
         //
@@ -212,13 +224,12 @@ impl DataLogger {
         //
         self.telemeter.run_loop_iteration(board);
 
+
+        self.update_actuators(board);
+
         //
         // Do the measurement cycle
         //
-        //
-        // implement interactive mode logging first
-
-        self.update_actuators(board);
 
         match self.mode {
             DataLoggerMode::Interactive  => {
@@ -251,8 +262,14 @@ impl DataLogger {
 
                 self.run_measurement_cycle(board);
                 if self.measurement_cycle_completed() {
+                    rprintln!("Measurement cycle completed");
                 //     // go to sleep until the next in interval (in minutes)
-                    board.delay_ms(self.settings.interactive_logging_interval); // TODO: using interactive while developing.
+                    let mut slept = 0;
+                    while slept < self.settings.sleep_interval * 1000 * 60 { // TODO: allow using interactive_logging_interval here for testing
+                        board.delay_ms(2000); 
+                        board.sleep(); // TODO: this just feeds the watchdog for now
+                        slept = slept + 2000;
+                    }
                     
                 //     // start the next measurement cycle
                     self.initialize_measurement_cycle();
@@ -282,11 +299,13 @@ impl DataLogger {
         // calculate the total number of readings per burst, max of readings requests on each sensor.
         // allow burst length to be set per sensors OR overwridden
 
-        let readings_per_burst = 10; // TODO get it from settings (need to be added there)
+        let readings_per_burst: u8 = 10; // TODO get it from settings (need to be added there)
 
         // get next raw reading
+        rprintln!("measuring sensor values in cycle");
         self.measure_sensor_values(board);
         self.readings_completed_in_current_burst = self.readings_completed_in_current_burst + 1;
+        rprintln!("completed reading {}", self.readings_completed_in_current_burst);
 
         // output raw data to serial?
         let output_raw_data_to_serial  = true;
@@ -296,13 +315,15 @@ impl DataLogger {
 
         // write raw data to storage
         self.write_raw_measurement_to_storage(board);
-
         // store values into the summarizer
 
         // check on progress
-        if(self.readings_completed_in_current_burst >= readings_per_burst){
+        if self.readings_completed_in_current_burst >= readings_per_burst {
+            rprintln!("completed burst {}", self.completed_bursts);
             self.completed_bursts = self.completed_bursts + 1;
         }
+        rprintln!("run_measurement_cycle done");
+
     }
 
     fn process_telemetry(&mut self, board: &mut impl rriv_board::RRIVBoard) {
@@ -531,7 +552,7 @@ impl DataLogger {
     fn write_last_measurement_to_serial(&mut self, board: &mut impl rriv_board::RRIVBoard) {
         // first output the column headers
         match self.serial_tx_mode {
-            DataLoggerSerialTxMode::Normal => self.write_column_headers_to_serial(board),
+            DataLoggerSerialTxMode::Interactive => self.write_column_headers_to_serial(board),
             _ => {}
         }
 
@@ -580,6 +601,8 @@ impl DataLogger {
                         }
                         _ => {}
                     }
+        self.settings.mode = self.mode.to_u8();
+        self.store_settings(board);
     }
 
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
