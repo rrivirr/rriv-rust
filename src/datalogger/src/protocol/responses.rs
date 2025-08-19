@@ -14,3 +14,4 @@ pub fn send_command_response_error(board: &mut impl RRIVBoard, message: &str, er
     board.usb_serial_send(json!({"message":message, "error": error}).to_string().as_str());
     board.usb_serial_send("\n");
 }
+

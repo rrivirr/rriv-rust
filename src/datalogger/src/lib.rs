@@ -14,6 +14,8 @@ use rriv_board::{
 };
 use util::{any_as_u8_slice};
 extern crate alloc;
+use crate::datalogger::bytes;
+use crate::datalogger::helper;
 use crate::datalogger::modes::DataLoggerMode;
 use crate::datalogger::modes::DataLoggerSerialTxMode;
 use crate::{
@@ -38,7 +40,6 @@ use serde_json::{json, Value};
 pub struct DataLogger {
     settings: DataloggerSettings,
     sensor_drivers: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],  // TODO: this could be called 'sensor_configs'. modules, (composable modules)
-    // actuator_drivers: [Option<Box<dyn ActuatorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
     telemeter_drivers: [Option<Box<dyn TelemeterDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
 
     last_interactive_log_time: i64,
@@ -62,11 +63,9 @@ pub struct DataLogger {
 }
 
 const SENSOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::SensorDriver>> = None;
-const ACTUATOR_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::ActuatorDriver>> =
-    None;
 const TELEMETER_DRIVER_INIT_VALUE: core::option::Option<Box<dyn drivers::types::TelemeterDriver>> =
     None;
-const CALIBRATION_REPEAT_VALUE: core::option::Option<Box<[types::CalibrationPair]>> = None;
+const CALIBRATION_INIT_VALUE: core::option::Option<Box<[types::CalibrationPair]>> = None;
 
 impl DataLogger {
     pub fn new() -> Self {
@@ -79,7 +78,7 @@ impl DataLogger {
             log_raw_data: true,
             mode: DataLoggerMode::Interactive,
             serial_tx_mode: DataLoggerSerialTxMode::Normal,
-            calibration_point_values: [CALIBRATION_REPEAT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
+            calibration_point_values: [CALIBRATION_INIT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
             telemeter: RakWireless3172::new(),
             completed_bursts: 0,
             readings_completed_in_current_burst: 0,
@@ -123,10 +122,6 @@ impl DataLogger {
         let id = match id {
             serde_json::Value::String(ref payload_id) => payload_id,
             _ => {
-                // responses::send_command_response_message(
-                //     board,
-                //     "Invalid sensor id specified",
-                // );
                 return None;
             }
         };
@@ -148,9 +143,7 @@ impl DataLogger {
 
         // read all the sensors from EEPROM
         let registry = get_registry();
-        let mut sensor_config_bytes: [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE
-            * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS] =
-            [0; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE * rriv_board::EEPROM_TOTAL_SENSOR_SLOTS];
+        let mut sensor_config_bytes= bytes::empty_sensors_settings();
         board.retrieve_sensor_settings(&mut sensor_config_bytes);
         for i in 0..rriv_board::EEPROM_TOTAL_SENSOR_SLOTS {
             let base = i * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE;
@@ -160,10 +153,10 @@ impl DataLogger {
                 + SENSOR_SETTINGS_PARTITION_SIZE)
                 ..(i + 1) * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
 
-            let mut s: [u8; SENSOR_SETTINGS_PARTITION_SIZE] = [0; SENSOR_SETTINGS_PARTITION_SIZE];
-            s.clone_from_slice(general_settings_slice); // explicitly define the size of the array
+            let mut general_settings_partition = bytes::empty_sensor_settings_partition();
+            general_settings_partition.clone_from_slice(general_settings_slice); // explicitly define the size of the array
             let settings: SensorDriverGeneralConfiguration =
-                SensorDriverGeneralConfiguration::new_from_bytes(&s);
+                SensorDriverGeneralConfiguration::new_from_bytes(&general_settings_partition);
 
             let sensor_type_id = usize::from(settings.sensor_type_id);
             if sensor_type_id > registry.len() {
@@ -171,10 +164,9 @@ impl DataLogger {
             }
             let create_function = registry[usize::from(settings.sensor_type_id)];
             if let Some(functions) = create_function {
-                let mut s: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
-                    [0; SENSOR_SETTINGS_PARTITION_SIZE];
-                s.clone_from_slice(special_settings_slice); // explicitly define the size of the arra
-                let mut driver = functions.1(settings, &s);
+                let mut special_settings_partition = bytes::empty_sensor_settings_partition();
+                special_settings_partition.clone_from_slice(special_settings_slice); // explicitly define the size of the arra
+                let mut driver = functions.1(settings, &special_settings_partition);
                 driver.setup(board.get_sensor_driver_services());
                 self.sensor_drivers[i] = Some(driver);
             }
@@ -184,17 +176,9 @@ impl DataLogger {
         self.write_column_headers_to_storage(board);
         rprintln!("done with setup");
 
-        // match self.mode {
-        //     DataLoggerMode::Field => {
-        //         board.usb_serial_send("!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-        //         board.usb_serial_send("Datalogger entering field mode\n");
-        //         board.usb_serial_send("Type 'i' to exit to interactive mode\n");
-        //         for i in 5..0 {
-        //            board.usb_serial_send(format!("{}\n",i).as_str()); 
-        //         }
-        //     },
-        //     _ => {}
-        // }
+
+        protocol::status::send_ready_status(board);
+
     }
 
     pub fn run_loop_iteration(&mut self, board: &mut impl RRIVBoard) {
@@ -335,7 +319,7 @@ impl DataLogger {
 
         // TODO: this book-keeping to get the sensor values is not correct / robust / fully functional
         let mut values: [f32; 12] = [0_f32; 12];
-        let mut bits: [u8; 12] = [0_u8; 12];
+        // let mut bits: [u8; 12] = [0_u8; 12];
         let mut j = 0; // index of value into the values array
         for i in 0..self.sensor_drivers.len() {
             if let Some(ref mut driver) = self.sensor_drivers[i] {
@@ -357,8 +341,8 @@ impl DataLogger {
             }
         }
 
-        let timestamp_hour_offset = 0; // TODO get the timestamp offset from the beginning of the utc hour
-        let bits = [13_u8; 12];
+        // let timestamp_hour_offset = 0; // TODO get the timestamp offset from the beginning of the utc hour
+        // let bits = [13_u8; 12];
 
         let payload = telemetry::codecs::naive_codec::encode(board.epoch_timestamp(), &values);
 
@@ -396,24 +380,13 @@ impl DataLogger {
                     board.usb_serial_send(",");
                 }
 
-                let sensor_name = driver.get_id(); // always output the id for now, later add bit to control append prefix behavior, default to false
-                                                   // let mut prefix: &str = "";
-                                                   // if let Some(sensor_name) = sensor_name {
-                let mut prefix = core::str::from_utf8(&sensor_name.clone())
-                    .unwrap()
-                    .to_string();
-                prefix = (prefix + "_").clone();
-                // }
+                let prefix = helper::get_prefix(&mut driver.get_id());
+
                 for j in 0..driver.get_measured_parameter_count() {
-                    let identifier = driver.get_measured_parameter_identifier(j);
-                    let identifier_str = core::str::from_utf8(&identifier).unwrap();
+                    let mut identifier = driver.get_measured_parameter_identifier(j);
+                    let identifier_str = util::str_from_utf8(&mut identifier).unwrap_or_default();
                     board.usb_serial_send(&prefix);
-                    let end = identifier
-                        .iter()
-                        .position(|&x| x == b'\0')
-                        .unwrap_or_else(|| 1);
-                    let var = &identifier_str[0..end];
-                    board.usb_serial_send(var);
+                    board.usb_serial_send(identifier_str);
                     if j != driver.get_measured_parameter_count() - 1 {
                         board.usb_serial_send(",");
                     }
@@ -435,24 +408,13 @@ impl DataLogger {
                     board.write_log_file(",");
                 }
 
-                let sensor_name = driver.get_id(); // always output the id for now, later add bit to control append prefix behavior, default to false
-                                                   // let mut prefix: &str = "";
-                                                   // if let Some(sensor_name) = sensor_name {
-                let mut prefix = core::str::from_utf8(&sensor_name.clone())
-                    .unwrap()
-                    .to_string();
-                prefix = (prefix + "_").clone();
-                // }
+                let prefix = helper::get_prefix(&mut driver.get_id());
+
                 for j in 0..driver.get_measured_parameter_count() {
-                    let identifier = driver.get_measured_parameter_identifier(j);
-                    let identifier_str = core::str::from_utf8(&identifier).unwrap();
+                    let mut identifier = driver.get_measured_parameter_identifier(j);
+                    let identifier_str = util::str_from_utf8(&mut identifier).unwrap_or_default();
                     board.write_log_file(&prefix);
-                    let end = identifier
-                        .iter()
-                        .position(|&x| x == b'\0')
-                        .unwrap_or_else(|| 1);
-                    let var = &identifier_str[0..end];
-                    board.write_log_file(var);
+                    board.write_log_file(identifier_str);
                     if j != driver.get_measured_parameter_count() - 1 {
                         board.write_log_file(",");
                     }
@@ -743,8 +705,7 @@ impl DataLogger {
                     // get the generic settings as bytes
                     let generic_settings_bytes: &[u8] =
                         unsafe { any_as_u8_slice(&general_settings) };
-                    let mut bytes_sized: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
-                        [0; EEPROM_SENSOR_SETTINGS_SIZE];
+                    let mut bytes_sized = bytes::empty_sensor_settings();
                     let copy_size =
                         if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
                             SENSOR_SETTINGS_PARTITION_SIZE
@@ -811,8 +772,7 @@ impl DataLogger {
                         // do the removal if we matched, and then return
                         if usize::from(found) < EEPROM_TOTAL_SENSOR_SLOTS {
                             // remove the sensor driver and write null to EEPROM
-                            let bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
-                                [0xFF; EEPROM_DATALOGGER_SETTINGS_SIZE];
+                            let bytes = bytes::empty_sensor_settings();
                             if let Some(found_u8) = found.try_into().ok() {
                                 board.store_sensor_settings(found_u8, &bytes);
                                 self.sensor_drivers[found] = None;
@@ -1065,7 +1025,7 @@ impl DataLogger {
                             driver.clear_calibration();
                             match driver.fit(pairs) {
                                 Ok(_) => {
-                                    let mut storage = [0u8; EEPROM_SENSOR_SETTINGS_SIZE];
+                                    let mut storage = bytes::empty_sensor_settings();
                                     driver.get_configuration_bytes(&mut storage);
 
                                     board.store_sensor_settings(index as u8, &storage);
