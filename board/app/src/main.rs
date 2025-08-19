@@ -47,5 +47,7 @@ fn panic(_info: &PanicInfo) -> ! {
     }
     
     rprintln!("with message: {}", _info.message());
+
+    
     loop {}
 }
