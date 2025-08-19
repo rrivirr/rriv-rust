@@ -12,7 +12,7 @@ const SENSOR_NAMES: [&str; 9] = [
     "aht20",
     "mcp_9808",
     "ring_temperature",
-    "heater",
+    "timed_switch",
     "ds18b20",
     "k30_co2",
 ];
@@ -109,8 +109,8 @@ pub fn get_registry() -> [DriverCreateFunctions; 256] {
         crate::drivers::ring_temperature::RingTemperatureDriverSpecialConfiguration
     ));
     driver_create_functions[6] = Some(driver_create_functions!(
-        crate::drivers::heater::Heater, 
-        crate::drivers::heater::HeaterSpecialConfiguration
+        crate::drivers::heater::TimedSwitch, 
+        crate::drivers::heater::TimedSwitchSpecialConfiguration
     ));
     driver_create_functions[7] = Some(driver_create_functions!(
         crate::drivers::ds18b20::Ds18b20,

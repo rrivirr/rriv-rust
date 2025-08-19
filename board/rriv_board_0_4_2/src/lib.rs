@@ -22,6 +22,8 @@ use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, TIM4, USART2, USB};
 use stm32f1xx_hal::spi::Spi;
+use embedded_hal::blocking::delay::DelayMs;
+
 
 use rtt_target::rprintln;
 use stm32f1xx_hal::rcc::{Clocks, CFGR};
@@ -154,7 +156,7 @@ impl RRIVBoard for Board {
     where
         F: Fn() -> T,
     {
-        cortex_m::interrupt::free(|cs| f())
+        cortex_m::interrupt::free(|_cs| f())
     }
 
     // // use this to talk out on serial to other UART modules, RS 485, etc
@@ -195,42 +197,7 @@ impl RRIVBoard for Board {
 
   
     fn usb_serial_send(&mut self, string: &str) {
-        cortex_m::interrupt::free(|_cs| {
-            // USB
-            let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
-            let bytes = string.as_bytes();
-            let mut written = 0;
-
-            let mut would_block_count = 0;
-            while written < bytes.len() {
-                match serial.write(&bytes[written..bytes.len()]){
-                    Ok(bytes_written) => {
-                        // rprintln!("usb bytes written {}", bytes_written);
-                        written = written + bytes_written;
-                    },
-                    Err(err) => {
-                        match err {
-                            UsbError::WouldBlock => {
-                                if would_block_count > 100 {
-                                    rprintln!("USBWouldBlock limit exceeded");
-                                    return;
-                                }
-                                would_block_count = would_block_count + 1; // handle hung blocking condition.  possibly caused by client not reading and buffer full.
-                                rriv_board::RRIVBoard::delay_ms(self, 1);
-                            },
-                            _ => { rprintln!("{:?}", err); }
-                            // UsbError::ParseError => todo!(),
-                            // UsbError::BufferOverflow => todo!(),
-                            // UsbError::EndpointOverflow => todo!(),
-                            // UsbError::EndpointMemoryOverflow => todo!(),
-                            // UsbError::InvalidEndpoint => todo!(),
-                            // UsbError::Unsupported => todo!(),
-                            // UsbError::InvalidState => todo!(),
-                        }
-                    },
-                }
-            }
-        });
+        _usb_serial_send(string, &mut self.delay);
     }
 
     // outputs to serial and also echos to rtt
@@ -1223,7 +1190,7 @@ impl BoardBuilder {
         //     delay2,
         // );
 
-        let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
+        let storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
         // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
         // rprintln!("{:?}", clocks);
    
@@ -1264,7 +1231,7 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 }
 
 
- fn _usb_serial_send(string: &str, delay: impl DelayMs) {
+ fn _usb_serial_send(string: &str, delay: &mut impl DelayMs<u16>) {
         cortex_m::interrupt::free(|_cs| {
             // USB
             let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
@@ -1286,7 +1253,7 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
                                     return;
                                 }
                                 would_block_count = would_block_count + 1; // handle hung blocking condition.  possibly caused by client not reading and buffer full.
-                                delay.delay_ms
+                                delay.delay_ms(1);
                             },
                             _ => { rprintln!("{:?}", err); }
                             // UsbError::ParseError => todo!(),

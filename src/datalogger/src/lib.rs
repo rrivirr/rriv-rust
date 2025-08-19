@@ -264,8 +264,8 @@ impl DataLogger {
                 if self.measurement_cycle_completed() {
                     rprintln!("Measurement cycle completed");
                 //     // go to sleep until the next in interval (in minutes)
-                    let mut slept = 0;
-                    while slept < self.settings.sleep_interval * 1000 * 60 { // TODO: allow using interactive_logging_interval here for testing
+                    let mut slept = 0u64;
+                    while slept < (self.settings.sleep_interval as u64) * 1000u64 * 60u64 { // TODO: allow using interactive_logging_interval here for testing
                         board.delay_ms(2000); 
                         board.sleep(); // TODO: this just feeds the watchdog for now
                         slept = slept + 2000;
