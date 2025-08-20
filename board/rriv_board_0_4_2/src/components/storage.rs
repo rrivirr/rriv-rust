@@ -118,7 +118,7 @@ impl Storage {
     // Try and access Volume 0 (i.e. the first partition).
     // The volume object holds information about the filesystem on that volume.
     rprintln!("trying to set up sd card volume");
-    let result = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0));
+    let result = volume_manager.open_volume(embedded_sdmmc::VolumeIdx(0)); // TODO: this just hangs.  need window watchdog to catch here.
     let volume = match result {
       Ok(volume0) =>   {rprintln!("Volume Success: {:?}", volume0); volume0 },
       Err(error) => {
