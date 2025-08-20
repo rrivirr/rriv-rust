@@ -680,7 +680,8 @@ impl DataLogger {
                         .copy_from_slice(&special_settings_bytes[0..copy_size]);
 
                     board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
-                    responses::send_command_response_message(board, "updated sensor configuration");
+                    board.usb_serial_send(driver.get_configuration_json().to_string().as_str());
+
                 }
             }
             CommandPayload::SensorGetCommandPayload(payload) => {
