@@ -391,7 +391,7 @@ pub enum CommandPayload {
     DataloggerSetCommandPayload(DataloggerSetCommandPayload),
     DataloggerGetCommandPayload(DataloggerGetCommandPayload),
     DataloggerSetModeCommandPayload(DataloggerSetModeCommandPayload),
-    SensorSetCommandPayload(SensorSetCommandPayload, Value),
+    SensorSetCommandPayload(SensorSetCommandPayload, Value), // Value here is for dynamically specific special properties of the driver
     SensorGetCommandPayload(SensorGetCommandPayload),
     SensorRemoveCommandPayload(SensorRemoveCommandPayload),
     SensorListCommandPayload(SensorListCommandPayload),
@@ -438,6 +438,7 @@ pub fn get_id(id: &serde_json::Value) -> Result<(&alloc::string::String), (&str)
 }
 
 
+// Command implementations
 
 // TODO: this is a command implementation, probably doesn't below in this file
 pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
@@ -490,5 +491,9 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload){
         let epoch = board.epoch_timestamp();
         board.usb_serial_send(format!("{:}", epoch).as_str());                
     }
+
+}
+
+pub fn set_sensor(){
 
 }

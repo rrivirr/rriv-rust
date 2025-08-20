@@ -8,8 +8,11 @@
 use core::prelude::rust_2024::*;
 use cortex_m_rt::entry;
 use rtt_target::{rtt_init_print};
+use stm32f1xx_hal::{flash::FlashExt, pac::{self, TIM3}, time::{MicroSeconds, MilliSeconds}, timer::{DelayMs, DelayUs}};
 
 pub mod prelude;
+
+use stm32f1xx_hal::prelude::*;
 
 extern crate rriv_board;
 
@@ -20,6 +23,7 @@ extern crate datalogger;
 use datalogger::DataLogger;
 
 use rtt_target::rprintln;
+
 
 #[entry]
 fn main() -> ! {
@@ -47,6 +51,28 @@ fn panic(_info: &PanicInfo) -> ! {
     }
     
     rprintln!("with message: {}", _info.message());
+    let device_peripherals = unsafe { pac::Peripherals::steal() };
+    
+    let rcc = device_peripherals.RCC.constrain();
+    let mut flash = device_peripherals.FLASH.constrain();
+    let clocks = rcc.cfgr
+            .use_hse(8.MHz())
+            .sysclk(48.MHz())
+            .pclk1(24.MHz())
+            .adcclk(14.MHz())
+            .freeze(&mut flash.acr);
+
+    let mut delay: DelayMs<TIM3> = device_peripherals.TIM3.delay(&clocks);
+    delay.delay(MilliSeconds::secs(5));
+    rriv_board_0_4_2::usb_serial_send("{\"status\":\"Panicked!", &mut delay);
+    // if let Some(location) = _info.location() {
+    //     rriv_board_0_4_2::usb_serial_send(" at ", &mut delay);
+    //     rriv_board_0_4_2::usb_serial_send(location., &mut delay);
+    // }
+    rriv_board_0_4_2::usb_serial_send(" with message ", &mut delay);
+    rriv_board_0_4_2::usb_serial_send(_info.message().as_str().unwrap_or_default(), &mut delay);
+    rriv_board_0_4_2::usb_serial_send("\"}\n", &mut delay);
+
 
     
     loop {}

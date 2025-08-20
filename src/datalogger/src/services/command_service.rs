@@ -167,25 +167,16 @@ fn get_command_payload(
         },
         CommandType::SensorSet => {
 
-            // return serde_json::from_str::<T>(command_data_str);
-
             let command_data_str = command_cstr.to_str().unwrap();
 
-            let mut raw_value: Value = serde_json::from_str(command_data_str).unwrap(); // use hashbrown HashMap?
-
+            let raw_value: Value = serde_json::from_str(command_data_str).unwrap(); // use hashbrown HashMap?
 
             let result = parse_command::<SensorSetCommandPayload>(command_cstr);
             match result {
                 Ok(payload) => return Ok(CommandPayload::SensorSetCommandPayload(payload, raw_value)),
                 Err(error) => return Err(CommandError::InvalidPayload(error)),
             }
-            // let mut map: HashMap<String, serde_json::Value> = HashMap::new();
-            // for key in keys {
-            //     let (k, v) = lookup.remove_entry (key).unwrap();
-            //     map.insert(k, v);
-            // }
 
-            // parse_command_to_payload!(SensorSetCommandPayload, CommandPayload::SensorSetCommandPayload, command_cstr);
         },
         CommandType::SensorGet => {
             parse_command_to_payload!(SensorGetCommandPayload, CommandPayload::SensorGetCommandPayload, command_cstr);

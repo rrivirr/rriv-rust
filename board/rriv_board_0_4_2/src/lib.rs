@@ -197,7 +197,7 @@ impl RRIVBoard for Board {
 
   
     fn usb_serial_send(&mut self, string: &str) {
-        _usb_serial_send(string, &mut self.delay);
+        usb_serial_send(string, &mut self.delay);
     }
 
     // outputs to serial and also echos to rtt
@@ -955,7 +955,7 @@ impl BoardBuilder {
     fn setup(&mut self) {
         rprintln!("board new");
 
-        let mut core_peripherals = cortex_m::Peripherals::take().unwrap();
+        let mut core_peripherals: pac::CorePeripherals = cortex_m::Peripherals::take().unwrap();
         let device_peripherals = pac::Peripherals::take().unwrap();
 
         let uid = Uid::fetch();
@@ -1000,13 +1000,6 @@ impl BoardBuilder {
         let clocks =
             BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
 
-        // let mut delay: Option<SysDelay> = None;
-        // unsafe {
-        //     let core_peripherals = cortex_m::Peripherals::steal();
-        //     delay = Some(core_peripherals.SYST.delay(&clocks));
-        // }
-        // let mut delay = delay.unwrap();
-
         let mut delay: DelayUs<TIM3> = device_peripherals.TIM3.delay(&clocks);
 
         BoardBuilder::setup_serial(
@@ -1016,9 +1009,12 @@ impl BoardBuilder {
             device_peripherals.USART2,
             &clocks,
         );
-        BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
 
-        
+        BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
+        usb_serial_send("{\"status\":\"usb started up\"}\n", &mut delay);
+
+        let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
+        let storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
 
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
         self.external_adc.as_mut().unwrap().disable(&mut delay);
@@ -1053,6 +1049,7 @@ impl BoardBuilder {
             Ok(_) => {},
             Err(e) => {
                 rprintln!("Couln't reset i2c1");
+                usb_serial_send("{\"status\":\"i2c1 failed, restarting\"}", &mut delay);
                 loop{}
             }, // wait for IDWP to reset.   actually we can just hardware reset here?
         }
@@ -1088,7 +1085,10 @@ impl BoardBuilder {
                     },
                 }
             },
-            Err(_) => loop{}, // wait for IDWD to reset.   actually we can just hardware reset here?
+            Err(_) =>{
+                usb_serial_send("{\"status\":\"i2c2 failed, restarting\"}", &mut delay);
+                 loop{}; // wait for IDWD to reset.   actually we can just hardware reset here?
+            }
         }
 
         let i2c2_pins = I2c2Pins::rebuild(scl2, sda2, &mut gpio_cr);
@@ -1178,35 +1178,10 @@ impl BoardBuilder {
         self.gpio = Some(dynamic_gpio_pins);
         self.gpio_cr = Some(gpio_cr);
 
-        let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
-        // delay2.delay(2);
-        // rprintln!("{:?}", clocks);
-        
-        // let mut storage = storage::build(
-        //     spi1_pins,
-        //     device_peripherals.SPI1,
-        //     &mut afio.mapr,
-        //     clocks,
-        //     delay2,
-        // );
-
-        let storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
-        // for SPI SD https://github.com/rust-embedded-community/embedded-sdmmc-rs
-        // rprintln!("{:?}", clocks);
+      
+   
    
         self.storage = Some(storage);
-
-        // // let spi_mode = Mode {
-        // //     polarity: Polarity::IdleLow,
-        // //     phase: Phase::CaptureOnFirstTransition,
-        // // };
-        // let spi2 = Spi::spi2(
-        //     device_peripherals.SPI2,
-        //     (spi2_pins.sck, spi2_pins.miso, spi2_pins.mosi),
-        //     MODE,
-        //     1.MHz(),
-        //     clocks,
-        // );
 
         self.delay = Some(delay);
 
@@ -1231,7 +1206,7 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
 }
 
 
- fn _usb_serial_send(string: &str, delay: &mut impl DelayMs<u16>) {
+pub fn usb_serial_send(string: &str, delay: &mut impl DelayMs<u16>) {
         cortex_m::interrupt::free(|_cs| {
             // USB
             let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
