@@ -6,24 +6,34 @@ use alloc::boxed::Box;
 use alloc::format;
 use i2c_hung_fix::try_unhang_i2c;
 
+use core::mem;
 use core::{
-    cell::RefCell, default::Default, ops::DerefMut, option::Option::{self, *}, result::Result::*
+    cell::RefCell,
+    default::Default,
+    ops::DerefMut,
+    option::Option::{self, *},
+    result::Result::*,
 };
-use core::{mem};
 use cortex_m::{
     asm::{delay, dmb, dsb},
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
+use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
-use stm32f1xx_hal::{afio::MAPR, gpio::{Dynamic, PinModeError}, pac::TIM3, time::MilliSeconds, timer::CounterMs, watchdog::IndependentWatchdog};
-use stm32f1xx_hal::{serial::StopBits};
 use stm32f1xx_hal::flash::ACR;
 use stm32f1xx_hal::gpio::{Alternate, Pin};
 use stm32f1xx_hal::pac::{I2C1, I2C2, TIM2, TIM4, USART2, USB};
+use stm32f1xx_hal::serial::StopBits;
 use stm32f1xx_hal::spi::Spi;
-use embedded_hal::blocking::delay::DelayMs;
-
+use stm32f1xx_hal::{
+    afio::MAPR,
+    gpio::{Dynamic, PinModeError},
+    pac::TIM3,
+    time::MilliSeconds,
+    timer::CounterMs,
+    watchdog::IndependentWatchdog,
+};
 
 use rtt_target::rprintln;
 use stm32f1xx_hal::rcc::{Clocks, CFGR};
@@ -42,8 +52,8 @@ use usb_device::{bus::UsbBusAllocator, prelude::*};
 use usbd_serial::{SerialPort, USB_CLASS_CDC};
 
 use rriv_board::{
-    RRIVBoard, RXProcessor,
-    SensorDriverServices, TelemetryDriverServices, EEPROM_TOTAL_SENSOR_SLOTS,
+    RRIVBoard, RXProcessor, SensorDriverServices, TelemetryDriverServices,
+    EEPROM_TOTAL_SENSOR_SLOTS,
 };
 
 use ds323x::{DateTimeAccess, Ds323x, NaiveDateTime};
@@ -70,7 +80,8 @@ static USART_RX: Mutex<RefCell<Option<Rx<pac::USART2>>>> = Mutex::new(RefCell::n
 static USART_TX: Mutex<RefCell<Option<Tx<pac::USART2>>>> = Mutex::new(RefCell::new(None));
 
 static RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
-static USART_RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> = Mutex::new(RefCell::new(None));
+static USART_RX_PROCESSOR: Mutex<RefCell<Option<Box<&dyn RXProcessor>>>> =
+    Mutex::new(RefCell::new(None));
 
 #[repr(C)]
 pub struct Usart {
@@ -101,7 +112,7 @@ pub struct Board {
     pub one_wire_bus: OneWire<OneWirePin>,
     one_wire_search_state: Option<SearchState>,
     pub watchdog: IndependentWatchdog,
-    pub counter: CounterMs<TIM4>
+    pub counter: CounterMs<TIM4>,
 }
 
 impl Board {
@@ -113,10 +124,10 @@ impl Board {
         let timestamp: i64 = rriv_board::RRIVBoard::epoch_timestamp(self);
         self.storage.create_file(timestamp);
 
-
         // TODO: this is for the NOX sensor, needs to be configured by drivers
-        self.gpio.gpio6.make_push_pull_output(&mut self.gpio_cr.gpioc_crh);
-
+        self.gpio
+            .gpio6
+            .make_push_pull_output(&mut self.gpio_cr.gpioc_crh);
     }
 }
 
@@ -160,15 +171,13 @@ impl RRIVBoard for Board {
     }
 
     // // use this to talk out on serial to other UART modules, RS 485, etc
-    fn usart_send(&mut self, string: &str){
-
+    fn usart_send(&mut self, string: &str) {
         // set control bit for sending
         let _ = self.gpio.gpio6.set_high(); // origi
-        // self.gpio.gpio6.set_low();
-        // rriv_board::RRIVBoard::delay_ms(self, 100);
+                                            // self.gpio.gpio6.set_low();
+                                            // rriv_board::RRIVBoard::delay_ms(self, 100);
 
         cortex_m::interrupt::free(|cs| {
-            
             // USART
             let bytes = string.as_bytes();
             for char in bytes.iter() {
@@ -188,14 +197,12 @@ impl RRIVBoard for Board {
 
         rriv_board::RRIVBoard::delay_ms(self, 2);
         let _ = self.gpio.gpio6.set_low(); // origi
-        // self.gpio.gpio6.set_high();
-
+                                           // self.gpio.gpio6.set_high();
 
         // set control bit for receiving
         // rriv_board::RRIVBoard::delay_ms(self, 70);
     }
 
-  
     fn usb_serial_send(&mut self, string: &str) {
         usb_serial_send(string, &mut self.delay);
     }
@@ -235,7 +242,6 @@ impl RRIVBoard for Board {
             read_sensor_configuration_from_eeprom(self, slot.try_into().unwrap(), slice);
         }
     }
-
 
     fn store_sensor_settings(
         &mut self,
@@ -305,7 +311,10 @@ impl RRIVBoard for Board {
     }
 
     fn get_battery_level(&mut self) -> i16 {
-        match self.battery_level.measure_battery_level(&mut self.internal_adc,&mut self.delay) {
+        match self
+            .battery_level
+            .measure_battery_level(&mut self.internal_adc, &mut self.delay)
+        {
             Ok(value) => return value as i16,
             Err(err) => return -1,
         }
@@ -330,18 +339,20 @@ impl RRIVBoard for Board {
     }
 
     fn dump_eeprom(&mut self) {
-        
         let mut buffer: [u8; EEPROM_TOTAL_SENSOR_SLOTS * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE] =
             [0; EEPROM_TOTAL_SENSOR_SLOTS * rriv_board::EEPROM_SENSOR_SETTINGS_SIZE];
         self.retrieve_sensor_settings(&mut buffer);
 
-        for i in 0..buffer.len(){
+        for i in 0..buffer.len() {
             if i % rriv_board::EEPROM_SENSOR_SETTINGS_SIZE == 0 {
-              rriv_board::RRIVBoard::usb_serial_send(self, format!("\n{}:", i / rriv_board::EEPROM_SENSOR_SETTINGS_SIZE ).as_str());  
+                rriv_board::RRIVBoard::usb_serial_send(
+                    self,
+                    format!("\n{}:", i / rriv_board::EEPROM_SENSOR_SETTINGS_SIZE).as_str(),
+                );
             }
-           rriv_board::RRIVBoard::usb_serial_send(self,format!("{}", &buffer[i]).as_str()); 
+            rriv_board::RRIVBoard::usb_serial_send(self, format!("{}", &buffer[i]).as_str());
         }
-        rriv_board::RRIVBoard::usb_serial_send(self,"}\n"); // } ends the transmissions
+        rriv_board::RRIVBoard::usb_serial_send(self, "}\n"); // } ends the transmissions
     }
 
     fn get_uid(&mut self) -> [u8; 12] {
@@ -382,7 +393,7 @@ impl SensorDriverServices for Board {
             Err(error) => {
                 let mut error_string = match error {
                     AdcError::NBError(_) => "Internal ADC NBError",
-                    AdcError::NotConfigured =>  "Internal ADC Not Configured",
+                    AdcError::NotConfigured => "Internal ADC Not Configured",
                     AdcError::ReadError => "Internal ADC Read Error",
                 };
                 rriv_board::RRIVBoard::usb_serial_send(self, &error_string);
@@ -396,7 +407,7 @@ impl SensorDriverServices for Board {
         let mut i2c1 = i2c1.unwrap();
         let value = self.external_adc.read_single_channel(&mut i2c1, channel);
         self.i2c1 = Some(i2c1);
-        return value; 
+        return value;
     }
 
     control_services_impl!();
@@ -429,7 +440,10 @@ impl SensorDriverServices for Board {
                     stm32f1xx_hal::i2c::Error::Timeout => "tout",
                     _ => "none",
                 };
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {:X?} {}", addr, kind));
+                rriv_board::RRIVBoard::serial_debug(
+                    self,
+                    &format!("Problem writing I2C2 {:X?} {}", addr, kind),
+                );
                 return Err(());
             }
         }
@@ -447,12 +461,14 @@ impl SensorDriverServices for Board {
                     stm32f1xx_hal::i2c::Error::Timeout => "tout",
                     _ => "none",
                 };
-                rriv_board::RRIVBoard::serial_debug(self, &format!("Problem writing I2C2 {:X?} {}", addr, kind));
+                rriv_board::RRIVBoard::serial_debug(
+                    self,
+                    &format!("Problem writing I2C2 {:X?} {}", addr, kind),
+                );
                 return Err(());
-            } 
+            }
         }
     }
-
 
     // fn borrow_one_wire_bus(&mut self) -> &mut dyn rriv_board::OneWireBusInterface  {
 
@@ -548,17 +564,14 @@ impl SensorDriverServices for Board {
             }
             Ok(None) => {
                 rprintln!("no devices 1wire");
-                return None;              
-            },
+                return None;
+            }
             Err(e) => {
-                rprintln!("1wire error{:?}", e);          
-                return None;  
-            },
-        } 
+                rprintln!("1wire error{:?}", e);
+                return None;
+            }
+        }
     }
-
-
-
 }
 
 impl TelemetryDriverServices for Board {
@@ -577,13 +590,11 @@ unsafe fn USART2() {
                     //     USART_RECEIVE[USART_RECEIVE_INDEX] = c;
                     //     USART_RECEIVE_INDEX = USART_RECEIVE_INDEX + 1;
                     // }
-                    
 
                     let r = USART_RX_PROCESSOR.borrow(cs);
                     if let Some(processor) = r.borrow_mut().deref_mut() {
                         processor.process_character(c.clone());
                     }
-
                 }
             }
         }
@@ -704,7 +715,7 @@ pub struct BoardBuilder {
     pub internal_rtc: Option<Rtc>,
     pub storage: Option<Storage>,
     pub watchdog: Option<IndependentWatchdog>,
-    pub counter: Option<CounterMs<TIM4>>
+    pub counter: Option<CounterMs<TIM4>>,
 }
 
 impl BoardBuilder {
@@ -726,7 +737,6 @@ impl BoardBuilder {
             storage: None,
             watchdog: None,
             counter: None,
-
         }
     }
 
@@ -791,7 +801,7 @@ impl BoardBuilder {
             one_wire_bus: one_wire,
             one_wire_search_state: None,
             watchdog: self.watchdog.unwrap(),
-            counter: self.counter.unwrap()
+            counter: self.counter.unwrap(),
         }
     }
 
@@ -832,7 +842,11 @@ impl BoardBuilder {
             (pins.tx, pins.rx),
             mapr,
             // Config::default().baudrate(38400.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // this worked for the nox sensor
-            Config::default().baudrate(115200.bps()).wordlength_8bits().parity_none().stopbits(StopBits::STOP1), // this appears to be right for the RAK 3172
+            Config::default()
+                .baudrate(115200.bps())
+                .wordlength_8bits()
+                .parity_none()
+                .stopbits(StopBits::STOP1), // this appears to be right for the RAK 3172
             &clocks,
         );
 
@@ -891,16 +905,15 @@ impl BoardBuilder {
         }
     }
 
-    pub fn setup_i2c1 (
+    pub fn setup_i2c1(
         pins: pin_groups::I2c1Pins,
         cr: &mut GpioCr,
         i2c1: I2C1,
         mapr: &mut MAPR,
-        clocks: &Clocks
+        clocks: &Clocks,
     ) -> BoardI2c1 {
-        let scl1 = pins.i2c1_scl; 
-        let sda1 = pins.i2c1_sda; 
-           
+        let scl1 = pins.i2c1_scl;
+        let sda1 = pins.i2c1_sda;
 
         BlockingI2c::i2c1(
             i2c1,
@@ -930,7 +943,7 @@ impl BoardBuilder {
             (scl2, sda2),
             Mode::Standard {
                 frequency: 100.kHz(), // slower to same some energy?
-            },  
+            },
             *clocks,
             1000,
             10,
@@ -949,8 +962,6 @@ impl BoardBuilder {
 
         return x;
     }
-
-
 
     fn setup(&mut self) {
         rprintln!("board new");
@@ -1016,6 +1027,8 @@ impl BoardBuilder {
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         let storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
 
+        panic!("my panic!  stopping here");
+
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
         self.external_adc.as_mut().unwrap().disable(&mut delay);
 
@@ -1032,26 +1045,35 @@ impl BoardBuilder {
         self.external_adc.as_mut().unwrap().enable(&mut delay);
         self.external_adc.as_mut().unwrap().reset(&mut delay);
 
-
         let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
         watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
-        
+
         watchdog.start(MilliSeconds::secs(6));
         watchdog.feed();
 
         rprintln!("unhang I2C1 if hung");
 
-        let mut scl1= i2c1_pins.i2c1_scl.into_open_drain_output(&mut gpio_cr.gpiob_crl);
-        let mut sda1 = i2c1_pins.i2c1_sda.into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        let mut scl1 = i2c1_pins
+            .i2c1_scl
+            .into_open_drain_output(&mut gpio_cr.gpiob_crl);
+        let mut sda1 = i2c1_pins
+            .i2c1_sda
+            .into_open_drain_output(&mut gpio_cr.gpiob_crl);
         sda1.set_high(); // remove signal from the master
 
-        match  try_unhang_i2c(&mut scl1, &sda1, &mut delay, i2c_hung_fix::FALLBACK_I2C_FREQUENCY, 30){
-            Ok(_) => {},
+        match try_unhang_i2c(
+            &mut scl1,
+            &sda1,
+            &mut delay,
+            i2c_hung_fix::FALLBACK_I2C_FREQUENCY,
+            30,
+        ) {
+            Ok(_) => {}
             Err(e) => {
                 rprintln!("Couln't reset i2c1");
                 usb_serial_send("{\"status\":\"i2c1 failed, restarting\"}", &mut delay);
-                loop{}
-            }, // wait for IDWP to reset.   actually we can just hardware reset here?
+                loop {}
+            } // wait for IDWP to reset.   actually we can just hardware reset here?
         }
 
         let i2c1_pins = I2c1Pins::rebuild(scl1, sda1, &mut gpio_cr);
@@ -1063,31 +1085,41 @@ impl BoardBuilder {
             &mut gpio_cr,
             device_peripherals.I2C1,
             &mut afio.mapr,
-            &clocks
+            &clocks,
         );
         rprintln!("set up i2c1 done");
 
         // rprintln!("skipping unhang I2C2 if hung");
 
         rprintln!("unhang I2C2 if hung");
-        
-        let mut scl2 = i2c2_pins.i2c2_scl.into_open_drain_output(&mut gpio_cr.gpiob_crh);
-        let mut sda2= i2c2_pins.i2c2_sda.into_open_drain_output(&mut gpio_cr.gpiob_crh);
+
+        let mut scl2 = i2c2_pins
+            .i2c2_scl
+            .into_open_drain_output(&mut gpio_cr.gpiob_crh);
+        let mut sda2 = i2c2_pins
+            .i2c2_sda
+            .into_open_drain_output(&mut gpio_cr.gpiob_crh);
         sda2.set_high(); // remove signal from the master
 
-        match try_unhang_i2c(&mut scl2, &sda2, &mut delay, 100_000, i2c_hung_fix::RECOMMENDED_MAX_CLOCK_CYCLES){
+        match try_unhang_i2c(
+            &mut scl2,
+            &sda2,
+            &mut delay,
+            100_000,
+            i2c_hung_fix::RECOMMENDED_MAX_CLOCK_CYCLES,
+        ) {
             Ok(ok) => {
                 match ok {
-                    i2c_hung_fix::Sucess::BusNotHung => {},
+                    i2c_hung_fix::Sucess::BusNotHung => {}
                     i2c_hung_fix::Sucess::FixedHungBus => {
                         rprintln!("Fixed hung bus");
-                        loop {}; // wait for IDWD to reset
-                    },
+                        loop {} // wait for IDWD to reset
+                    }
                 }
-            },
-            Err(_) =>{
+            }
+            Err(_) => {
                 usb_serial_send("{\"status\":\"i2c2 failed, restarting\"}", &mut delay);
-                 loop{}; // wait for IDWD to reset.   actually we can just hardware reset here?
+                loop {} // wait for IDWD to reset.   actually we can just hardware reset here?
             }
         }
 
@@ -1099,15 +1131,15 @@ impl BoardBuilder {
 
         rprintln!("i2c2 scanning for k30...");
         // loop {
-            let mut buf = [b'\0'; 1];
-            let addr = 0x68; //7F - all
-            if i2c2.write(addr, &mut buf).is_ok() {  // Has to be a write in order to respond...
-                rprintln!("{:02x} good", addr);
-                delay.delay_ms(2000_u16);
-            }
+        let mut buf = [b'\0'; 1];
+        let addr = 0x68; //7F - all
+        if i2c2.write(addr, &mut buf).is_ok() {
+            // Has to be a write in order to respond...
+            rprintln!("{:02x} good", addr);
+            delay.delay_ms(2000_u16);
+        }
         //     delay.delay_ms(50_u16);
         // }
-
 
         rprintln!("i2c1 scanning...");
 
@@ -1137,8 +1169,6 @@ impl BoardBuilder {
             delay.delay_ms(10_u32);
         }
         rprintln!("scan is done");
-
-
 
         watchdog.feed();
 
@@ -1178,16 +1208,13 @@ impl BoardBuilder {
         self.gpio = Some(dynamic_gpio_pins);
         self.gpio_cr = Some(gpio_cr);
 
-      
-   
-   
         self.storage = Some(storage);
 
         self.delay = Some(delay);
 
         // the millis counter
         let mut counter: CounterMs<TIM4> = device_peripherals.TIM4.counter_ms(&clocks);
-        match counter.start( (u16::MAX as u32).millis()) {
+        match counter.start((u16::MAX as u32).millis()) {
             Ok(_) => rprintln!("Millis counter start ok"),
             Err(err) => rprintln!("Millis counter start not ok {:?}", err),
         }
@@ -1205,42 +1232,94 @@ unsafe fn any_as_u8_slice<T: Sized>(p: &T) -> &[u8] {
     ::core::slice::from_raw_parts((p as *const T) as *const u8, ::core::mem::size_of::<T>())
 }
 
-
 pub fn usb_serial_send(string: &str, delay: &mut impl DelayMs<u16>) {
-        cortex_m::interrupt::free(|_cs| {
-            // USB
-            let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
-            let bytes = string.as_bytes();
-            let mut written = 0;
+    cortex_m::interrupt::free(|_cs| {
+        // USB
+        let serial = unsafe { USB_SERIAL.as_mut().unwrap() };
+        let bytes = string.as_bytes();
+        let mut written = 0;
 
-            let mut would_block_count = 0;
-            while written < bytes.len() {
-                match serial.write(&bytes[written..bytes.len()]){
-                    Ok(bytes_written) => {
-                        // rprintln!("usb bytes written {}", bytes_written);    
-                        written = written + bytes_written;
-                    },
-                    Err(err) => {
-                        match err {
-                            UsbError::WouldBlock => {
-                                if would_block_count > 100 {
-                                    rprintln!("USBWouldBlock limit exceeded");
-                                    return;
-                                }
-                                would_block_count = would_block_count + 1; // handle hung blocking condition.  possibly caused by client not reading and buffer full.
-                                delay.delay_ms(1);
-                            },
-                            _ => { rprintln!("{:?}", err); }
-                            // UsbError::ParseError => todo!(),
-                            // UsbError::BufferOverflow => todo!(),
-                            // UsbError::EndpointOverflow => todo!(),
-                            // UsbError::EndpointMemoryOverflow => todo!(),
-                            // UsbError::InvalidEndpoint => todo!(),
-                            // UsbError::Unsupported => todo!(),
-                            // UsbError::InvalidState => todo!(),
+        let mut would_block_count = 0;
+        while written < bytes.len() {
+            match serial.write(&bytes[written..bytes.len()]) {
+                Ok(bytes_written) => {
+                    // rprintln!("usb bytes written {}", bytes_written);
+                    written = written + bytes_written;
+                }
+                Err(err) => {
+                    match err {
+                        UsbError::WouldBlock => {
+                            if would_block_count > 100 {
+                                rprintln!("USBWouldBlock limit exceeded");
+                                return;
+                            }
+                            would_block_count = would_block_count + 1; // handle hung blocking condition.  possibly caused by client not reading and buffer full.
+                            delay.delay_ms(1);
                         }
-                    },
+                        _ => {
+                            rprintln!("{:?}", err);
+                        } // UsbError::ParseError => todo!(),
+                          // UsbError::BufferOverflow => todo!(),
+                          // UsbError::EndpointOverflow => todo!(),
+                          // UsbError::EndpointMemoryOverflow => todo!(),
+                          // UsbError::InvalidEndpoint => todo!(),
+                          // UsbError::Unsupported => todo!(),
+                          // UsbError::InvalidState => todo!(),
+                    }
                 }
             }
-        });
-    }
+        }
+    });
+}
+
+pub fn write_panic_to_storage(message: &str) {
+    let mut core_peripherals: pac::CorePeripherals = unsafe { cortex_m::Peripherals::steal() };
+
+    let device_peripherals = unsafe { pac::Peripherals::steal() };
+    let rcc = device_peripherals.RCC.constrain();
+    let mut flash = device_peripherals.FLASH.constrain();
+    let mut afio = device_peripherals.AFIO.constrain(); // Prepare the alternate function I/O registers
+
+    let clocks = rcc
+        .cfgr
+        .use_hse(8.MHz())
+        .sysclk(48.MHz())
+        .pclk1(24.MHz())
+        .adcclk(14.MHz())
+        .freeze(&mut flash.acr);
+
+    let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
+
+    // Prepare the GPIO
+    let gpioa: gpio::gpioa::Parts = device_peripherals.GPIOA.split();
+    let gpiob = device_peripherals.GPIOB.split();
+    let gpioc = device_peripherals.GPIOC.split();
+    let gpiod = device_peripherals.GPIOD.split();
+
+    let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
+
+    // Set up pins
+    let (pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
+    let (
+        external_adc_pins,
+        internal_adc_pins,
+        battery_level_pins,
+        dynamic_gpio_pins,
+        i2c1_pins,
+        i2c2_pins,
+        mut oscillator_control_pins,
+        mut power_pins,
+        rgb_led_pins,
+        serial_pins,
+        _spi1_pins,
+        spi2_pins,
+        usb_pins,
+    ) = pin_groups::build(pins, &mut gpio_cr, delay);
+
+    let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
+
+    storage.create_file(0);
+    storage.write(message.as_bytes(), 0);
+    storage.flush();
+
+}

@@ -24,6 +24,9 @@ use datalogger::DataLogger;
 
 use rtt_target::rprintln;
 
+extern crate alloc;
+use alloc::format;
+
 
 #[entry]
 fn main() -> ! {
@@ -73,7 +76,7 @@ fn panic(_info: &PanicInfo) -> ! {
     rriv_board_0_4_2::usb_serial_send(_info.message().as_str().unwrap_or_default(), &mut delay);
     rriv_board_0_4_2::usb_serial_send("\"}\n", &mut delay);
 
+    rriv_board_0_4_2::write_panic_to_storage(format!("Panick: {} \n", _info.message().as_str().unwrap_or_default()).as_str());
 
-    
     loop {}
 }
