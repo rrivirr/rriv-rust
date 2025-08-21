@@ -1091,6 +1091,12 @@ impl BoardBuilder {
             &clocks,
         );
 
+        let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
+        watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
+
+        watchdog.start(MilliSeconds::secs(6));
+        watchdog.feed();
+
         BoardBuilder::setup_usb(usb_pins, &mut gpio_cr, device_peripherals.USB, &clocks);
         usb_serial_send("{\"status\":\"usb started up\"}\n", &mut delay);
 
@@ -1125,12 +1131,6 @@ impl BoardBuilder {
         // but actually... it also can't be disabled.
         //
         // the IndependentWatchdog won't trigger an interrupt.  it also can't be disabled.
-
-        let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
-        watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
-
-        watchdog.start(MilliSeconds::secs(6));
-        watchdog.feed();
 
         rprintln!("unhang I2C1 if hung");
 

@@ -575,13 +575,16 @@ impl DataLogger {
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
         // rprintln!("executing command {:?}", command_payload);
         match command_payload {
+            
             CommandPayload::DataloggerSetCommandPayload(payload) => {
                 self.update_datalogger_settings(board, payload);
                 responses::send_json(board,self.datalogger_settings_payload());
             }
+
             CommandPayload::DataloggerGetCommandPayload(_) => {
                 responses::send_json(board,self.datalogger_settings_payload());
             }
+
             CommandPayload::DataloggerSetModeCommandPayload(payload) => {
                 // TODO: this command is deprecated
                 if let Some(mode) = payload.mode {
@@ -590,110 +593,11 @@ impl DataLogger {
 
                 responses::send_json(board,self.datalogger_settings_payload());
             }
+
             CommandPayload::SensorSetCommandPayload(payload, values) => {
-
-                let registry = get_registry();
-                let sensor_type_id = match payload.r#type {
-                    serde_json::Value::String(sensor_type) => {
-                        match registry::sensor_type_id_from_name(&sensor_type) {
-                            Ok(sensor_type_id) => sensor_type_id,
-                            Err(_) => {
-                                responses::send_command_response_message(board, "sensor type not found");
-                                return;
-
-                            }
-                        }
-                    }
-                    _ => {
-                        responses::send_command_response_message(
-                            board,
-                            "sensor type not specified",
-                        );
-                        return;
-                    }
-                };
-
-                // get the sensor id or make a unique new one
-                let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
-                if let Some(payload_id) = payload.id {
-                    sensor_id = match payload_id {
-                        serde_json::Value::String(id) => {
-                            let mut prepared_id: [u8; 6] = [0; 6];
-                            prepared_id[0..id.len()].copy_from_slice(id.as_bytes());
-                            prepared_id
-                        }
-                        _ => {
-                            // make a unique id
-                            self.make_unique_sensor_id(sensor_id)
-                        }
-                    };
-                }
-
-                // find the slot
-                let mut slot = usize::MAX;
-                let mut empty_slot = usize::MAX;
-                for i in 0..self.sensor_drivers.len() {
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        if sensor_id == driver.get_id() {
-                            slot = i;
-                        }
-                    } else {
-                        if empty_slot == usize::MAX {
-                            empty_slot = i;
-                        }
-                    }
-                }
-
-                if slot == usize::MAX {
-                    slot = empty_slot
-                };
-
-                rprintln!("looking up funcs");
-                let create_function = registry[usize::from(sensor_type_id)];
-
-                if let Some(functions) = create_function {
-                    let general_settings =
-                        SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
-                    rprintln!("calling func 0"); // TODO: crashed here
-                    let (mut driver, special_settings_bytes) =
-                        functions.0(general_settings, values); // could just convert values to special settings bytes directly, store, then load
-                    driver.setup(board.get_sensor_driver_services());
-                    self.sensor_drivers[slot] = Some(driver);
-
-                    // get the generic settings as bytes
-                    let generic_settings_bytes: &[u8] =
-                        unsafe { any_as_u8_slice(&general_settings) };
-                    let mut bytes_sized = bytes::empty_sensor_settings();
-                    let copy_size =
-                        if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-                            SENSOR_SETTINGS_PARTITION_SIZE
-                        } else {
-                            generic_settings_bytes.len()
-                        };
-                    bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
-
-                    // get the special settings as bytes
-                    let copy_size =
-                        if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-                            SENSOR_SETTINGS_PARTITION_SIZE
-                        } else {
-                            special_settings_bytes.len()
-                        };
-                    bytes_sized[SENSOR_SETTINGS_PARTITION_SIZE
-                        ..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
-                        .copy_from_slice(&special_settings_bytes[0..copy_size]);
-
-                    board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
-
-                }
-
-                if let Some(index) = self.get_driver_index_by_id(util::str_from_utf8(&mut sensor_id).unwrap_or_default()) {
-                    if let Some(driver) = &mut self.sensor_drivers[index] {
-                        responses::send_json(board, driver.get_configuration_json());
-                        return;
-                    }
-                }
+                datalogger::commands::set_sensor(board, &mut self.sensor_drivers, payload, values);
             }
+
             CommandPayload::SensorGetCommandPayload(payload) => {
                 if let Some(index) = self.get_driver_index_by_id_value(payload.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
@@ -704,52 +608,15 @@ impl DataLogger {
 
                 responses::send_command_response_message(board, "didn't find the sensor"); // TODO: send 404
             }
+
             CommandPayload::SensorRemoveCommandPayload(payload) => {
-                let sensor_id = match payload.id {
-                    serde_json::Value::String(id) => {
-                        let mut prepared_id: [u8; 6] = [0; 6];
-                        prepared_id[0..id.as_bytes().len()].copy_from_slice(id.as_bytes());
-                        prepared_id
-                    }
-                    _ => {
-                        responses::send_command_response_message(board, "Sensor not found");
-                        return;
-                    }
-                };
-
-                for i in 0..self.sensor_drivers.len() {
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        let mut found = i;
-
-                        // bytewise comparison of sensor id to delete with sensor id of loaded sensor driver
-                        for (j, (u1, u2)) in
-                            driver.get_id().iter().zip(sensor_id.iter()).enumerate()
-                        {
-                            if u1 != u2 {
-                                found = 256; // 256 mneans not found
-                                break;
-                            }
-                        }
-
-                        // do the removal if we matched, and then return
-                        if usize::from(found) < EEPROM_TOTAL_SENSOR_SLOTS {
-                            // remove the sensor driver and write null to EEPROM
-                            let bytes = bytes::empty_sensor_settings();
-                            if let Some(found_u8) = found.try_into().ok() {
-                                board.store_sensor_settings(found_u8, &bytes);
-                                self.sensor_drivers[found] = None;
-                                responses::send_command_response_message(board, "sensor removed");
-                                return;
-                            }
-                        }
-                    }
-                }
+               datalogger::commands::remove_sensor(board, payload, &mut self.sensor_drivers);
             }
+
             CommandPayload::SensorListCommandPayload(_) => {
-
                 datalogger::commands::list_sensors(board, &mut self.sensor_drivers);
-
             }
+
             CommandPayload::BoardRtcSetPayload(payload) => {
                 match payload.epoch {
                     serde_json::Value::Number(epoch) => {
@@ -771,38 +638,23 @@ impl DataLogger {
                     }
                 };
             }
+
             CommandPayload::BoardGetPayload(payload) => {
                 datalogger::commands::get_board(board, payload);
             }
+
             CommandPayload::SensorCalibratePointPayload(payload) => {
-                // we want to do the book keeping here for point payloads
-                // i guess we use a box again
-                rprintln!("Sensor calibrate point payload");
 
-                let id = match payload.id {
-                    serde_json::Value::String(ref payload_id) => payload_id,
-                    _ => {
-                        responses::send_command_response_message(
-                            board,
-                            "Invalid sensor id specified",
-                        );
+                let args = match datalogger::commands::sensor_add_calibration_point_arguments(&payload) {
+                    Ok(args) => args,
+                    Err(message) => {
+                        responses::send_command_response_message(board, message);
                         return;
                     }
                 };
 
-                let point = payload.point.as_f64();
-                let point = match point {
-                    Some(point) => point,
-                    None => {
-                        responses::send_command_response_message(
-                            board,
-                            "Invalid calibration point specified",
-                        );
-                        return;
-                    }
-                };
-
-                if let Some(index) = self.get_driver_index_by_id(id) {
+      
+                if let Some(index) = self.get_driver_index_by_id(args.0) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         // read sensor values
                         driver.take_measurement(board.get_sensor_driver_services());
@@ -821,10 +673,12 @@ impl DataLogger {
                             values[j] = value;
                         }
 
+                        // TODO: datalogger can own a calibration object that tracks the calibrations and does the fit
+
                         // store the point
                         // TODO: we are only storing one point for now
                         let calibration_pair = CalibrationPair {
-                            point: point,
+                            point: args.1,
                             values: values,
                         };
                         if self.calibration_point_values[index].is_some() {
@@ -840,15 +694,16 @@ impl DataLogger {
                             let arr_box = Box::new(arr);
                             self.calibration_point_values[index] = Some(arr_box);
                         }
-                        responses::send_command_response_message(
-                            board,
-                            "Stored a single calibration point",
-                        );
+
+                        // Success, so return the current calibration point list
+                        responses::calibration_point_list(board, &self.calibration_point_values[index]); // TODO: is responses the right place for marshaling JSON lists to serial?
+
                     }
                 } else {
-                    responses::send_command_response_message(board, "Didn't find the sensor");
-                    board.usb_serial_send("didn't find the sensor\n");
+                   responses::send_command_response_message(board, "Didn't find the sensor"); 
                 }
+      
+             
             }
             CommandPayload::SensorCalibrateListPayload(payload) => {
                 let payload_values = match payload.convert() {
@@ -868,34 +723,12 @@ impl DataLogger {
                     let pairs: &Option<Box<[CalibrationPair]>> =
                         &self.calibration_point_values[index];
 
-                    board.usb_serial_send("{ pairs: [");
+                    responses::calibration_point_list(board, pairs); // TODO: is responses the right place for marshaling JSON lists to serial?
 
-                    if let Some(pairs) = pairs {
-                        for i in 0..pairs.len() {
-                            rprintln!("calib pair{:?}", i);
-                            let pair = &pairs[i];
-                            board.usb_serial_send(
-                                format!("{{'point': {}, 'values': [", pair.point).as_str(),
-                            );
-                            for i in 0..pair.values.len() {
-                                board.usb_serial_send(format!("{}", pair.values[i]).as_str());
-                                if i < pair.values.len() - 1 {
-                                    board.usb_serial_send(",");
-                                }
-                            }
-
-                            board.usb_serial_send("] }");
-                            if i < pairs.len() - 1 {
-                                board.usb_serial_send(",");
-                            }
-                        }
-                    }
-
-                    board.usb_serial_send("]}");
                 }
 
-                board.usb_serial_send("]\n");
             }
+
             CommandPayload::SensorCalibrateRemovePayload(payload) => {
                 responses::send_command_response_message(
                     board,
@@ -923,6 +756,7 @@ impl DataLogger {
                     }
                 }
             }
+
             CommandPayload::SensorCalibrateFitPayload(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
@@ -972,6 +806,7 @@ impl DataLogger {
                     }
                 }
             }
+
             CommandPayload::SensorCalibrateClearPayload(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
@@ -988,6 +823,7 @@ impl DataLogger {
                     }
                 }
             }
+
             CommandPayload::BoardSerialSendPayload(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
@@ -1065,6 +901,7 @@ impl DataLogger {
 
                 return;
             }
+
             CommandPayload::TelemeterGet => match self.telemeter.get_identity(board) {
                 Ok(message) => {
                     board.usb_serial_send(format!("{}\n", message.as_str()).as_str());
@@ -1073,6 +910,7 @@ impl DataLogger {
                     responses::send_command_response_message(board, "Failed to get identifiers");
                 }
             },
+            
         }
     }
 
@@ -1088,43 +926,6 @@ impl DataLogger {
             self.set_mode(board, mode);
         }
         self.store_settings(board)
-    }
-
-    fn make_unique_sensor_id(&mut self, default: [u8; 6]) -> [u8; 6] {
-        let mut sensor_id = default.clone();
-        // get all the current ids
-        let mut driver_ids: [[u8; 6]; EEPROM_TOTAL_SENSOR_SLOTS] =
-            [[0; 6]; EEPROM_TOTAL_SENSOR_SLOTS];
-        for i in 0..self.sensor_drivers.len() {
-            if let Some(driver) = &mut self.sensor_drivers[i] {
-                driver_ids[i] = driver.get_id();
-            }
-        }
-
-        let mut unique = false;
-        while unique == false {
-            let mut i = 0;
-            let mut changed = false;
-            let sensor_id_scan = sensor_id.clone();
-            while i < driver_ids.len() && changed == false {
-                let mut same = true;
-                for (j, (u1, u2)) in driver_ids[i].iter().zip(sensor_id_scan.iter()).enumerate() {
-                    // if hey are equal..
-                    if u1 != u2 {
-                        same = false;
-                        break;
-                    }
-                }
-                if same {
-                    // we need to make a change
-                    sensor_id[sensor_id.len() - 1] = sensor_id[sensor_id.len() - 1] + 1;
-                    changed = true;
-                }
-                i = i + 1;
-            }
-            unique = !changed;
-        }
-        sensor_id
     }
 
     fn datalogger_settings_payload(&mut self) -> Value {

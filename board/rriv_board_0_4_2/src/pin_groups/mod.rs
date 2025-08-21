@@ -7,7 +7,6 @@ pub use battery_level::*;
 mod dynamic_gpio;
 pub use dynamic_gpio::*;
 mod i2c1;
-use embedded_hal::blocking::i2c;
 pub use i2c1::*;
 mod i2c2;
 pub use i2c2::*;

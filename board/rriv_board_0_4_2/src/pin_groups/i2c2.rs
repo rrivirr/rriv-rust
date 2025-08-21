@@ -1,4 +1,4 @@
-use stm32f1xx_hal::{gpio::*, afio::MAPR};
+use stm32f1xx_hal::gpio::*;
 use crate::pins::*;
 
 pub type I2c2Scl = Pin<'B', 10, Alternate<OpenDrain>>;

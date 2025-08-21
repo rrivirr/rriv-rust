@@ -206,8 +206,6 @@ impl RakWireless3172 {
     pub fn transmit(&mut self, board: &mut impl RRIVBoard, payload: &[u8]) {
         // AT+SEND=14:696E746572727570743
 
-        let len = payload.len();
-
         let mut s = String::with_capacity(payload.len() * 2);
         for byte in payload {
             write!(&mut s, "{:02X}", byte);
