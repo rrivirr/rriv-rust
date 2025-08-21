@@ -28,8 +28,7 @@ pub use usb::*;
 
 pub fn build(
     pins: crate::pins::Pins,
-    cr: &mut crate::pins::GpioCr,
-    delay: cortex_m::delay::Delay
+    cr: &mut crate::pins::GpioCr
 ) -> (
     ExternalAdcPins,
     InternalAdcPins,

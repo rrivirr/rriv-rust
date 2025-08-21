@@ -19,6 +19,11 @@ use cortex_m::{
     interrupt::{CriticalSection, Mutex},
     peripheral::NVIC,
 };
+
+
+use cortex_m::peripheral::SCB;
+
+
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use stm32f1xx_hal::flash::ACR;
@@ -128,6 +133,42 @@ impl Board {
         self.gpio
             .gpio6
             .make_push_pull_output(&mut self.gpio_cr.gpioc_crh);
+    }
+
+    pub fn sleep_mcu(&mut self) {
+
+        // TODO: sleep mode won't work with independent watch dog, unless we can stop it.
+        // TODO: evaluate the benefit of having a separate clock source for the watch dog.  when would the main clock fail?
+        // TODO: we would disable the secondary clock input using a MOSFET, or we can just use another timer as a custom watch dog that triggers an interrupt (like the C code)
+
+        self.internal_rtc.set_alarm(5000); // 5 seconds?
+        rprintln!("will sleep");
+        
+        // disable interrupts
+        NVIC::mask(pac::Interrupt::USB_HP_CAN_TX);
+        NVIC::mask(pac::Interrupt::USB_LP_CAN_RX0);
+        NVIC::mask(pac::Interrupt::USART2);
+
+        unsafe { NVIC::unmask(pac::Interrupt::RTCALARM) };
+        cortex_m::asm::dsb();
+
+        let mut core_peripherals: pac::CorePeripherals = unsafe { cortex_m::Peripherals::steal() };
+        core_peripherals.SYST.disable_interrupt();
+
+        cortex_m::asm::wfi();
+
+        core_peripherals.SYST.enable_interrupt();
+
+        cortex_m::asm::isb();
+
+
+        // re-enable interrupts
+        unsafe { NVIC::unmask(pac::Interrupt::USB_HP_CAN_TX) };
+        unsafe { NVIC::unmask(pac::Interrupt::USB_LP_CAN_RX0) };
+        unsafe { NVIC::unmask(pac::Interrupt::USART2) };
+
+        rprintln!("woke from sleep");
+
     }
 }
 
@@ -290,7 +331,9 @@ impl RRIVBoard for Board {
         }
     }
 
-    // crystal time, systick
+    // also crystal time, systick?
+
+
     fn timestamp(&mut self) -> i64 {
         return self.internal_rtc.current_time().into(); // internal RTC
     }
@@ -868,7 +911,7 @@ impl BoardBuilder {
         // USB Serial
         let mut usb_dp = pins.usb_dp; // take ownership
         usb_dp.make_push_pull_output(&mut cr.gpioa_crh);
-        usb_dp.set_low();
+        let _ = usb_dp.set_low();
         delay(clocks.sysclk().raw() / 100);
 
         let usb_dm = pins.usb_dm;
@@ -987,8 +1030,6 @@ impl BoardBuilder {
         let gpioc = device_peripherals.GPIOC.split();
         let gpiod = device_peripherals.GPIOD.split();
 
-        let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
-
         // Set up pins
         let (pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
         let (
@@ -1005,7 +1046,7 @@ impl BoardBuilder {
             _spi1_pins,
             spi2_pins,
             usb_pins,
-        ) = pin_groups::build(pins, &mut gpio_cr, delay);
+        ) = pin_groups::build(pins, &mut gpio_cr);
 
         let clocks =
             BoardBuilder::setup_clocks(&mut oscillator_control_pins, rcc.cfgr, &mut flash.acr);
@@ -1270,7 +1311,7 @@ pub fn usb_serial_send(string: &str, delay: &mut impl DelayMs<u16>) {
 }
 
 pub fn write_panic_to_storage(message: &str) {
-    let mut core_peripherals: pac::CorePeripherals = unsafe { cortex_m::Peripherals::steal() };
+    let core_peripherals: pac::CorePeripherals = unsafe { cortex_m::Peripherals::steal() };
 
     let device_peripherals = unsafe { pac::Peripherals::steal() };
     let rcc = device_peripherals.RCC.constrain();
@@ -1293,25 +1334,23 @@ pub fn write_panic_to_storage(message: &str) {
     let gpioc = device_peripherals.GPIOC.split();
     let gpiod = device_peripherals.GPIOD.split();
 
-    let delay = cortex_m::delay::Delay::new(core_peripherals.SYST, 1000000);
-
     // Set up pins
     let (pins, mut gpio_cr) = Pins::build(gpioa, gpiob, gpioc, gpiod, &mut afio.mapr);
     let (
-        external_adc_pins,
-        internal_adc_pins,
-        battery_level_pins,
-        dynamic_gpio_pins,
-        i2c1_pins,
-        i2c2_pins,
-        mut oscillator_control_pins,
-        mut power_pins,
-        rgb_led_pins,
-        serial_pins,
+        _external_adc_pins,
+        _internal_adc_pins,
+        _battery_level_pins,
+        _dynamic_gpio_pins,
+        _i2c1_pins,
+        _i2c2_pins,
+        mut _oscillator_control_pins,
+        mut _power_pins,
+        _rgb_led_pins,
+        _serial_pins,
         _spi1_pins,
         spi2_pins,
-        usb_pins,
-    ) = pin_groups::build(pins, &mut gpio_cr, delay);
+        _usb_pins,
+    ) = pin_groups::build(pins, &mut gpio_cr);
 
     let mut storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
 
