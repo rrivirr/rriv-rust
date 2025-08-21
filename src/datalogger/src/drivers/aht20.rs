@@ -41,9 +41,9 @@ impl AHT20SpecialConfiguration {
 pub struct AHT20 {
     general_config: SensorDriverGeneralConfiguration,
     special_config: AHT20SpecialConfiguration,
-    initialized: bool,
     humidity: f64,
-    temperature: f64
+    temperature: f64,
+    enabled: bool
 }
 
 pub struct ConfigurationPayload {}
@@ -57,11 +57,20 @@ impl AHT20 {
         }
     }
 
-    fn loop_until_ready(board: &mut dyn rriv_board::SensorDriverServices) {
+    fn loop_until_ready(board: &mut dyn rriv_board::SensorDriverServices) -> bool {
+        let attempts = 10; // wait for up to 250ms
+        let mut attempted = 0;
         while (AHT20::get_status(board) & AHTX0_STATUS_BUSY) != 0 {
-            rprintln!("AHT20 is busy");
+            if attempted < 3 { // only output a few messages so we don't overload the usb serial
+                rprintln!("AHT20 is busy");
+            }
             board.delay_ms(10);
+            attempted = attempted + 1;
+            if attempted > attempts { 
+                return false;
+            }
         }
+        return true;
     }
 
     fn is_calibrated(board: &mut dyn rriv_board::SensorDriverServices) -> bool {
@@ -74,7 +83,7 @@ impl AHT20 {
 
     fn self_calibrate(board: &mut dyn rriv_board::SensorDriverServices){
         let cmd = [AHTX0_CMD_CALIBRATE, 0x08, 0x00];
-        board.ic2_write(AHTX0_I2CADDR_DEFAULT, &cmd);
+        let _ = board.ic2_write(AHTX0_I2CADDR_DEFAULT, &cmd);
 
         AHT20::loop_until_ready(board);
     }
@@ -85,12 +94,12 @@ impl SensorDriver for AHT20 {
 
     fn get_configuration_json(&mut self) -> serde_json::Value  {
 
-        let sensor_name_bytes = sensor_name_from_type_id(self.get_type_id().into());
-        let sensor_name_str = core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+        let mut sensor_type_bytes = sensor_name_from_type_id(self.get_type_id().into());
+        let sensor_type_str = util::str_from_utf8(&mut sensor_type_bytes).unwrap_or_default();
 
         json!({ 
-            "id" : self.get_id(),
-            "type" : sensor_name_str,
+            "id" : util::str_from_utf8(&mut self.get_id()).unwrap_or_default(),
+            "type" : sensor_type_str,
             "wait_time": self.special_config.wait_time
         })
     }
@@ -107,20 +116,23 @@ impl SensorDriver for AHT20 {
             Ok(_) => {},
             Err(err) => {
                 rprintln!("Failed to setup AHTX0 {:?}", err);
-                self.initialized = false;
+                self.enabled = false;
                 return;
             }
         }
         board.delay_ms(20);
 
-        AHT20::loop_until_ready(board);
+        self.enabled = AHT20::loop_until_ready(board);
+        if !self.enabled {
+            board.serial_debug("AHT20 Not Found");
+            return;
+        }
 
         if !AHT20::is_calibrated(board) {
             AHT20::self_calibrate(board);
 
             if !AHT20::is_calibrated(board) {
                 rprintln!("Failed to calibrate AHTX0");
-                self.initialized = false;
                 return;
             }
         }
@@ -133,6 +145,11 @@ impl SensorDriver for AHT20 {
     getters!();
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
+        if !self.enabled {
+            return;
+        }
+
+
         let cmd: [u8; 3] = [AHTX0_CMD_TRIGGER, 0x33, 0];
         match board.ic2_write(AHTX0_I2CADDR_DEFAULT, &cmd) {
             Ok(_) => {},
@@ -176,6 +193,9 @@ impl SensorDriver for AHT20 {
     }
 
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
+        if !self.enabled{ 
+           return Ok(-1.0f64) 
+        }
         match index {
             0 => Ok(self.humidity),
             1 => Ok(self.temperature),
@@ -221,9 +241,9 @@ impl AHT20 {
         AHT20 {
             general_config,
             special_config,
-            initialized: false,
             humidity: MAX,
-            temperature: MAX
+            temperature: MAX,
+            enabled: true
         }
     }
 }
