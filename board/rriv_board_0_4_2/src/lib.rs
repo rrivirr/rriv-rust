@@ -211,8 +211,7 @@ impl RRIVBoard for Board {
     fn serial_debug(&mut self, string: &str) {
         rprintln!("{:?}", string);
         if self.debug {
-            rriv_board::RRIVBoard::usb_serial_send(self, string);
-            rriv_board::RRIVBoard::usb_serial_send(self, "\n");
+            rriv_board::RRIVBoard::usb_serial_send(self, format!("{{\"debug\":\"{}\"}}\n",string).as_str());
         }
     }
 
@@ -418,7 +417,7 @@ impl SensorDriverServices for Board {
             Err(e) => {
                 rriv_board::RRIVBoard::serial_debug(
                     self,
-                    &format!("Problem reading I2C2 {:X?} {:?}\n", addr, e),
+                    &format!("Problem reading I2C2 {:X?} {:?}", addr, e),
                 );
                 for i in 0..buffer.len() {
                     buffer[i] = 0b11111111; // error value
@@ -1026,8 +1025,6 @@ impl BoardBuilder {
 
         let delay2: DelayUs<TIM2> = device_peripherals.TIM2.delay(&clocks);
         let storage = storage::build(spi2_pins, device_peripherals.SPI2, clocks, delay2);
-
-        panic!("my panic!  stopping here");
 
         self.external_adc = Some(ExternalAdc::new(external_adc_pins));
         self.external_adc.as_mut().unwrap().disable(&mut delay);

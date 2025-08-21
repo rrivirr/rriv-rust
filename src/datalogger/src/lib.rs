@@ -680,14 +680,20 @@ impl DataLogger {
                         .copy_from_slice(&special_settings_bytes[0..copy_size]);
 
                     board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
-                    board.usb_serial_send(driver.get_configuration_json().to_string().as_str());
 
+                }
+
+                if let Some(index) = self.get_driver_index_by_id(util::str_from_utf8(&mut sensor_id).unwrap_or_default()) {
+                    if let Some(driver) = &mut self.sensor_drivers[index] {
+                        responses::send_json(board, driver.get_configuration_json());
+                        return;
+                    }
                 }
             }
             CommandPayload::SensorGetCommandPayload(payload) => {
                 if let Some(index) = self.get_driver_index_by_id_value(payload.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
-                        board.usb_serial_send(driver.get_configuration_json().to_string().as_str());
+                        responses::send_json(board, driver.get_configuration_json());
                         return;
                     }
                 }
@@ -736,7 +742,7 @@ impl DataLogger {
                 }
             }
             CommandPayload::SensorListCommandPayload(_) => {
-                board.usb_serial_send("[");
+                board.usb_serial_send("{\"sensors\":[");
                 let mut first = true;
                 for i in 0..self.sensor_drivers.len() {
                     // create json and output it
@@ -769,7 +775,7 @@ impl DataLogger {
                         board.usb_serial_send(str);
                     }
                 }
-                board.usb_serial_send("]");
+                board.usb_serial_send("]}");
                 board.usb_serial_send("\n");
             }
             CommandPayload::BoardRtcSetPayload(payload) => {
