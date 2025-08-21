@@ -142,6 +142,7 @@ impl Board {
         // TODO: we would disable the secondary clock input using a MOSFET, or we can just use another timer as a custom watch dog that triggers an interrupt (like the C code)
 
         self.internal_rtc.set_alarm(5000); // 5 seconds?
+        self.internal_rtc.listen_alarm();
         rprintln!("will sleep");
         
         // disable interrupts
@@ -168,6 +169,25 @@ impl Board {
         unsafe { NVIC::unmask(pac::Interrupt::USART2) };
 
         rprintln!("woke from sleep");
+
+    }
+
+    pub fn enter_stop_mode(&mut self){
+
+        
+        //           debug("setting up EXTI");
+        //   *bb_perip(&EXTI_BASE->IMR, EXTI_RTC_ALARM_BIT) = 1;
+        // 	*bb_perip(&EXTI_BASE->RTSR, EXTI_RTC_ALARM_BIT) = 1;
+
+        // in addition to the RTCALARM interrupt, the rtc must route through EXTI to wake the MCU up from stop mode.
+        let device_peripherals: pac::Peripherals = unsafe { pac::Peripherals::steal() };
+        device_peripherals.EXTI.imr.write(|w| w
+            .mr17().set_bit() // interrupt mask bit 17 enables RTC EXTI
+        );
+        device_peripherals.EXTI.rtsr.write(|w| w
+            .tr17().set_bit() // rising trigger bit 17 enables RTC EXTI
+        );
+
 
     }
 }
@@ -1009,7 +1029,7 @@ impl BoardBuilder {
         rprintln!("board new");
 
         let mut core_peripherals: pac::CorePeripherals = cortex_m::Peripherals::take().unwrap();
-        let device_peripherals = pac::Peripherals::take().unwrap();
+        let device_peripherals: pac::Peripherals = pac::Peripherals::take().unwrap();
 
         let uid = Uid::fetch();
         rprintln!("uid: {:X?}", uid.bytes());
