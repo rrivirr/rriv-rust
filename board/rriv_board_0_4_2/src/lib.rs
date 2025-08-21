@@ -188,6 +188,16 @@ impl Board {
             .tr17().set_bit() // rising trigger bit 17 enables RTC EXTI
         );
 
+        // clocks
+        // steal and use raw the same function sin cfgr to switch to hsi and wait for stabilization
+        // and the same thing to switch back.
+        // let clocks = cfgr
+        //     .use_hse(8.MHz())
+        //     .sysclk(48.MHz())
+        //     .pclk1(24.MHz())
+        //     .adcclk(14.MHz())
+        //     .freeze(flash_acr);
+
 
     }
 }
@@ -1102,6 +1112,19 @@ impl BoardBuilder {
         delay.delay_ms(250_u32);
         self.external_adc.as_mut().unwrap().enable(&mut delay);
         self.external_adc.as_mut().unwrap().reset(&mut delay);
+
+
+        // unsafe { NVIC::unmask(pac::interrupt::WWDG) }; // is this the EWI ?
+        // NVIC::mask(pac::interrupt::WWDG);
+        // device_peripherals.WWDG.cr.write( |w| unsafe { w
+        //     .bits(0xFF) }
+        // );
+        // It is enabled by setting the WDGA bit in the
+        // WWDG_CR register, then it cannot be disabled again except by a reset.
+        // this might mean it's good to use the WWDG for general watchdog purposes, since it also has EWI
+        // but actually... it also can't be disabled.
+        //
+        // the IndependentWatchdog won't trigger an interrupt.  it also can't be disabled.
 
         let mut watchdog = IndependentWatchdog::new(device_peripherals.IWDG);
         watchdog.stop_on_debug(&device_peripherals.DBGMCU, true);
