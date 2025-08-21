@@ -3,9 +3,7 @@ use core::num::Wrapping;
 use crate::sensor_name_from_type_id;
 
 use super::types::*;
-use alloc::boxed::Box;
-use bitfield_struct::bitfield;
-use rtt_target::{rprint, rprintln};
+use rtt_target::{rprintln};
 use serde_json::json;
 use util::any_as_u8_slice;
 

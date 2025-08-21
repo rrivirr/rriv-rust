@@ -1,9 +1,8 @@
 use crate::sensor_name_from_type_id;
 
 use super::types::*;
-use alloc::boxed::Box;
 use bitfield_struct::bitfield;
-use rtt_target::{rprint, rprintln};
+use rtt_target::{rprintln};
 use serde_json::json;
 use util::any_as_u8_slice;
 
@@ -46,9 +45,9 @@ impl SensorDriver for GenericAnalog {
     }
 
     fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        self.m = (self.special_config.m as f64);
+        self.m = self.special_config.m as f64;
         // rprintln!("loading {:#b} {} {} {}", self.special_config.b, self.special_config.b, self.special_config.b as f64, (self.special_config.b as f64) / 1000_f64 );
-        self.b = (self.special_config.b as f64);
+        self.b = self.special_config.b as f64;
     }
  
     getters!();

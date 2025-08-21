@@ -6,7 +6,6 @@ use serde_json::json;
 use util::str_from_utf8;
 
 use crate::services::usart_service;
-use crate::DataLoggerMode;
 use alloc::string::{String,ToString};
 use alloc::format;
 

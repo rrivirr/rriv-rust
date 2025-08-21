@@ -39,12 +39,13 @@ use serde_json::{json, Value};
 pub struct DataLogger {
     settings: DataloggerSettings,
     sensor_drivers: [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS], // TODO: this could be called 'sensor_configs'. modules, (composable modules)
-    telemeter_drivers: [Option<Box<dyn TelemeterDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+    _telemeter_drivers: [Option<Box<dyn TelemeterDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
 
     last_interactive_log_time: i64,
 
-    debug_values: bool, // serial out of values as they are read
-    log_raw_data: bool, // both raw and summary data writting to storage
+    _debug_values: bool, // serial out of values as they are read
+    _log_raw_data: bool, // both raw and summary data writting to storage
+    use_telemetry: bool,
 
     mode: DataLoggerMode,
     serial_tx_mode: DataLoggerSerialTxMode,
@@ -70,10 +71,11 @@ impl DataLogger {
         DataLogger {
             settings: DataloggerSettings::new(),
             sensor_drivers: [SENSOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-            telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+            _telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             last_interactive_log_time: 0,
-            debug_values: true,
-            log_raw_data: true,
+            _debug_values: true,
+            _log_raw_data: true,
+            use_telemetry: true,
             mode: DataLoggerMode::Interactive,
             serial_tx_mode: DataLoggerSerialTxMode::Normal,
             calibration_point_values: [CALIBRATION_INIT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
@@ -96,7 +98,7 @@ impl DataLogger {
     }
 
     fn store_settings(&mut self, board: &mut impl RRIVBoard) {
-        let bytes = unsafe { self.settings.get_bytes() };
+        let bytes = self.settings.get_bytes();
         board.store_datalogger_settings(&bytes);
         rprintln!("stored {:?}", bytes);
     }
@@ -738,23 +740,23 @@ impl DataLogger {
 
                 // TO DO: implement removal by tag
 
-                let payload_values = match payload.convert() {
-                    Ok(payload_values) => payload_values,
-                    Err(message) => {
-                        board.usb_serial_send(format!("{}", message).as_str());
-                        return;
-                    }
-                };
+                // let payload_values = match payload.convert() {
+                //     Ok(payload_values) => payload_values,
+                //     Err(message) => {
+                //         board.usb_serial_send(format!("{}", message).as_str());
+                //         return;
+                //     }
+                // };
 
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
-                    let pairs: &Option<Box<[CalibrationPair]>> =
-                        &self.calibration_point_values[index];
-                    if let Some(pairs) = pairs {
-                        for i in 0..pairs.len() {
-                            let pair: CalibrationPair = pairs[i];
-                        }
-                    }
-                }
+                // if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                //     let pairs: &Option<Box<[CalibrationPair]>> =
+                //         &self.calibration_point_values[index];
+                //     if let Some(pairs) = pairs {
+                //         for i in 0..pairs.len() {
+                //             let pair: CalibrationPair = pairs[i];
+                //         }
+                //     }
+                // }
             }
 
             CommandPayload::SensorCalibrateFitPayload(payload) => {
@@ -910,7 +912,7 @@ impl DataLogger {
                     responses::send_command_response_message(board, "Failed to get identifiers");
                 }
             },
-            
+
         }
     }
 

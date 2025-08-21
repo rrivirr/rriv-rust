@@ -2,13 +2,11 @@
 
 use crate::any_as_u8_slice;
 use crate::sensor_name_from_type_id;
-use crate::sensor_type_id_from_name;
 
 use super::mcp9808::*;
 
 use super::types::*;
 use alloc::boxed::Box;
-use alloc::format;
 use rtt_target::rprint;
 use serde_json::json;
 
@@ -22,7 +20,7 @@ pub struct RingTemperatureDriverSpecialConfiguration {
 }
 
 impl RingTemperatureDriverSpecialConfiguration {
-    pub fn new_from_values(value: serde_json::Value) -> RingTemperatureDriverSpecialConfiguration {
+    pub fn new_from_values(_value: serde_json::Value) -> RingTemperatureDriverSpecialConfiguration {
         Self {
             calibration_offset: [0; 8],
             address_offset: 0,
@@ -155,7 +153,7 @@ impl SensorDriver for RingTemperatureDriver {
     }
 
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
-        if (self.measured_parameter_values[index] == f64::MAX) {
+        if self.measured_parameter_values[index] == f64::MAX {
             Err(())
         } else {
             Ok(self.measured_parameter_values[index])

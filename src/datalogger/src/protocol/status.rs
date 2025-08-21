@@ -1,5 +1,4 @@
 use rriv_board::RRIVBoard;
-use rtt_target::rprintln;
 use serde_json::json;
 
 use crate::alloc::string::ToString;

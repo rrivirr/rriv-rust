@@ -65,7 +65,7 @@ impl SensorDriver for MCP9808TemperatureDriver {
 
         json!({ 
             "id" : self.get_id(),
-            "type" : sensor_name_bytes,
+            "type" : sensor_name_str,
             "calibration_offset": self.special_config.calibration_offset
         })
     }
@@ -81,7 +81,7 @@ impl SensorDriver for MCP9808TemperatureDriver {
     }
 
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()> {
-        if(self.measured_parameter_values[index] == f64::MAX){
+        if self.measured_parameter_values[index] == f64::MAX {
             Err(())
         } else {
             Ok(self.measured_parameter_values[index])
@@ -122,12 +122,12 @@ impl SensorDriver for MCP9808TemperatureDriver {
         //First Check flag bits
         // follows from https://ww1.microchip.com/downloads/en/DeviceDoc/MCP9808-0.5C-Maximum-Accuracy-Digital-Temperature-Sensor-Data-Sheet-DS20005095B.pdf
         let mut upper_byte: u16 = buffer[0].into();
-        let mut lower_byte: u16 = buffer[1].into();
-        if ((upper_byte & 0x80) == 0x80){ //T A ≥ TCRIT
+        let lower_byte: u16 = buffer[1].into();
+        if (upper_byte & 0x80) == 0x80 { //T A ≥ TCRIT
         }
-        if ((upper_byte & 0x40) == 0x40){ //T A > TUPPER
+        if (upper_byte & 0x40) == 0x40 { //T A > TUPPER
         }
-        if ((upper_byte & 0x20) == 0x20){ //T A < TLOWER
+        if (upper_byte & 0x20) == 0x20 { //T A < TLOWER
         }
 
         upper_byte = upper_byte & 0x1F; //Clear flag bits

@@ -21,9 +21,6 @@ use cortex_m::{
 };
 
 
-use cortex_m::peripheral::SCB;
-
-
 use embedded_hal::blocking::delay::DelayMs;
 use embedded_hal::digital::v2::{InputPin, OutputPin};
 use stm32f1xx_hal::flash::ACR;
@@ -339,7 +336,7 @@ impl RRIVBoard for Board {
                 Err(err) => rprintln!("Error {:?}", err),
             }
         }
-        let result = ds3231.datetime();
+        let _result = ds3231.datetime();
         self.i2c1 = Some(ds3231.destroy_ds3231());
     }
 

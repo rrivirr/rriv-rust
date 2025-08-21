@@ -10,7 +10,7 @@ use crate::datalogger::payloads::{
     SensorCalibratePointPayload, SensorRemoveCommandPayload, SensorSetCommandPayload,
 };
 use crate::drivers::types::{
-    CalibrationPair, SensorDriverGeneralConfiguration, SENSOR_SETTINGS_PARTITION_SIZE,
+    SensorDriverGeneralConfiguration, SENSOR_SETTINGS_PARTITION_SIZE,
 };
 use alloc::boxed::Box;
 
@@ -241,7 +241,7 @@ pub fn remove_sensor(
             let mut found = i;
 
             // bytewise comparison of sensor id to delete with sensor id of loaded sensor driver
-            for (j, (u1, u2)) in driver.get_id().iter().zip(sensor_id.iter()).enumerate() {
+            for (_j, (u1, u2)) in driver.get_id().iter().zip(sensor_id.iter()).enumerate() {
                 if u1 != u2 {
                     found = 256; // 256 mneans not found
                     break;

@@ -1,4 +1,4 @@
-use core::{borrow::BorrowMut, fmt::Error};
+use core::borrow::BorrowMut;
 use alloc::boxed::Box;
 use rriv_board::{RRIVBoard, RXProcessor};
 use rtt_target::rprintln;

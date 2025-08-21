@@ -1,14 +1,7 @@
-use rriv_board::RRIVBoard;
-use rtt_target::rprintln;
+
 use serde::{Deserialize, Serialize};
-use serde_json::{json, Number, Value};
+use serde_json::{Number, Value};
 use alloc::fmt::Debug;
-use alloc::format;
-
-
-use crate::drivers::types::SensorDriver;
-use crate::protocol::responses;
-use crate::registry::sensor_name_from_type_id;
 
 const LOGGER_NAME_LENGTH : usize = 8;
 const SITE_NAME_LENGTH : usize = 8;
@@ -407,18 +400,18 @@ impl Debug for CommandError {
     }
 }
 
-pub fn get_id(id: &serde_json::Value) -> Result<(&alloc::string::String), (&str)> {
-    match id {
-        serde_json::Value::String(ref payload_id) => {
-            return Ok(payload_id)
-        },
-        _ => {
-            // board.usb_serial_send("bad sensor id\n");
-            return Err("bad sensor id")
-        }
-    };
+// pub fn get_id(id: &serde_json::Value) -> Result<alloc::string::String,(&str)> {
+//     match id {
+//         serde_json::Value::String(ref payload_id) => {
+//             return Ok(payload_id)
+//         },
+//         _ => {
+//             // board.usb_serial_send("bad sensor id\n");
+//             return Err("bad sensor id")
+//         }
+//     };
 
-}
+// }
 
 
 fn value_length( target: &[u8], value: &[u8]) -> usize {

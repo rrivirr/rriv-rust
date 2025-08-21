@@ -1,4 +1,3 @@
-use core::time;
 
 use rtt_target::rprintln;
 
