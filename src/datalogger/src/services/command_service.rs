@@ -1,23 +1,22 @@
 #![cfg_attr(not(test), no_std)]
 
-use control_interface::command_recognizer::{self, CommandData, CommandRecognizer};
-use control_interface::command_registry::{CommandRegistry, CommandType};
+use control_interface::command_recognizer::{CommandData, CommandRecognizer};
+use control_interface::command_registry::CommandType;
 use rriv_board::{RRIVBoard, RXProcessor};
 
 extern crate alloc;
 use alloc::boxed::Box;
 use alloc::format;
-use alloc::string::String;
 use serde_json::Value;
 
 use core::borrow::BorrowMut;
-use core::ffi::{c_char, CStr};
+use core::ffi::CStr;
 use serde::{Deserialize, Serialize};
 
 use rtt_target::rprintln;
 
 
-use crate::datalogger::commands::*;
+use crate::datalogger::payloads::*;
 
 static mut COMMAND_DATA: CommandData = CommandData::default();
 

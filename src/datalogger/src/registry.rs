@@ -17,13 +17,13 @@ const SENSOR_NAMES: [&str; 9] = [
     "k30_co2",
 ];
 
-pub fn sensor_type_id_from_name(name: &str) -> u16 {
+pub fn sensor_type_id_from_name(name: &str) -> Result<u16, ()> {
     for i in 0..SENSOR_NAMES.len() {
         if name == SENSOR_NAMES[i] {
-            return u16::try_from(i).ok().unwrap();
+            return Ok(u16::try_from(i).ok().unwrap());
         }
     }
-    return 0;
+    Err(())
 }
 
 pub fn sensor_name_from_type_id(id: usize) -> [u8; 16] {

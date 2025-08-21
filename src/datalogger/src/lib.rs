@@ -4,6 +4,7 @@
 mod datalogger;
 mod services;
 
+use datalogger::payloads::*;
 use datalogger::commands::*;
 use datalogger::settings::*;
 
@@ -590,10 +591,18 @@ impl DataLogger {
                 responses::send_json(board,self.datalogger_settings_payload());
             }
             CommandPayload::SensorSetCommandPayload(payload, values) => {
+
                 let registry = get_registry();
                 let sensor_type_id = match payload.r#type {
                     serde_json::Value::String(sensor_type) => {
-                        registry::sensor_type_id_from_name(&sensor_type)
+                        match registry::sensor_type_id_from_name(&sensor_type) {
+                            Ok(sensor_type_id) => sensor_type_id,
+                            Err(_) => {
+                                responses::send_command_response_message(board, "sensor type not found");
+                                return;
+
+                            }
+                        }
                     }
                     _ => {
                         responses::send_command_response_message(
@@ -604,13 +613,8 @@ impl DataLogger {
                     }
                 };
 
-                if sensor_type_id == 0 {
-                    responses::send_command_response_message(board, "sensor type not found");
-                    return;
-                }
-
+                // get the sensor id or make a unique new one
                 let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
-
                 if let Some(payload_id) = payload.id {
                     sensor_id = match payload_id {
                         serde_json::Value::String(id) => {
@@ -742,41 +746,9 @@ impl DataLogger {
                 }
             }
             CommandPayload::SensorListCommandPayload(_) => {
-                board.usb_serial_send("{\"sensors\":[");
-                let mut first = true;
-                for i in 0..self.sensor_drivers.len() {
-                    // create json and output it
-                    if let Some(driver) = &mut self.sensor_drivers[i] {
-                        if first {
-                            first = false
-                        } else {
-                            board.usb_serial_send(",");
-                        }
 
-                        let mut id_bytes = driver.get_id();
-                        let id_str = match util::str_from_utf8(&mut id_bytes) {
-                            Ok(str) => str,
-                            Err(_) => "error",
-                        };
+                datalogger::commands::list_sensors(board, &mut self.sensor_drivers);
 
-                        let type_id = driver.get_type_id();
-                        let mut sensor_name_bytes = sensor_name_from_type_id(type_id.into());
-                        let sensor_name_str = match util::str_from_utf8(&mut sensor_name_bytes) {
-                            Ok(str) => str,
-                            Err(_) => "error",
-                        };
-
-                        let json = json!({
-                            "id": id_str,
-                            "type": sensor_name_str
-                        });
-                        let string = json.to_string();
-                        let str = string.as_str();
-                        board.usb_serial_send(str);
-                    }
-                }
-                board.usb_serial_send("]}");
-                board.usb_serial_send("\n");
             }
             CommandPayload::BoardRtcSetPayload(payload) => {
                 match payload.epoch {

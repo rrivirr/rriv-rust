@@ -59,7 +59,7 @@ pub trait SensorDriver {
     fn get_configuration_json(&mut self) -> serde_json::Value;
     fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices);
     fn get_id(&self) -> [u8; 6];
-    fn get_type_id(&mut self) -> u16;
+    fn get_type_id(&self) -> u16;
 
     fn get_measured_parameter_count(&mut self) -> usize;
     fn get_measured_parameter_value(&mut self, index: usize) -> Result<f64, ()>;
@@ -88,7 +88,7 @@ macro_rules! getters {
             self.general_config.id.clone()
         }
 
-        fn get_type_id(&mut self) -> u16 {
+        fn get_type_id(&self) -> u16 {
             self.general_config.sensor_type_id.clone()
         }
     };
