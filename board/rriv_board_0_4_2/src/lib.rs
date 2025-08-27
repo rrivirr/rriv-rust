@@ -589,9 +589,9 @@ impl SensorDriverServices for Board {
             // }
             _ => {
                 if value {
-                    self.gpio.gpio4.set_low();
-                } else { 
                     self.gpio.gpio4.set_high();
+                } else {
+                    self.gpio.gpio4.set_low();
                 }
             }
         };

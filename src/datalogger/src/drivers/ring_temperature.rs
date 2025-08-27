@@ -112,7 +112,9 @@ impl RingTemperatureDriver {
 
 
 
+
 const INDEX_TO_BYTE_CHAR: [u8; TEMPERATURE_SENSORS_ON_RING] = [b'A', b'B', b'E', b'C', b'F', b'D'];
+
 
 impl SensorDriver for RingTemperatureDriver {
     fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]) {
