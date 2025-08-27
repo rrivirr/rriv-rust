@@ -130,6 +130,12 @@ impl Board {
         self.gpio
             .gpio6
             .make_push_pull_output(&mut self.gpio_cr.gpioc_crh);
+
+
+        // TODO: this is for the NOX sensor, needs to be configured by drivers
+        self.gpio
+            .gpio4
+            .make_push_pull_output(&mut self.gpio_cr.gpiob_crl);
     }
 
     pub fn sleep_mcu(&mut self) {
@@ -583,9 +589,9 @@ impl SensorDriverServices for Board {
             // }
             _ => {
                 if value {
-                    self.gpio.gpio6.set_high();
+                    self.gpio.gpio4.set_high();
                 } else {
-                    self.gpio.gpio6.set_low();
+                    self.gpio.gpio4.set_low();
                 }
             }
         };
@@ -845,6 +851,9 @@ impl BoardBuilder {
         // TODO: just one GPIO pin for the moment
         let mut gpio = self.gpio.unwrap();
         gpio.gpio6.make_push_pull_output(&mut gpio_cr.gpioc_crh);
+        gpio.gpio4.make_push_pull_output(&mut gpio_cr.gpiob_crl);        
+   
+
 
         // let one_wire_bus_rriv = OneWireGpio1 {
         //     one_wire
