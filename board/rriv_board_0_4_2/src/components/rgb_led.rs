@@ -14,7 +14,6 @@ pub fn build_rgb_led(pins: RgbLedPins, tim1: TIM1, mapr: &mut MAPR, clocks: &Clo
   pwm.enable(Channel::C3);
 
   pwm.set_period(ms(500).into_rate());
-  asm::bkpt();
 
   let max = pwm.get_max_duty();
 
@@ -46,8 +45,6 @@ impl RgbLed {
   }
 
   pub fn set_color(&mut self, red: u8, green: u8, blue: u8) {
-
-    let r = self.max as u32 * (red as u32);
 
     self.pwm.set_duty(Channel::C1, self.convert(red) );
     self.pwm.set_duty(Channel::C2, self.convert(green) );

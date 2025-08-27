@@ -11,13 +11,13 @@ impl OscillatorControl {
     }
   }
 
-  pub fn enable_hse(&mut self, delay: &mut SysDelay) {
+  pub fn enable_hse(&mut self, _delay: &mut SysDelay) {
 
     self.pins.enable_hse.set_high();
 
   }
 
-  pub fn disable_hse(&mut self, delay: &mut SysDelay) {
+  pub fn disable_hse(&mut self, _delay: &mut SysDelay) {
 
     self.pins.enable_hse.set_low();
 

@@ -2,11 +2,13 @@ extern crate alloc;
 use alloc::format;
 use core::ffi::c_char;
 use hashbrown::HashMap;
+use alloc::boxed::Box;
+
 
 /// NOTE: Since this has a C compatible representation, it could be used in the FFI
 /// we use from_str when processing commands from the serial side anyway though..
 #[repr(u8)]
-#[derive(Debug, Eq, Hash, PartialEq)]
+#[derive(Eq, Hash, PartialEq)]
 pub enum CommandType {
     DataloggerSet = 0,
     DataloggerGet = 1,
@@ -17,7 +19,10 @@ pub enum CommandType {
     SensorRemove = 6,
     SensorList = 7,
     SensorCalibratePoint = 8,
+    SensorCalibrateList = 36,
+    SensorCalibrateRemove = 37,
     SensorCalibrateFit = 9,
+    SensorCalibrateClear = 38,
     SensorReset = 10,
     ActuatorSet = 11,
     ActuatorGet = 12,
@@ -34,7 +39,7 @@ pub enum CommandType {
     BoardFirmwareConditions = 23,
     BoardFirmwareLicense = 24,
     BoardRtcSet = 25,
-    BoardRtcGet = 26,
+    BoardGet = 26,
     BoardRestart = 27,
     BoardI2cList = 28,
     BoardMemoryCheck = 29,
@@ -43,8 +48,10 @@ pub enum CommandType {
     BoardSignalExAdcHigh = 32,
     BoardSignalExAdcLow = 33,
     BoardSignal3v3BoostHigh = 34,
+    BoardSerialSend = 39,
     BoardSignal3v3BoostLow = 35,
-    Unknown = 37, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
+    
+    Unknown = 40, // !!! `Unknown` needs to be the last command, its value is used to get the number of commands see CommandRegistry::new !!!
 }
 
 impl CommandType {
@@ -59,7 +66,10 @@ impl CommandType {
             "sensor_remove" => CommandType::SensorRemove,
             "sensor_list" => CommandType::SensorList,
             "sensor_calibrate_point" => CommandType::SensorCalibratePoint,
+            "sensor_calibrate_list" => CommandType::SensorCalibrateList,
+            "sensor_calibrate_remove" => CommandType::SensorCalibrateRemove,
             "sensor_calibrate_fit" => CommandType::SensorCalibrateFit,
+            "sensor_calibrate_clear" => CommandType::SensorCalibrateClear,
             "sensor_reset" => CommandType::SensorReset,
             "actuator_set" => CommandType::ActuatorSet,
             "actuator_get" => CommandType::ActuatorGet,
@@ -75,8 +85,8 @@ impl CommandType {
             "board_firmware_warranty" => CommandType::BoardFirmwareWarranty,
             "board_firmware_conditions" => CommandType::BoardFirmwareConditions,
             "board_firmware_license" => CommandType::BoardFirmwareLicense,
-            "board_rtc_set" => CommandType::BoardRtcSet,
-            "board_rtc_get" => CommandType::BoardRtcGet,
+            "board_set" => CommandType::BoardRtcSet,
+            "board_get" => CommandType::BoardGet,
             "board_restart" => CommandType::BoardRestart,
             "board_i2c_list" => CommandType::BoardI2cList,
             "board_memory_check" => CommandType::BoardMemoryCheck,
@@ -86,6 +96,7 @@ impl CommandType {
             "board_signal_ex_adc_low" => CommandType::BoardSignalExAdcLow,
             "board_signal_3v3_boost_high" => CommandType::BoardSignal3v3BoostHigh,
             "board_signal_3v3_boost_low" => CommandType::BoardSignal3v3BoostLow,
+            "serial_send" => CommandType::BoardSerialSend,
             _ => CommandType::Unknown,
         }
     }
@@ -118,7 +129,9 @@ impl CommandRegistry {
     pub fn get_action_fn(&self, command: &CommandType) -> Option<extern "C" fn(*const c_char)> {
         self.command_map.get(command).copied()
     }
-    pub fn get_command_from_parts(&self, object: &str, action: &str) -> CommandType {
+    pub fn get_command_from_parts(&self, object: &str, action: &str, subcommand: Option<Box<str>> ) -> CommandType {
+        let _ = subcommand;
+        todo!();
         let command_str = format!("{}_{}", object, action);
         CommandType::from_str(&command_str)
     }
@@ -149,7 +162,9 @@ mod tests {
         let command = Command::DataloggerSet;
         let object = "datalogger";
         let action = "set";
-        let command_from_parts = command_registry.get_command_from_parts(object, action);
+        // let subcommand = Box(str, "subcommand");
+        let subcommand = None;
+        let command_from_parts = command_registry.get_command_from_parts(object, action, subcommand);
         assert_eq!(command, command_from_parts);
     }
 }

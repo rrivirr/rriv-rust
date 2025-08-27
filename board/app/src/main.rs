@@ -1,29 +1,32 @@
 #![cfg_attr(not(test), no_std)]
 #![allow(clippy::empty_loop)]
 #![feature(alloc_error_handler)]
-#![feature(prelude_2024)]
 #![no_main]
 
-extern crate panic_halt;
-use core::{prelude::rust_2024::*, u8};
+// extern crate panic_halt;
+
+use core::prelude::rust_2024::*;
 use cortex_m_rt::entry;
-use rtt_target::rtt_init_print;
+use rtt_target::{rtt_init_print};
+use stm32f1xx_hal::{flash::FlashExt, pac::{self, TIM3}, time::{MicroSeconds, MilliSeconds}, timer::{DelayMs, DelayUs}};
 
 pub mod prelude;
 
+use stm32f1xx_hal::prelude::*;
+
 extern crate rriv_board;
-use rriv_board::{RRIVBoard,RRIVBoardBuilder};
 
 extern crate rriv_board_0_4_2;
-use rriv_board_0_4_2::{Board,BoardBuilder};
+use crate::rriv_board::RRIVBoard;
 
 extern crate datalogger;
 use datalogger::DataLogger;
 
-// #[link(name = "rriv_0_4", kind = "static")]
-// extern "C" {
-//     pub fn rust_serial_interface_new() -> *mut c_void;
-// }
+use rtt_target::rprintln;
+
+extern crate alloc;
+use alloc::format;
+
 
 #[entry]
 fn main() -> ! {
@@ -31,19 +34,49 @@ fn main() -> ! {
     prelude::init();
 
     let mut board = rriv_board_0_4_2::build();
+    board.start(); // not needed, for debug only
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
     loop {
+        board.run_loop_iteration();
         datalogger.run_loop_iteration(&mut board);
     }
 }
 
-// some serial commands to test for success and failure
-// {"cmd":"set","object":"datalogger"}
-// {"cmd":"foo","object":"bar"}
 
+use core::panic::PanicInfo;
 
+#[panic_handler]
+fn panic(_info: &PanicInfo) -> ! {
+    rprintln!("Panicked!");
+    if let Some(location) = _info.location() {
+        rprintln!("at {}", location);
+    }
+    
+    rprintln!("with message: {}", _info.message());
+    let device_peripherals = unsafe { pac::Peripherals::steal() };
+    
+    let rcc = device_peripherals.RCC.constrain();
+    let mut flash = device_peripherals.FLASH.constrain();
+    let clocks = rcc.cfgr
+            .use_hse(8.MHz())
+            .sysclk(48.MHz())
+            .pclk1(24.MHz())
+            .adcclk(14.MHz())
+            .freeze(&mut flash.acr);
 
-    // let mut peripherals = BoardPeripherals::new();
-    // peripherals.setup();
-    // let mut board = Board::new(peripherals)
+    let mut delay: DelayMs<TIM3> = device_peripherals.TIM3.delay(&clocks);
+    delay.delay(MilliSeconds::secs(5));
+    rriv_board_0_4_2::usb_serial_send("{\"status\":\"Panicked!", &mut delay);
+    // if let Some(location) = _info.location() {
+    //     rriv_board_0_4_2::usb_serial_send(" at ", &mut delay);
+    //     rriv_board_0_4_2::usb_serial_send(location., &mut delay);
+    // }
+    rriv_board_0_4_2::usb_serial_send(" with message ", &mut delay);
+    rriv_board_0_4_2::usb_serial_send(_info.message().as_str().unwrap_or_default(), &mut delay);
+    rriv_board_0_4_2::usb_serial_send("\"}\n", &mut delay);
+
+    rriv_board_0_4_2::write_panic_to_storage(format!("Panick: {} \n", _info.message().as_str().unwrap_or_default()).as_str());
+
+    loop {}
+}

@@ -7,7 +7,6 @@ pub use battery_level::*;
 mod dynamic_gpio;
 pub use dynamic_gpio::*;
 mod i2c1;
-use embedded_hal::blocking::i2c;
 pub use i2c1::*;
 mod i2c2;
 pub use i2c2::*;
@@ -28,7 +27,7 @@ pub use usb::*;
 
 pub fn build(
     pins: crate::pins::Pins,
-    cr: &mut crate::pins::GpioCr,
+    cr: &mut crate::pins::GpioCr
 ) -> (
     ExternalAdcPins,
     InternalAdcPins,
@@ -37,14 +36,14 @@ pub fn build(
     I2c1Pins,
     I2c2Pins,
     OscillatorControlPins,
-    // PowerPins,
+    PowerPins,
     RgbLedPins,
     SerialPins,
     Spi1Pins,
     Spi2Pins,
     UsbPins,
 ) {
-    let external_adc =
+    let mut external_adc =
         ExternalAdcPins::build(pins.enable_external_adc, pins.external_adc_reset, cr);
 
     let internal_adc = InternalAdcPins::build(
@@ -65,13 +64,35 @@ pub fn build(
         pins.gpio8, cr,
     );
 
+
+    let mut power = PowerPins::build(pins.enable_3v, pins.enable_5v, cr);
+
+    // power.enable_3v.set_high();
+    // delay.delay_ms(2000_u32);
+    // power.enable_3v.set_low();
+    // delay.delay_ms(2000_u32);
+    // power.enable_3v.set_high();
+    // delay.delay_ms(2000_u32);
+
+
+    // power.enable_5v.set_high();
+    // delay.delay_ms(250_u32);
+
+
+    // external_adc.enable.set_low(); // The exADC must be restarted properly again in order for it be detected
+    // delay.delay_ms(1_u32);
+    // external_adc.reset.set_low();
+    // delay.delay_ms(1_u32);
+    // external_adc.reset.set_high();
+    // delay.delay_ms(100_u32);
+
+
     let i2c1 = I2c1Pins::build(pins.i2c1_scl, pins.i2c1_sda, cr);
 
     let i2c2 = I2c2Pins::build(pins.i2c2_scl, pins.i2c2_sda, cr);
 
     let oscillator_control = OscillatorControlPins::build(pins.enable_hse, cr);
 
-    // let power = PowerPins::build(pins.enable_3v, pins.enable_5v, cr);
 
     let rgb_led = RgbLedPins::build(
         pins.rgb_red_and_wake_button,
@@ -82,9 +103,9 @@ pub fn build(
 
     let serial = SerialPins::build(pins.tx, pins.rx, cr);
 
-    let spi1 = Spi1Pins::build(pins.spi1_sck, pins.spi1_miso, pins.spi1_mosi, pins.sd_card_chip_select, cr);
+    let spi1 = Spi1Pins::build(pins.spi1_sck, pins.spi1_miso, pins.spi1_mosi, cr);
 
-    let spi2 = Spi2Pins::build(pins.spi2_sck, pins.spi2_miso, pins.spi2_mosi, cr);
+    let spi2 = Spi2Pins::build(pins.spi2_sck, pins.spi2_miso, pins.spi2_mosi, pins.sd_card_chip_select, cr);
 
     let usb = UsbPins::build(pins.usb_p, pins.usb_n, cr);
 
@@ -96,7 +117,7 @@ pub fn build(
         i2c1,
         i2c2,
         oscillator_control,
-        // power,
+        power,
         rgb_led,
         serial,
         spi1,

@@ -11,19 +11,33 @@ You will need to install the Rust toolchain. The easiest way to do this is with 
 You will need the nightly toolchain since Rust on embedded needs unstable features. You will also need to install the `thumbv7m-none-eabi` target to build for the STM32F103RB.
 ```zsh
 rustup toolchain install nightly
+```
+```zsh
 rustup target add thumbv7m-none-eabi
+rustup default nightly
+rustup update
+```
+You can also list and set the toolchain directly like so:
+```
+rustup toolchain list
+rustup toochain default <toolchain from the list>
+rustup update
+```
+```zsh
+rustup default nightly
 ```
 
-[probe-rs](https://probe.rs/docs/getting-started/installation/) sets up the tooling for flashing and debugging. You will need to install the probe-rs cli tool. You can do this with cargo:
+[probe-rs](https://probe.rs/docs/getting-started/installation/) is used for flashing and debugging. 
+
+There is a one-liner shell script installer availble here: [https://probe.rs/](https://probe.rs/)
 
 ```zsh
-cargo install probe-rs --features cli
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/probe-rs/probe-rs/releases/latest/download/probe-rs-tools-installer.sh | sh
 ```
-This will install the probe-rs, cargo-flash and cargo-embed binaries and put them in $PATH.
 
 Users of VSCode will also want to install the following extensions:
 * rust-analyzer
-* probe-rs-debugger
+
 
 
 ### Code Organization
@@ -43,9 +57,7 @@ The code in `board` must be run on target hardware. This is because it is either
 
 `board/lib` - a static C FFI library is being used as a way to call new features written in Rust from the current C firmware. Eventually, the C firmware will have been fully replaced (and upgraded!) by the Rust firmware.
 
-`board/rriv-0-4` - This is where the board-specific code lives.
-
-The Rust library in `src/lib` is for core functionality that can be tested on the host and used by the C firmware via the FFI library.
+`board/rriv-0-4-2` - This is where the board-specific code lives.  A new revision of the board hardware can be supported by creating a new implementation module.
 
 
 ### Build & Debug

@@ -1,4 +1,4 @@
-use stm32f1xx_hal::{gpio::*, afio::MAPR};
+use stm32f1xx_hal::gpio::*;
 use crate::pins::*;
 
 
@@ -22,5 +22,18 @@ impl I2c1Pins {
       i2c1_sda: i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl),
     }
   }
+
+ pub fn rebuild(
+    i2c1_scl: Pin<'B', 6, Output<OpenDrain>>,
+    i2c1_sda: Pin<'B', 7, Output<OpenDrain>>,
+    cr: &mut GpioCr
+  ) -> Self {
+
+    return I2c1Pins {
+      i2c1_scl: i2c1_scl.into_alternate_open_drain(&mut cr.gpiob_crl), 
+      i2c1_sda: i2c1_sda.into_alternate_open_drain(&mut cr.gpiob_crl),
+    }
+  }
+
 
 }
