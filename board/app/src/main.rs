@@ -37,6 +37,8 @@ fn main() -> ! {
     board.start(); // not needed, for debug only
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
+    board.watchdog.feed(); // make sure we leave enough time for the panic handler
+    panic!("test the panic");
     loop {
         board.run_loop_iteration();
         datalogger.run_loop_iteration(&mut board);
@@ -66,16 +68,17 @@ fn panic(_info: &PanicInfo) -> ! {
             .freeze(&mut flash.acr);
 
     let mut delay: DelayMs<TIM3> = device_peripherals.TIM3.delay(&clocks);
-    delay.delay(MilliSeconds::secs(5));
-    rriv_board_0_4_2::usb_serial_send("{\"status\":\"Panicked!", &mut delay);
+    // we avoid using format! here because we don't want to do dynamic memory in panic handler
+    rriv_board_0_4_2::usb_serial_send("{\"status\":\"panic\",\"message\":\"", &mut delay);
     // if let Some(location) = _info.location() {
     //     rriv_board_0_4_2::usb_serial_send(" at ", &mut delay);
     //     rriv_board_0_4_2::usb_serial_send(location., &mut delay);
     // }
-    rriv_board_0_4_2::usb_serial_send(" with message ", &mut delay);
     rriv_board_0_4_2::usb_serial_send(_info.message().as_str().unwrap_or_default(), &mut delay);
     rriv_board_0_4_2::usb_serial_send("\"}\n", &mut delay);
+    rprintln!("send json panic");
 
+    // we use format! here because we didn't find another good way yet.
     rriv_board_0_4_2::write_panic_to_storage(format!("Panick: {} \n", _info.message().as_str().unwrap_or_default()).as_str());
 
     loop {}
