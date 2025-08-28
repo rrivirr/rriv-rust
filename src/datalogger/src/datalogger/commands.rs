@@ -227,6 +227,8 @@ pub fn remove_sensor(
     let sensor_id = match payload.id {
         serde_json::Value::String(id) => {
             let mut prepared_id: [u8; 6] = [0; 6];
+            let mut len = id.as_bytes().len();
+            let len = if len <= 6 { len } else { 6 };
             prepared_id[0..id.as_bytes().len()].copy_from_slice(id.as_bytes());
             prepared_id
         }
