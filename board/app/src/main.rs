@@ -38,7 +38,6 @@ fn main() -> ! {
     let mut datalogger = DataLogger::new();
     datalogger.setup(&mut board);
     board.watchdog.feed(); // make sure we leave enough time for the panic handler
-    panic!("test the panic");
     loop {
         board.run_loop_iteration();
         datalogger.run_loop_iteration(&mut board);

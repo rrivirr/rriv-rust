@@ -22,7 +22,7 @@ pub struct DataloggerSettingsValues {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct DataloggerSetCommandPayload {
+pub struct DataloggerSetPayload {
     pub object: Value,
     pub action: Value,
     pub logger_name: Option<Value>,
@@ -37,7 +37,7 @@ pub struct DataloggerSetCommandPayload {
     // pub user_value: Option<i16>
 }
 
-impl DataloggerSetCommandPayload {
+impl DataloggerSetPayload {
     pub fn values(self) -> DataloggerSettingsValues {
 
         let mut datalogger_settings_values = DataloggerSettingsValues::default();
@@ -105,7 +105,7 @@ impl DataloggerSetCommandPayload {
 
 
 #[derive(Serialize, Deserialize)]
-pub struct DataloggerGetCommandPayload {
+pub struct DataloggerGetPayload {
     pub object: Value,
     pub action: Value,
     pub propery: Option<Value>
@@ -120,7 +120,7 @@ pub struct DataloggerSetModeCommandPayload {
 
 
 #[derive(Serialize, Deserialize)]
-pub struct SensorSetCommandPayload {
+pub struct SensorSetPayload {
     pub object: Value,
     pub action: Value, 
     pub id: Option<Value>, // option
@@ -128,21 +128,21 @@ pub struct SensorSetCommandPayload {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SensorGetCommandPayload {
+pub struct SensorGetPayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SensorRemoveCommandPayload {
+pub struct SensorRemovePayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct SensorListCommandPayload {
+pub struct SensorListPayload {
     pub object: Value,
     pub action: Value,
 }
@@ -198,6 +198,51 @@ impl BoardSerialSendPayload {
         }
         )
     }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DeviceSetSerialNumberPayload {
+    pub object: Value,
+    pub action: Value,
+    pub serial_number: Option<Value>
+}
+
+pub struct DeviceSetSerialNumberPayloadValues {
+    pub serial_number: [u8; 5]
+}
+
+impl DeviceSetSerialNumberPayload {
+    pub fn convert(&self) -> Result<DeviceSetSerialNumberPayloadValues, &'static str> { 
+        let serial_number = match self.serial_number {
+            Some(serde_json::Value::String(ref serial_number)) => {
+                serial_number
+            },
+            _ => {
+                // board.usb_serial_send("bad sensor id\n");
+                return Err("bad serial number");
+            }
+        };
+
+        // let mut bytes:
+        let bytes = serial_number.as_str().as_bytes();
+        if bytes.len() != 5 {
+            return Err("wrong length")
+        }
+        let mut serial_number_bytes: [u8;5] = [0;5];
+        serial_number_bytes.clone_from_slice(bytes);
+
+        return Ok(
+            DeviceSetSerialNumberPayloadValues {
+                serial_number: serial_number_bytes
+            }
+        )
+    }
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct DeviceGetPayload {
+    pub object: Value,
+    pub action: Value,
 }
 
 
@@ -364,22 +409,24 @@ impl SensorCalibrateRemovePayload {
 
 #[derive(Serialize, Deserialize)]
 pub enum CommandPayload {
-    DataloggerSetCommandPayload(DataloggerSetCommandPayload),
-    DataloggerGetCommandPayload(DataloggerGetCommandPayload),
-    DataloggerSetModeCommandPayload(DataloggerSetModeCommandPayload),
-    SensorSetCommandPayload(SensorSetCommandPayload, Value), // Value here is for dynamically specific special properties of the driver
-    SensorGetCommandPayload(SensorGetCommandPayload),
-    SensorRemoveCommandPayload(SensorRemoveCommandPayload),
-    SensorListCommandPayload(SensorListCommandPayload),
-    SensorCalibratePointPayload(SensorCalibratePointPayload),
-    SensorCalibrateListPayload(SensorCalibrateListPayload),
-    SensorCalibrateRemovePayload(SensorCalibrateRemovePayload),
-    SensorCalibrateFitPayload(SensorCalibrateFitPayload),
-    SensorCalibrateClearPayload(SensorCalibrateClearPayload),
-    BoardRtcSetPayload(BoardRtcSetPayload),
-    BoardGetPayload(BoardGetPayload),
-    BoardSerialSendPayload(BoardSerialSendPayload),
-    TelemeterGet
+    DataloggerSet(DataloggerSetPayload),
+    DataloggerGet(DataloggerGetPayload),
+    DataloggerSetModeCommandPayload(DataloggerSetModeCommandPayload), // deprecated
+    SensorSet(SensorSetPayload, Value), // Value here is for dynamically specific special properties of the driver
+    SensorGet(SensorGetPayload),
+    SensorRemove(SensorRemovePayload),
+    SensorList(SensorListPayload),
+    SensorCalibratePoint(SensorCalibratePointPayload),
+    SensorCalibrateList(SensorCalibrateListPayload),
+    SensorCalibrateRemove(SensorCalibrateRemovePayload),
+    SensorCalibrateFit(SensorCalibrateFitPayload),
+    SensorCalibrateClear(SensorCalibrateClearPayload),
+    BoardRtcSet(BoardRtcSetPayload),
+    BoardGet(BoardGetPayload),
+    BoardSerialSend(BoardSerialSendPayload),
+    TelemeterGet,
+    DeviceSetSerialNumber(DeviceSetSerialNumberPayload),
+    DeviceGet(DeviceGetPayload),
 }
 
 

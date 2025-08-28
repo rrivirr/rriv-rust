@@ -427,6 +427,19 @@ impl RRIVBoard for Board {
     fn get_uid(&mut self) -> [u8; 12] {
         return self.uid;
     }
+
+    fn set_serial_number(&mut self, serial_number: [u8;rriv_board::EEPROM_SERIAL_NUMBER_SIZE]) -> bool {
+        let existing_serial_number = self.get_serial_number();
+        if existing_serial_number != [255,255,255,255,255] {
+            return false;
+        }
+        eeprom::write_serial_number_to_eeprom(self, &serial_number);
+        return true;
+    }
+
+    fn get_serial_number(&mut self) -> [u8;rriv_board::EEPROM_SERIAL_NUMBER_SIZE] {
+        eeprom::read_serial_number_from_eeprom(self)
+    }
 }
 
 macro_rules! control_services_impl {

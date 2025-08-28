@@ -14,7 +14,7 @@ pub fn send_command_response_message(board: &mut impl RRIVBoard, message: &str) 
 
 pub fn send_command_response_error(board: &mut impl RRIVBoard, message: &str, error: &str) {
     board.usb_serial_send(
-        json!({"message":message, "error": error})
+        json!({"status":"error", "message":message, "error": error})
             .to_string()
             .as_str(),
     );
@@ -49,4 +49,28 @@ pub fn calibration_point_list(board: &mut impl RRIVBoard, pairs: &Option<Box<[Ca
     }
 
     board.usb_serial_send("]}\n");
+}
+
+pub fn device_get(board: &mut impl RRIVBoard, mut serial_number: [u8;5], mut uid : [u8;12]){
+    rprintln!("{:?}", serial_number);
+    let serial_number = util::str_from_utf8(&mut serial_number).unwrap_or_default();
+    let uid = format!("{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}",            
+            uid[0],
+            uid[1],
+            uid[2],
+            uid[3],
+            uid[4],
+            uid[5],
+            uid[6],
+            uid[7],
+            uid[8],
+            uid[9],
+            uid[10],
+            uid[11]);
+    let uid = uid.as_str();
+    let json = json!({
+        "serial_number": serial_number,
+        "uid": uid
+    });
+    send_json(board, json);
 }

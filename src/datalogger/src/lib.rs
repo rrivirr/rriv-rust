@@ -4,8 +4,8 @@
 mod datalogger;
 mod services;
 
-use datalogger::payloads::*;
 use datalogger::commands::*;
+use datalogger::payloads::*;
 use datalogger::settings::*;
 
 use rriv_board::{
@@ -71,7 +71,8 @@ impl DataLogger {
         DataLogger {
             settings: DataloggerSettings::new(),
             sensor_drivers: [SENSOR_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-            _telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+            _telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE;
+                rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             last_interactive_log_time: 0,
             _debug_values: true,
             _log_raw_data: true,
@@ -577,30 +578,26 @@ impl DataLogger {
     pub fn execute_command(&mut self, board: &mut impl RRIVBoard, command_payload: CommandPayload) {
         // rprintln!("executing command {:?}", command_payload);
         match command_payload {
-            
-            CommandPayload::DataloggerSetCommandPayload(payload) => {
+            CommandPayload::DataloggerSet(payload) => {
                 self.update_datalogger_settings(board, payload);
-                responses::send_json(board,self.datalogger_settings_payload());
+                responses::send_json(board, self.datalogger_settings_payload());
             }
-
-            CommandPayload::DataloggerGetCommandPayload(_) => {
-                responses::send_json(board,self.datalogger_settings_payload());
+            CommandPayload::DataloggerGet(_) => {
+                responses::send_json(board, self.datalogger_settings_payload());
             }
-
             CommandPayload::DataloggerSetModeCommandPayload(payload) => {
+                // Deprecated, replaced by DataloggerSet
                 // TODO: this command is deprecated
                 if let Some(mode) = payload.mode {
                     self.set_mode(board, mode);
                 }
 
-                responses::send_json(board,self.datalogger_settings_payload());
+                responses::send_json(board, self.datalogger_settings_payload());
             }
-
-            CommandPayload::SensorSetCommandPayload(payload, values) => {
+            CommandPayload::SensorSet(payload, values) => {
                 datalogger::commands::set_sensor(board, &mut self.sensor_drivers, payload, values);
             }
-
-            CommandPayload::SensorGetCommandPayload(payload) => {
+            CommandPayload::SensorGet(payload) => {
                 if let Some(index) = self.get_driver_index_by_id_value(payload.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         responses::send_json(board, driver.get_configuration_json());
@@ -608,18 +605,16 @@ impl DataLogger {
                     }
                 }
 
-                responses::send_command_response_message(board, "didn't find the sensor"); // TODO: send 404
+                responses::send_command_response_message(board, "didn't find the sensor");
+                // TODO: send 404
             }
-
-            CommandPayload::SensorRemoveCommandPayload(payload) => {
-               datalogger::commands::remove_sensor(board, payload, &mut self.sensor_drivers);
+            CommandPayload::SensorRemove(payload) => {
+                datalogger::commands::remove_sensor(board, payload, &mut self.sensor_drivers);
             }
-
-            CommandPayload::SensorListCommandPayload(_) => {
+            CommandPayload::SensorList(_) => {
                 datalogger::commands::list_sensors(board, &mut self.sensor_drivers);
             }
-
-            CommandPayload::BoardRtcSetPayload(payload) => {
+            CommandPayload::BoardRtcSet(payload) => {
                 match payload.epoch {
                     serde_json::Value::Number(epoch) => {
                         let epoch = epoch.as_i64();
@@ -640,22 +635,19 @@ impl DataLogger {
                     }
                 };
             }
-
-            CommandPayload::BoardGetPayload(payload) => {
+            CommandPayload::BoardGet(payload) => {
                 datalogger::commands::get_board(board, payload);
             }
+            CommandPayload::SensorCalibratePoint(payload) => {
+                let args =
+                    match datalogger::commands::sensor_add_calibration_point_arguments(&payload) {
+                        Ok(args) => args,
+                        Err(message) => {
+                            responses::send_command_response_message(board, message);
+                            return;
+                        }
+                    };
 
-            CommandPayload::SensorCalibratePointPayload(payload) => {
-
-                let args = match datalogger::commands::sensor_add_calibration_point_arguments(&payload) {
-                    Ok(args) => args,
-                    Err(message) => {
-                        responses::send_command_response_message(board, message);
-                        return;
-                    }
-                };
-
-      
                 if let Some(index) = self.get_driver_index_by_id(args.0) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         // read sensor values
@@ -698,16 +690,16 @@ impl DataLogger {
                         }
 
                         // Success, so return the current calibration point list
-                        responses::calibration_point_list(board, &self.calibration_point_values[index]); // TODO: is responses the right place for marshaling JSON lists to serial?
-
+                        responses::calibration_point_list(
+                            board,
+                            &self.calibration_point_values[index],
+                        ); // TODO: is responses the right place for marshaling JSON lists to serial?
                     }
                 } else {
-                   responses::send_command_response_message(board, "Didn't find the sensor"); 
+                    responses::send_command_response_message(board, "Didn't find the sensor");
                 }
-      
-             
             }
-            CommandPayload::SensorCalibrateListPayload(payload) => {
+            CommandPayload::SensorCalibrateList(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
                     Err(message) => {
@@ -726,12 +718,9 @@ impl DataLogger {
                         &self.calibration_point_values[index];
 
                     responses::calibration_point_list(board, pairs); // TODO: is responses the right place for marshaling JSON lists to serial?
-
                 }
-
             }
-
-            CommandPayload::SensorCalibrateRemovePayload(payload) => {
+            CommandPayload::SensorCalibrateRemove(payload) => {
                 responses::send_command_response_message(
                     board,
                     "This command is not implemented yet",
@@ -758,8 +747,7 @@ impl DataLogger {
                 //     }
                 // }
             }
-
-            CommandPayload::SensorCalibrateFitPayload(payload) => {
+            CommandPayload::SensorCalibrateFit(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
                     Err(message) => {
@@ -808,8 +796,7 @@ impl DataLogger {
                     }
                 }
             }
-
-            CommandPayload::SensorCalibrateClearPayload(payload) => {
+            CommandPayload::SensorCalibrateClear(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
                     Err(message) => {
@@ -825,8 +812,7 @@ impl DataLogger {
                     }
                 }
             }
-
-            CommandPayload::BoardSerialSendPayload(payload) => {
+            CommandPayload::BoardSerialSend(payload) => {
                 let payload_values = match payload.convert() {
                     Ok(payload_values) => payload_values,
                     Err(error) => {
@@ -903,7 +889,6 @@ impl DataLogger {
 
                 return;
             }
-
             CommandPayload::TelemeterGet => match self.telemeter.get_identity(board) {
                 Ok(message) => {
                     board.usb_serial_send(format!("{}\n", message.as_str()).as_str());
@@ -912,14 +897,38 @@ impl DataLogger {
                     responses::send_command_response_message(board, "Failed to get identifiers");
                 }
             },
-
+            CommandPayload::DeviceSetSerialNumber(device_set_serial_number_payload) => {
+                match device_set_serial_number_payload.convert() {
+                    Ok(values) => {
+                        if board.set_serial_number(values.serial_number) {
+                            let serial_number = board.get_serial_number();
+                            let uid = board.get_uid();
+                            responses::device_get(board, serial_number, uid);
+                        } else {
+                            responses::send_command_response_error(
+                                board,
+                                "Serial number already set",
+                                "",
+                            );
+                        }
+                    }
+                    Err(err) => {
+                        responses::send_command_response_error(board, "error", err);
+                    }
+                }
+            }
+            CommandPayload::DeviceGet(device_get_payload) => {
+                let serial_number = board.get_serial_number();
+                let uid = board.get_uid();
+                responses::device_get(board, serial_number, uid);
+            }
         }
     }
 
     pub fn update_datalogger_settings(
         &mut self,
         board: &mut impl RRIVBoard,
-        set_command_payload: DataloggerSetCommandPayload,
+        set_command_payload: DataloggerSetPayload,
     ) {
         let mode = set_command_payload.mode.clone(); // TODO: clean this up
         let values = set_command_payload.values();

@@ -4,6 +4,8 @@ use alloc::boxed::Box;
 
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
+pub const EEPROM_SERIAL_NUMBER_SIZE: usize = 5;
+
 
 #[cfg(feature = "24LC08")]
 pub const EEPROM_TOTAL_SENSOR_SLOTS: usize = 12;
@@ -70,6 +72,10 @@ pub trait RRIVBoard: Send {
     // for debugging and basic operation
     fn dump_eeprom(&mut self);
     fn get_uid(&mut self) -> [u8; 12];
+    fn set_serial_number(&mut self, serial_number: [u8;5]) -> bool;
+    fn get_serial_number(&mut self) -> [u8;5];
+    
+    // fn subsystem(&mut self, ...)  //TODO: custom commands to the board subsystems, use a tokenized rather than json format
 
 }
 

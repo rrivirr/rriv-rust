@@ -4,7 +4,7 @@ use embedded_hal::prelude::{
     _embedded_hal_blocking_i2c_WriteRead,
 };
 use crate::Board;
-use rriv_board::RRIVBoard;
+use rriv_board::{RRIVBoard, EEPROM_SERIAL_NUMBER_SIZE};
 use rtt_target::rprintln;
 
 // implementation specific consts
@@ -12,12 +12,11 @@ const EEPROM_I2C_ADDRESS: u8 = 0x50;
 
 const _EEPROM_RESET_VALUE: u16 = 255; // max value of a byte
 
-const _EEPROM_UUID_ADDRESS_START: u8 = 0;
-const _EEPROM_UUID_ADDRESS_END: u8 = 15;
-const _UUID_LENGTH: u8 = 12; // STM32 has a 12 byte UUID, leave extra space for the future 16
 
 const EEPROM_DATALOGGER_SETTINGS_START: u8 = 16;
 const _EEPROM_SENSOR_SETTINGS_START: u8 = 80;
+
+const EEPROM_SERIAL_NUMBER_START: u8 = 0;
 
 
 pub fn write_bytes_to_eeprom(board: &mut crate::Board, block: u8, start_address: u8, bytes: &[u8]) {
@@ -67,6 +66,21 @@ pub fn read_bytes_from_eeprom(board: &mut crate::Board, block: u8, start_address
             i = i + 1;
         }
     
+}
+
+pub fn write_serial_number_to_eeprom(
+    board: &mut Board,
+    bytes: &[u8; rriv_board::EEPROM_SERIAL_NUMBER_SIZE],
+){
+    write_bytes_to_eeprom(board, 0, EEPROM_SERIAL_NUMBER_START, bytes);
+}
+
+pub fn read_serial_number_from_eeprom(
+    board: &mut Board
+) -> [u8; rriv_board::EEPROM_SERIAL_NUMBER_SIZE] {
+    let mut serial_number: [u8;rriv_board::EEPROM_SERIAL_NUMBER_SIZE] = [0;rriv_board::EEPROM_SERIAL_NUMBER_SIZE];
+    read_bytes_from_eeprom(board, 0, EEPROM_SERIAL_NUMBER_START, &mut serial_number);
+    return serial_number;
 }
 
 pub fn write_datalogger_settings_to_eeprom(

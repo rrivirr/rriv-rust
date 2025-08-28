@@ -7,7 +7,7 @@ extern crate alloc;
 use crate::alloc::string::ToString;
 use crate::datalogger::bytes;
 use crate::datalogger::payloads::{
-    SensorCalibratePointPayload, SensorRemoveCommandPayload, SensorSetCommandPayload,
+    SensorCalibratePointPayload, SensorRemovePayload, SensorSetPayload,
 };
 use crate::drivers::types::{
     SensorDriverGeneralConfiguration, SENSOR_SETTINGS_PARTITION_SIZE,
@@ -83,7 +83,7 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload) {
 pub fn set_sensor(
     board: &mut impl RRIVBoard,
     drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-    payload: SensorSetCommandPayload,
+    payload: SensorSetPayload,
     raw_payload_values: Value,
 ) {
     let registry = crate::registry::get_registry();
@@ -221,7 +221,7 @@ fn make_unique_sensor_id(
 // TODO: then the caller devides what to send to the device (including any re-query)
 pub fn remove_sensor(
     board: &mut impl RRIVBoard,
-    payload: SensorRemoveCommandPayload,
+    payload: SensorRemovePayload,
     drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
 ) {
     let sensor_id = match payload.id {

@@ -80,7 +80,7 @@ fn take_command(board: &impl RRIVBoard) -> Result<[u8; 500], ()> {
 pub fn get_pending_command(board: &impl RRIVBoard) -> Option<Result<CommandPayload, CommandError>> {
     if pending_message_count(board) > 0 {
         if let Ok(command_bytes) = take_command(board) {
-            let command_cstr = CStr::from_bytes_until_nul(&command_bytes).unwrap();
+            let command_cstr = CStr::from_bytes_until_nul(&command_bytes).unwrap(); // TODO: do we really need CStr here?  I don't think so...
             let command_identification_result = identify_serial_command(command_cstr);
             // rprintln!("{:?}", command_identification_result);
             match command_identification_result {
@@ -91,7 +91,7 @@ pub fn get_pending_command(board: &impl RRIVBoard) -> Option<Result<CommandPaylo
                     return Some(result);
                 }
                 Err(error) => {
-                    rprintln!("{:?}", error);
+                    rprintln!("{:?} {:?}", error, command_cstr);
                     return Some(Err(error))
                 }
             }
@@ -155,53 +155,53 @@ fn get_command_payload(
 ) -> Result<CommandPayload, CommandError> {
     match command {
         CommandType::DataloggerSet => {
-            parse_command_to_payload!(DataloggerSetCommandPayload, CommandPayload::DataloggerSetCommandPayload, command_cstr);
-        }
+                        parse_command_to_payload!(DataloggerSetPayload, CommandPayload::DataloggerSet, command_cstr);
+            }
         CommandType::DataloggerGet => {
-            parse_command_to_payload!(DataloggerGetCommandPayload, CommandPayload::DataloggerGetCommandPayload, command_cstr);
-        }
+                parse_command_to_payload!(DataloggerGetPayload, CommandPayload::DataloggerGet, command_cstr);
+            }
         CommandType::DataloggerReset => todo!(),
         CommandType::DataloggerSetMode => {
-            parse_command_to_payload!(DataloggerSetModeCommandPayload, CommandPayload::DataloggerSetModeCommandPayload, command_cstr);
-        },
+                parse_command_to_payload!(DataloggerSetModeCommandPayload, CommandPayload::DataloggerSetModeCommandPayload, command_cstr);
+            },
         CommandType::SensorSet => {
 
-            let command_data_str = command_cstr.to_str().unwrap();
+                let command_data_str = command_cstr.to_str().unwrap();
 
-            let raw_value: Value = serde_json::from_str(command_data_str).unwrap(); // use hashbrown HashMap?
+                let raw_value: Value = serde_json::from_str(command_data_str).unwrap(); // use hashbrown HashMap?
 
-            let result = parse_command::<SensorSetCommandPayload>(command_cstr);
-            match result {
-                Ok(payload) => return Ok(CommandPayload::SensorSetCommandPayload(payload, raw_value)),
-                Err(error) => return Err(CommandError::InvalidPayload(error)),
-            }
+                let result = parse_command::<SensorSetPayload>(command_cstr);
+                match result {
+                    Ok(payload) => return Ok(CommandPayload::SensorSet(payload, raw_value)),
+                    Err(error) => return Err(CommandError::InvalidPayload(error)),
+                }
 
-        },
+            },
         CommandType::SensorGet => {
-            parse_command_to_payload!(SensorGetCommandPayload, CommandPayload::SensorGetCommandPayload, command_cstr);
-        },
+                parse_command_to_payload!(SensorGetPayload, CommandPayload::SensorGet, command_cstr);
+            },
         CommandType::SensorRemove => {
-            parse_command_to_payload!(SensorRemoveCommandPayload, CommandPayload::SensorRemoveCommandPayload, command_cstr);
-        },
+                parse_command_to_payload!(SensorRemovePayload, CommandPayload::SensorRemove, command_cstr);
+            },
         CommandType::SensorList => {
-            parse_command_to_payload!(SensorListCommandPayload, CommandPayload::SensorListCommandPayload, command_cstr);
-        },
+                parse_command_to_payload!(SensorListPayload, CommandPayload::SensorList, command_cstr);
+            },
         CommandType::SensorCalibratePoint => {
-            // rprintln!("parsing SensorCalibratePoint");
-            parse_command_to_payload!(SensorCalibratePointPayload, CommandPayload::SensorCalibratePointPayload, command_cstr);
-        },
+                // rprintln!("parsing SensorCalibratePoint");
+                parse_command_to_payload!(SensorCalibratePointPayload, CommandPayload::SensorCalibratePoint, command_cstr);
+            },
         CommandType::SensorCalibrateList => {
-            parse_command_to_payload!(SensorCalibrateListPayload, CommandPayload::SensorCalibrateListPayload, command_cstr);
-        }
+                parse_command_to_payload!(SensorCalibrateListPayload, CommandPayload::SensorCalibrateList, command_cstr);
+            }
         CommandType::SensorCalibrateRemove => {
-            parse_command_to_payload!(SensorCalibrateRemovePayload, CommandPayload::SensorCalibrateRemovePayload, command_cstr);
-        }
+                parse_command_to_payload!(SensorCalibrateRemovePayload, CommandPayload::SensorCalibrateRemove, command_cstr);
+            }
         CommandType::SensorCalibrateFit => {
-            parse_command_to_payload!(SensorCalibrateFitPayload, CommandPayload::SensorCalibrateFitPayload, command_cstr);
-        },
+                parse_command_to_payload!(SensorCalibrateFitPayload, CommandPayload::SensorCalibrateFit, command_cstr);
+            },
         CommandType::SensorCalibrateClear => {
-            parse_command_to_payload!(SensorCalibrateClearPayload, CommandPayload::SensorCalibrateClearPayload, command_cstr);
-        },
+                parse_command_to_payload!(SensorCalibrateClearPayload, CommandPayload::SensorCalibrateClear, command_cstr);
+            },
         CommandType::SensorReset => todo!(),
         CommandType::ActuatorSet => todo!(),
         CommandType::ActuatorGet => todo!(),
@@ -210,8 +210,8 @@ fn get_command_payload(
         CommandType::ActuatorReset => todo!(),
         CommandType::TelemeterSet => todo!(),
         CommandType::TelemeterGet => {
-            Ok(CommandPayload::TelemeterGet)
-        }
+                Ok(CommandPayload::TelemeterGet)
+            }
         CommandType::TelemeterRemove => todo!(),
         CommandType::TelemeterList => todo!(),
         CommandType::TelemeterReset => todo!(),
@@ -220,11 +220,11 @@ fn get_command_payload(
         CommandType::BoardFirmwareConditions => todo!(),
         CommandType::BoardFirmwareLicense => todo!(),
         CommandType::BoardRtcSet => {
-            parse_command_to_payload!(BoardRtcSetPayload, CommandPayload::BoardRtcSetPayload, command_cstr);
-        },
+                parse_command_to_payload!(BoardRtcSetPayload, CommandPayload::BoardRtcSet, command_cstr);
+            },
         CommandType::BoardGet => {
-            parse_command_to_payload!(BoardGetPayload, CommandPayload::BoardGetPayload, command_cstr);
-        }
+                parse_command_to_payload!(BoardGetPayload, CommandPayload::BoardGet, command_cstr);
+            }
         CommandType::BoardRestart => todo!(),
         CommandType::BoardI2cList => todo!(),
         CommandType::BoardMemoryCheck => todo!(),
@@ -235,9 +235,14 @@ fn get_command_payload(
         CommandType::BoardSignal3v3BoostHigh => todo!(),
         CommandType::BoardSignal3v3BoostLow => todo!(),
         CommandType::BoardSerialSend => {
-            parse_command_to_payload!(BoardSerialSendPayload, CommandPayload::BoardSerialSendPayload, command_cstr);
-        }
-        // todo: refactor these to be an errors enumerationget_command_payload
+                parse_command_to_payload!(BoardSerialSendPayload, CommandPayload::BoardSerialSend, command_cstr);
+            }
+        CommandType::DeviceSetSerialNumber => {
+                parse_command_to_payload!(DeviceSetSerialNumberPayload, CommandPayload::DeviceSetSerialNumber, command_cstr);
+            }
+        CommandType::DeviceGet => {
+                parse_command_to_payload!(DeviceGetPayload, CommandPayload::DeviceGet, command_cstr);
+            }
         CommandType::Unknown => todo!(),
     }
 }
