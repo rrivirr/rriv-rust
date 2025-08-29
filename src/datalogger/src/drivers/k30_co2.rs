@@ -68,19 +68,6 @@ impl SensorDriver for K30CO2 {
     }
 
     fn take_measurement(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-
-        // rprintln!("i2c2 scanning for k30...");
-
-        //     let mut buf = [b'\0'; 1];
-        //     let addr = 0x68; //7F - all
-        //     if board.ic2_write(addr, &mut buf).is_ok() {
-        //         rprintln!("{:02x} good", addr);
-        //         board.delay_ms(500);
-        //     }
-        //     board.delay_ms(50_u16);
-            
-
-
        // send the i2c command
        const I2C_ADDRESS: u8 = 0x68;
        const READ_RAM_COMMAND: u8 = 0x2;
@@ -90,7 +77,6 @@ impl SensorDriver for K30CO2 {
        const READ_COMPLETE_STATUS: u8 = 0x21;
         //    const READ_INCOMPLETE_STATUS: u8 = 0x20;
        
-        // << 1; // 0x68 in 7 bits
 
         let mut command: [u8; 4] = [0; 4];
         command[0] = (READ_RAM_COMMAND << 4) + NUMBER_OF_BYTES;
@@ -203,15 +189,6 @@ impl SensorDriver for K30CO2 {
 }
 
 impl K30CO2 {
-    // pub fn new(general_config: SensorDriverGeneralConfiguration, special_config_bytes: &[u8; rriv_board::EEPROM_SENSOR_SPECIAL_SETTINGS_SIZE]) -> Self {
-
-    //     let special_config = K30CO2SpecialConfiguration::new_from_bytes(special_config_bytes);
-    //     K30CO2 {
-    //         general_config,
-    //         special_config
-    //     }
-    // }
-
     pub fn new(
         general_config: SensorDriverGeneralConfiguration,
         special_config: K30CO2SpecialConfiguration,
@@ -225,10 +202,6 @@ impl K30CO2 {
         }
     }
 }
-
-// #[bitfield(u8)]
-// struct K30CO2DriverBitfield {
-// }
 
 #[derive(Copy, Clone)]
 pub struct K30CO2SpecialConfiguration {
