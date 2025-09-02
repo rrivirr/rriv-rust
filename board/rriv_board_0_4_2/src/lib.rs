@@ -570,39 +570,7 @@ impl SensorDriverServices for Board {
         }
     }
 
-    fn write_gpio_pin(&mut self, pin: u8, value: bool) {
-        let gpio = match pin {
-            0 => {
-                // self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
-                if value {
-                    let _ = self.gpio.gpio1.set_high();
-                } else {
-                    let _ = self.gpio.gpio1.set_low();
-                }
-            }
-            // 1 => &mut self.gpio.gpio2,
-            // 2 => &mut self.gpio.gpio3,
-            // 3 => &mut self.gpio.gpio4,
-            // 4 => &mut self.gpio.gpio5,
-            // 5 => &mut self.gpio.gpio6,
-            // 6 => &mut self.gpio.gpio7,
-            // 7 => {
-            //     self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
-            //     if(value){
-            //         self.gpio.gpio1.set_high();
-            //     } else {
-            //         self.gpio.gpio1.set_low();
-            //     }
-            // }
-            _ => {
-                if value {
-                    self.gpio.gpio6.set_high();
-                } else {
-                    self.gpio.gpio6.set_low();
-                }
-            }
-        };
-    }
+  
 
     fn one_wire_reset(&mut self) {
         let _ = self.one_wire_bus.reset(&mut self.delay);
@@ -652,6 +620,58 @@ impl SensorDriverServices for Board {
                 rprintln!("1wire error{:?}", e);
                 return None;
             }
+        }
+    }
+
+      fn write_gpio_pin(&mut self, pin: u8, value: bool) {
+        let gpio = match pin {
+            0 => {
+
+                // define a macro here for this..
+                // self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
+                if value {
+                    let _ = self.gpio.gpio1.set_high();
+                } else {
+                    let _ = self.gpio.gpio1.set_low();
+                }
+            }
+            // 1 => &mut self.gpio.gpio2,
+            // 2 => &mut self.gpio.gpio3,
+            // 3 => &mut self.gpio.gpio4,
+            // 4 => &mut self.gpio.gpio5,
+            // 5 => &mut self.gpio.gpio6,
+            // 6 => &mut self.gpio.gpio7,
+            // 7 => {
+            //     self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
+            //     if(value){
+            //         self.gpio.gpio1.set_high();
+            //     } else {
+            //         self.gpio.gpio1.set_low();
+            //     }
+            // }
+            _ => {
+                if value {
+                    self.gpio.gpio6.set_high();
+                } else {
+                    self.gpio.gpio6.set_low();
+                }
+            }
+        };
+    }
+    
+    fn read_gpio_pin(&mut self, pin: u8) -> bool {
+        todo!()
+    }
+    
+    fn set_gpio_pin_mode(&mut self, pin: u8, mode: rriv_board::gpio::GPIO_MODE) {
+        match mode {
+            rriv_board::gpio::GPIO_MODE::FLOATING_INPUT => todo!(),
+            rriv_board::gpio::GPIO_MODE::PULL_UP_INPUT => todo!(),
+            rriv_board::gpio::GPIO_MODE::PULL_DOWN_INPUT => todo!(),
+            rriv_board::gpio::GPIO_MODE::PUSH_PULL_OUTPUT => {
+                self.gpio.gpio6.make_push_pull_output(&mut self.gpio_cr.gpioc_crh); // hmmmm
+            }
+            rriv_board::gpio::GPIO_MODE::OPEN_DRAIN_OUTPUT => todo!(),
         }
     }
 }
