@@ -1,5 +1,6 @@
 use core::time;
 
+use rriv_board::gpio::GpioMode;
 use serde_json::json;
 
 use crate::{any_as_u8_slice, sensor_name_from_type_id};
@@ -119,6 +120,12 @@ impl SensorDriver for TimedSwitch2 {
         // todo!()
     }
 
+    fn get_requested_gpios(&self) -> GpioRequest {
+        let mut gpio_request = GpioRequest::none();
+        gpio_request.use_pin(self.special_config.gpio_pin, GpioMode::PushPullOutput);
+        gpio_request
+    }
+
     getters!();
     
 
@@ -158,7 +165,7 @@ impl SensorDriver for TimedSwitch2 {
         }
         if toggle_state {
             
-            board.write_gpio_pin(8, self.state != 0);
+            board.write_gpio_pin(self.special_config.gpio_pin, self.state != 0);
             self.state = match self.state {
                 0 => 1,
                 1 => 0,

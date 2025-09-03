@@ -85,6 +85,16 @@ macro_rules! check_gpio {
     }
 }
 
+#[macro_export]
+macro_rules! use_pin {
+    ($pin:expr, $pin_value:ident, $mode_value:expr, $self:ident, $gpio:ident, $mode:ident) => {
+        if $pin_value == $pin {
+            $self.$gpio = true;
+            $self.$mode = $mode_value;
+        }
+    };
+}
+
 impl GpioRequest {
     pub fn none() -> GpioRequest {
         GpioRequest { 
@@ -117,6 +127,17 @@ impl GpioRequest {
         check_gpio!(self, gpio7, request);
         check_gpio!(self, gpio8, request);
         Ok(())
+    }
+
+    pub fn use_pin(&mut self, pin: u8, mode: GpioMode){
+        use_pin!(1, pin, GpioMode::PushPullOutput, self, gpio1, mode1);
+        use_pin!(2, pin, GpioMode::PushPullOutput, self, gpio2, mode2);
+        use_pin!(3, pin, GpioMode::PushPullOutput, self, gpio3, mode3);
+        use_pin!(4, pin, GpioMode::PushPullOutput, self, gpio4, mode4);
+        use_pin!(5, pin, GpioMode::PushPullOutput, self, gpio5, mode5);
+        use_pin!(6, pin, GpioMode::PushPullOutput, self, gpio6, mode6);
+        use_pin!(7, pin, GpioMode::PushPullOutput, self, gpio7, mode7);
+        use_pin!(8, pin, GpioMode::PushPullOutput, self, gpio8, mode8);       
     }
 }
 
@@ -165,6 +186,7 @@ macro_rules! getters {
 }
 
 pub(crate) use getters;
+use rriv_board::gpio::GpioMode;
 pub fn single_raw_or_cal_parameter_identifiers(index: usize, prefix: Option<u8>) -> [u8; 16] {
     let mut buf = [0u8; 16];
     let identifiers = ["raw", "cal"];

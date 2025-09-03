@@ -468,6 +468,22 @@ macro_rules! control_services_impl {
 
 type OneWireGpio1 = OneWire<Pin<'B', 8, Dynamic>>;
 
+#[macro_export]
+macro_rules! write_gpio {
+    ($gpio:ident, $value:expr) => {
+        // if $self.$gpio && $request.$gpio {
+        //     return Err(concat!(stringify!($gpio), "already requested"))
+        // }
+        if $value {
+            let _ = $gpio.set_high();
+        } else {
+            let _ = $gpio.set_low();
+        }
+    }
+}
+
+
+
 impl SensorDriverServices for Board {
     fn query_internal_adc(&mut self, channel: u8) -> u16 {
         match self.internal_adc.read(channel) {
@@ -624,43 +640,58 @@ impl SensorDriverServices for Board {
     }
 
       fn write_gpio_pin(&mut self, pin: u8, value: bool) {
-        let gpio = match pin {
-            0 => {
-
-                // define a macro here for this..
-                // self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
-                if value {
-                    let _ = self.gpio.gpio1.set_high();
-                } else {
-                    let _ = self.gpio.gpio1.set_low();
-                }
+        match pin {
+            1 => {
+                let gpio = &mut self.gpio.gpio1;
+                write_gpio!(gpio, value);
+            },
+            2 => {
+                let gpio = &mut self.gpio.gpio2;
+                write_gpio!(gpio, value);
             }
-            // 1 => &mut self.gpio.gpio2,
-            // 2 => &mut self.gpio.gpio3,
-            // 3 => &mut self.gpio.gpio4,
-            // 4 => &mut self.gpio.gpio5,
-            // 5 => &mut self.gpio.gpio6,
-            // 6 => &mut self.gpio.gpio7,
-            // 7 => {
-            //     self.gpio.gpio1.make_push_pull_output(&mut self.gpio_cr.gpiob_crh);
-            //     if(value){
-            //         self.gpio.gpio1.set_high();
-            //     } else {
-            //         self.gpio.gpio1.set_low();
-            //     }
-            // }
+            3 => {
+                let gpio = &mut self.gpio.gpio3;
+                write_gpio!(gpio, value);
+            }
+            4 => {
+                let gpio = &mut self.gpio.gpio4;
+                write_gpio!(gpio, value);
+            }
+            5 => {
+                let gpio = &mut self.gpio.gpio5;
+                write_gpio!(gpio, value);
+            }
+            6 => {
+                let gpio = &mut self.gpio.gpio6;
+                write_gpio!(gpio, value);
+            }
+            7 => {
+                let gpio = &mut self.gpio.gpio7;
+                write_gpio!(gpio, value);
+            }
+            8 => {
+                let gpio = &mut self.gpio.gpio8;
+                write_gpio!(gpio, value);
+            }
             _ => {
-                if value {
-                    self.gpio.gpio6.set_high();
-                } else {
-                    self.gpio.gpio6.set_low();
-                }
+                let gpio = &mut self.gpio.gpio6;
+                write_gpio!(gpio, value);
             }
         };
     }
     
     fn read_gpio_pin(&mut self, pin: u8) -> bool {
-        todo!()
+        match pin {
+            1 => {
+                match self.gpio.gpio1.is_high() {
+                    Ok(is_high) => todo!(),
+                    Err(err) => todo!(),
+                }
+            }
+            _ => {
+                todo!()
+            }
+        }
     }
     
     fn set_gpio_pin_mode(&mut self, pin: u8, mode: rriv_board::gpio::GpioMode) {
