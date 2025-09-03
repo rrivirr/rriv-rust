@@ -122,7 +122,7 @@ impl SensorDriver for TimedSwitch2 {
 
     fn get_requested_gpios(&self) -> super::resources::gpio::GpioRequest {
         let mut gpio_request = super::resources::gpio::GpioRequest::none();
-        gpio_request.use_pin(self.special_config.gpio_pin); // TODO:  is mode really necessary here?  setup will choose the mode or modes (which could change)
+        gpio_request.use_pin(self.special_config.gpio_pin); 
         gpio_request
     }
 

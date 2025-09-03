@@ -1,14 +1,4 @@
 
-pub struct GpioRequest {
-    gpio1 : bool,
-    gpio2 : bool,
-    gpio3 : bool,
-    gpio4 : bool,
-    gpio5 : bool,
-    gpio6 : bool,
-    gpio7 : bool,
-    gpio8 : bool,
-}
 
 
 #[macro_export]
@@ -33,11 +23,25 @@ macro_rules! release_gpio {
 
 #[macro_export]
 macro_rules! use_pin {
-    ($pin:expr, $pin_value:ident, $self:ident, $gpio:ident, $mode:ident) => {
+    ($pin:expr, $pin_value:ident, $self:ident, $gpio:ident) => {
         if $pin_value == $pin {
             $self.$gpio = true;        }
     };
 }
+
+pub struct GpioRequest {
+    gpio1 : bool,
+    gpio2 : bool,
+    gpio3 : bool,
+    gpio4 : bool,
+    gpio5 : bool,
+    gpio6 : bool,
+    gpio7 : bool,
+    gpio8 : bool,
+    usart : bool,
+    usart_count : u8
+}
+
 
 impl GpioRequest {
     pub fn none() -> GpioRequest {
@@ -50,6 +54,8 @@ impl GpioRequest {
             gpio6: false, 
             gpio7: false, 
             gpio8: false, 
+            usart: false,
+            usart_count : 0
         }
     }
 
@@ -62,6 +68,7 @@ impl GpioRequest {
         if self.gpio6 != request.gpio6 { return true }
         if self.gpio7 != request.gpio7 { return true }
         if self.gpio8 != request.gpio8 { return true }
+        if self.usart != request.usart { return true }
         return false;
     }
 
@@ -74,18 +81,32 @@ impl GpioRequest {
         check_gpio!(self, gpio6, request);
         check_gpio!(self, gpio7, request);
         check_gpio!(self, gpio8, request);
+        // check_gpio!(self, usart, request); // allow multiple users are usart, we would need to have a users count
+        if request.usart == true {
+            self.usart_count = self.usart_count + 1;
+            self.usart = true;
+            self.gpio7 = true;
+            self.gpio8 = true;
+        }
         Ok(())
     }
 
+    // TODO: this idiom should be handing the driver some kind of handle it can use to access the pin
+    // TODO: since it is ONLY a way to register usage, it means another driver can be mis-implemented
     pub fn use_pin(&mut self, pin: u8){
-        use_pin!(1, pin, self, gpio1, mode1);
-        use_pin!(2, pin, self, gpio2, mode2);
-        use_pin!(3, pin, self, gpio3, mode3);
-        use_pin!(4, pin, self, gpio4, mode4);
-        use_pin!(5, pin, self, gpio5, mode5);
-        use_pin!(6, pin, self, gpio6, mode6);
-        use_pin!(7, pin, self, gpio7, mode7);
-        use_pin!(8, pin, self, gpio8, mode8);       
+        use_pin!(1, pin, self, gpio1);
+        use_pin!(2, pin, self, gpio2);
+        use_pin!(3, pin, self, gpio3);
+        use_pin!(4, pin, self, gpio4);
+        use_pin!(5, pin, self, gpio5);
+        use_pin!(6, pin, self, gpio6);
+        use_pin!(7, pin, self, gpio7);
+        use_pin!(8, pin, self, gpio8);       
+    }
+
+    pub fn use_usart(&mut self){
+        self.usart = true;
+        self.usart_count = self.usart_count + 1;
     }
 
     pub fn release(&mut self, request: GpioRequest) {
@@ -97,5 +118,14 @@ impl GpioRequest {
         release_gpio!(self, gpio6, request);
         release_gpio!(self, gpio7, request);
         release_gpio!(self, gpio8, request);
+        if request.usart {
+            self.usart_count = self.usart_count - 1;
+            if self.usart_count == 0 {
+                self.gpio7 = false;
+                self.gpio8 = false;
+            }
+        }
     }
 }
+
+
