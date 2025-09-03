@@ -15,7 +15,7 @@ pub struct TimedSwitchSpecialConfiguration {
 
 impl TimedSwitchSpecialConfiguration {
 
-    pub fn new_from_values(value: serde_json::Value) -> TimedSwitchSpecialConfiguration {
+    pub fn parse_from_values(value: serde_json::Value) -> Result<TimedSwitchSpecialConfiguration, &'static str> {
         // should we return a Result object here? because we are parsing?  parse_from_values?
         let mut on_time_s: usize = 10;
         match &value["on_time_s"] {
@@ -26,12 +26,12 @@ impl TimedSwitchSpecialConfiguration {
                         Ok(number) => {
                             on_time_s = number;
                         }
-                        Err(_) => todo!("need to handle invalid number"),
+                        Err(_) => return Err("invalid number"),
                     }
                 }
             }
             _ => {
-                todo!("need to handle missing sensor port")
+                return Err("missing sensor port")
             }
         }
 
@@ -55,11 +55,11 @@ impl TimedSwitchSpecialConfiguration {
 
 
       
-        return Self {
+        Ok( Self {
             on_time_s,
             off_time_s,
             empty: [b'\0'; 24],
-        };
+        } )
     }
 
 

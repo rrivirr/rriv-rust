@@ -62,10 +62,10 @@ pub struct Ds18b20SpecialConfiguration {
 }
 
 impl Ds18b20SpecialConfiguration {
-    pub fn new_from_values(value: serde_json::Value) -> Ds18b20SpecialConfiguration {
-        Self {
+    pub fn parse_from_values(value: serde_json::Value) -> Result<Ds18b20SpecialConfiguration, &'static str> {
+        Ok ( Self {
             _empty: [b'\0'; EMPTY_SIZE],
-        }
+        })
     }
 
     pub fn new_from_bytes(

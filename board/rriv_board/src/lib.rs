@@ -4,7 +4,7 @@ use alloc::boxed::Box;
 
 pub mod gpio;
 
-use crate::gpio::GPIO_MODE;
+use crate::gpio::GpioMode;
 
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
@@ -112,7 +112,7 @@ pub trait SensorDriverServices {
 
     fn write_gpio_pin(&mut self, pin: u8, value: bool);
     fn read_gpio_pin(&mut self, pin: u8) -> bool;
-    fn set_gpio_pin_mode(&mut self, pin: u8, mode: GPIO_MODE);
+    fn set_gpio_pin_mode(&mut self, pin: u8, mode: GpioMode);
 
     // fn borrow_one_wire_bus(&mut self) -> &mut dyn OneWireBusInterface;
 

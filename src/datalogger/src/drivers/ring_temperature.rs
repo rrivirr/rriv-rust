@@ -20,12 +20,12 @@ pub struct RingTemperatureDriverSpecialConfiguration {
 }
 
 impl RingTemperatureDriverSpecialConfiguration {
-    pub fn new_from_values(_value: serde_json::Value) -> RingTemperatureDriverSpecialConfiguration {
-        Self {
+    pub fn parse_from_values(_value: serde_json::Value) -> Result<RingTemperatureDriverSpecialConfiguration, &'static str> {
+        Ok ( Self {
             calibration_offset: [0; 8],
             address_offset: 0,
             _reserved: [b'\0'; 15],
-        } // Just using default address offset of 0 for now, need to optionally read from JSON
+        } ) // Just using default address offset of 0 for now, need to optionally read from JSON
     }
     pub fn new_from_bytes(
         bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE],

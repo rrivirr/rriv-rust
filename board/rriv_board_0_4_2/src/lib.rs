@@ -663,15 +663,16 @@ impl SensorDriverServices for Board {
         todo!()
     }
     
-    fn set_gpio_pin_mode(&mut self, pin: u8, mode: rriv_board::gpio::GPIO_MODE) {
+    fn set_gpio_pin_mode(&mut self, pin: u8, mode: rriv_board::gpio::GpioMode) {
         match mode {
-            rriv_board::gpio::GPIO_MODE::FLOATING_INPUT => todo!(),
-            rriv_board::gpio::GPIO_MODE::PULL_UP_INPUT => todo!(),
-            rriv_board::gpio::GPIO_MODE::PULL_DOWN_INPUT => todo!(),
-            rriv_board::gpio::GPIO_MODE::PUSH_PULL_OUTPUT => {
+            rriv_board::gpio::GpioMode::FloatingInput => todo!(),
+            rriv_board::gpio::GpioMode::PullUpInput => todo!(),
+            rriv_board::gpio::GpioMode::PullDownInput => todo!(),
+            rriv_board::gpio::GpioMode::PushPullOutput => {
                 self.gpio.gpio6.make_push_pull_output(&mut self.gpio_cr.gpioc_crh); // hmmmm
             }
-            rriv_board::gpio::GPIO_MODE::OPEN_DRAIN_OUTPUT => todo!(),
+            rriv_board::gpio::GpioMode::OpenDrainOutput => todo!(),
+            rriv_board::gpio::GpioMode::None => todo!()
         }
     }
 }

@@ -1,7 +1,8 @@
-pub enum GPIO_MODE {
-    FLOATING_INPUT,
-    PULL_UP_INPUT,
-    PULL_DOWN_INPUT,
-    PUSH_PULL_OUTPUT,
-    OPEN_DRAIN_OUTPUT
+pub enum GpioMode {
+    None,
+    FloatingInput,
+    PullUpInput,
+    PullDownInput,
+    PushPullOutput,
+    OpenDrainOutput
 }

@@ -9,9 +9,7 @@ use crate::datalogger::bytes;
 use crate::datalogger::payloads::{
     SensorCalibratePointPayload, SensorRemovePayload, SensorSetPayload,
 };
-use crate::drivers::types::{
-    SensorDriverGeneralConfiguration, SENSOR_SETTINGS_PARTITION_SIZE,
-};
+use crate::drivers::types::{SensorDriverGeneralConfiguration, SENSOR_SETTINGS_PARTITION_SIZE};
 use alloc::boxed::Box;
 
 use crate::protocol::responses;
@@ -143,32 +141,40 @@ pub fn set_sensor(
 
     if let Some(functions) = create_function {
         let general_settings = SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
-        rprintln!("calling func 0"); // TODO: crashed here
-        let (mut driver, special_settings_bytes) =
-            functions.0(general_settings, raw_payload_values); // could just convert values to special settings bytes directly, store, then load
-        driver.setup(board.get_sensor_driver_services());
-        drivers[slot] = Some(driver);
 
-        // get the generic settings as bytes
-        let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&general_settings) };
-        let mut bytes_sized = bytes::empty_sensor_settings();
-        let copy_size = if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-            SENSOR_SETTINGS_PARTITION_SIZE
-        } else {
-            generic_settings_bytes.len()
-        };
-        bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
+        match functions.0(general_settings, raw_payload_values) {
+            Err(message) => {
+                responses::send_command_response_error(board, message, "");
+                return;
+            }
 
-        // get the special settings as bytes
-        let copy_size = if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-            SENSOR_SETTINGS_PARTITION_SIZE
-        } else {
-            special_settings_bytes.len()
-        };
-        bytes_sized[SENSOR_SETTINGS_PARTITION_SIZE..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
-            .copy_from_slice(&special_settings_bytes[0..copy_size]);
+            Ok((mut driver, special_settings_bytes)) => {
+                driver.setup(board.get_sensor_driver_services());
+                drivers[slot] = Some(driver);
 
-        board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
+                // get the generic settings as bytes
+                let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&general_settings) };
+                let mut bytes_sized = bytes::empty_sensor_settings();
+                let copy_size = if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                    SENSOR_SETTINGS_PARTITION_SIZE
+                } else {
+                    generic_settings_bytes.len()
+                };
+                bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
+
+                // get the special settings as bytes
+                let copy_size = if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+                    SENSOR_SETTINGS_PARTITION_SIZE
+                } else {
+                    special_settings_bytes.len()
+                };
+                bytes_sized
+                    [SENSOR_SETTINGS_PARTITION_SIZE..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
+                    .copy_from_slice(&special_settings_bytes[0..copy_size]);
+
+                board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
+            }
+        }
     }
 
     if let Some(driver) = &mut drivers[slot] {
@@ -334,17 +340,17 @@ fn value_length(target: &[u8], value: &[u8]) -> usize {
 //     }
 // }
 
-
 // TODO: a potential ordering in datalogger.rs
 // 1. commands::sensor_add_calibration_point_arguments
 // 2. get a refernce to the driver and measure a point, and get the array values  datalogger::measure_one_driver
 // 3. commands::update the calibration points for the driver, or calibration::store_point
 // 4. send the error text or the success text back to the datalogger
 
-
 // use crate::Value::String;
 use alloc::string::String;
-pub fn sensor_add_calibration_point_arguments<'a>(payload: &'a SensorCalibratePointPayload) -> Result<(&'a String,f64), &'static str> {
+pub fn sensor_add_calibration_point_arguments<'a>(
+    payload: &'a SensorCalibratePointPayload,
+) -> Result<(&'a String, f64), &'static str> {
     rprintln!("Sensor calibrate point payload");
 
     let id = match payload.id {
@@ -361,7 +367,6 @@ pub fn sensor_add_calibration_point_arguments<'a>(payload: &'a SensorCalibratePo
     };
 
     Ok((id, point))
-
 }
 
 // pub fn sensor_add_calibration_point(
@@ -371,7 +376,7 @@ pub fn sensor_add_calibration_point_arguments<'a>(payload: &'a SensorCalibratePo
 // ) -> Result<(), &'static str> {
 //     // we want to do the book keeping here for point payloads
 //     // i guess we use a box again
-   
+
 //     if let Some(index) = self.get_driver_index_by_id(id) {
 //         if let Some(driver) = &mut self.sensor_drivers[index] {
 //             // read sensor values

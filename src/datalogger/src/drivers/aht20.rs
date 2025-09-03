@@ -30,11 +30,11 @@ impl AHT20SpecialConfiguration {
         unsafe { *settings }
     }
 
-    pub fn new_from_values(value: serde_json::Value) -> AHT20SpecialConfiguration {
-        return Self {
+    pub fn parse_from_values(value: serde_json::Value) -> Result<AHT20SpecialConfiguration, &'static str> {
+        Ok( Self {
             wait_time: 0,
             empty: [0; 28]
-        }
+        })
     }
 }
 

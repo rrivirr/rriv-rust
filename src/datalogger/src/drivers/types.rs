@@ -54,6 +54,50 @@ impl CalibrationPair {
     }
 }
 
+
+
+pub struct GpioRequest {
+    gpio1 : bool,
+    mode1 : rriv_board::gpio::GpioMode,
+    gpio2 : bool,
+    mode2 : rriv_board::gpio::GpioMode,
+    gpio3 : bool,
+    mode3 : rriv_board::gpio::GpioMode,
+    gpio4 : bool,
+    mode4 : rriv_board::gpio::GpioMode,
+    gpio5 : bool,
+    mode5 : rriv_board::gpio::GpioMode,
+    gpio6 : bool,
+    mode6 : rriv_board::gpio::GpioMode,
+    gpio7 : bool,
+    mode7 : rriv_board::gpio::GpioMode,
+    gpio8 : bool,
+    mode8 : rriv_board::gpio::GpioMode,
+}
+
+impl GpioRequest {
+    pub fn none() -> GpioRequest {
+        GpioRequest { 
+            gpio1: false, 
+            mode1: rriv_board::gpio::GpioMode::None, 
+            gpio2: false, 
+            mode2: rriv_board::gpio::GpioMode::None, 
+            gpio3: false, 
+            mode3: rriv_board::gpio::GpioMode::None, 
+            gpio4: false, 
+            mode4: rriv_board::gpio::GpioMode::None, 
+            gpio5: false, 
+            mode5: rriv_board::gpio::GpioMode::None, 
+            gpio6: false, 
+            mode6: rriv_board::gpio::GpioMode::None, 
+            gpio7: false, 
+            mode7: rriv_board::gpio::GpioMode::None, 
+            gpio8: false, 
+            mode8: rriv_board::gpio::GpioMode::None 
+        }
+    }
+}
+
 pub trait SensorDriver {
     fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]); // derivable
     fn get_configuration_json(&mut self) -> serde_json::Value;
@@ -71,6 +115,10 @@ pub trait SensorDriver {
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>;
     fn clear_calibration(&mut self);
     // fn get_required_calibration_point_count(&self) -> usize;  // TODO
+
+    fn get_requested_gpios(&self) -> GpioRequest {
+        GpioRequest::none()
+    }
 }
 
 
