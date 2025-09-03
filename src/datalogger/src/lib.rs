@@ -46,6 +46,7 @@ pub struct DataLogger {
     _debug_values: bool, // serial out of values as they are read
     _log_raw_data: bool, // both raw and summary data writting to storage
     use_telemetry: bool,
+    assigned_gpios: GpioRequest,
 
     mode: DataLoggerMode,
     serial_tx_mode: DataLoggerSerialTxMode,
@@ -77,6 +78,7 @@ impl DataLogger {
             _debug_values: true,
             _log_raw_data: true,
             use_telemetry: true,
+            assigned_gpios: GpioRequest::none(),
             mode: DataLoggerMode::Interactive,
             serial_tx_mode: DataLoggerSerialTxMode::Normal,
             calibration_point_values: [CALIBRATION_INIT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
@@ -594,8 +596,54 @@ impl DataLogger {
 
                 responses::send_json(board, self.datalogger_settings_payload());
             }
-            CommandPayload::SensorSet(payload, values) => {
-                datalogger::commands::set_sensor(board, &mut self.sensor_drivers, payload, values);
+            CommandPayload::SensorSet(payload, raw_values) => {
+                // convert to values 
+                let mut payload_values = match payload.convert() {
+                    Ok(values) => values,
+                    Err(message) => {
+                        responses::send_command_response_error(board, message, "");
+                        return;
+                    }
+                };
+
+                // make sure the id is unique
+                if payload_values.sensor_id == None {
+                    let sensor_id: [u8; 6] = [b'0'; 6]; // base default value
+                    payload_values.sensor_id = Some(make_unique_sensor_id(&mut self.sensor_drivers, sensor_id));
+                }
+
+                // build the driver
+                let driver = match datalogger::commands::build_driver(payload_values, raw_values){
+                    Ok(driver) => driver,
+                    Err(message) => {
+                        responses::send_command_response_error(board, message, "");
+                        return;
+                    }
+                };
+
+                // check for dedicated resources
+                match self.assigned_gpios.update_or_conflict(driver.get_requested_gpios()) {
+                    Ok(_) => {},
+                    Err(message) => {
+                        responses::send_command_response_error(board, message, "");
+                        return;
+                    }
+                };
+                
+   
+                let slot = find_driver_slot(&mut self.sensor_drivers, driver.get_id());      
+
+                let mut configuration_bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] = [0; EEPROM_SENSOR_SETTINGS_SIZE];
+                driver.get_configuration_bytes(&mut configuration_bytes);
+                board.store_sensor_settings(slot.try_into().unwrap(), &configuration_bytes);
+
+                if let Some(driver) = &mut self.sensor_drivers[slot] {
+                    responses::send_json(board, driver.get_configuration_json());
+                    return;
+                } else {
+                    responses::send_command_response_error(board, "sensor not configured", "");
+                }
+                
             }
             CommandPayload::SensorGet(payload) => {
                 if let Some(index) = self.get_driver_index_by_id_value(payload.id) {

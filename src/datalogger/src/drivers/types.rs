@@ -75,6 +75,16 @@ pub struct GpioRequest {
     mode8 : rriv_board::gpio::GpioMode,
 }
 
+
+#[macro_export]
+macro_rules! check_gpio {
+    ($self:ident, $gpio:ident, $request:ident) => {
+        if $self.$gpio && $request.$gpio {
+            return Err(concat!(stringify!($gpio), "already requested"))
+        }
+    }
+}
+
 impl GpioRequest {
     pub fn none() -> GpioRequest {
         GpioRequest { 
@@ -95,6 +105,18 @@ impl GpioRequest {
             gpio8: false, 
             mode8: rriv_board::gpio::GpioMode::None 
         }
+    }
+
+    pub fn update_or_conflict(&self, request: GpioRequest) -> Result<(), &'static str>{
+        check_gpio!(self, gpio1, request);
+        check_gpio!(self, gpio2, request);
+        check_gpio!(self, gpio3, request);
+        check_gpio!(self, gpio4, request);
+        check_gpio!(self, gpio5, request);
+        check_gpio!(self, gpio6, request);
+        check_gpio!(self, gpio7, request);
+        check_gpio!(self, gpio8, request);
+        Ok(())
     }
 }
 

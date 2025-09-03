@@ -1,11 +1,10 @@
-
+use alloc::fmt::Debug;
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
-use alloc::fmt::Debug;
 
-const LOGGER_NAME_LENGTH : usize = 8;
-const SITE_NAME_LENGTH : usize = 8;
-const DEPLOYMENT_IDENTIFIER_LENGTH : usize = 16;
+const LOGGER_NAME_LENGTH: usize = 8;
+const SITE_NAME_LENGTH: usize = 8;
+const DEPLOYMENT_IDENTIFIER_LENGTH: usize = 16;
 
 #[derive(Default)]
 pub struct DataloggerSettingsValues {
@@ -39,7 +38,6 @@ pub struct DataloggerSetPayload {
 
 impl DataloggerSetPayload {
     pub fn values(self) -> DataloggerSettingsValues {
-
         let mut datalogger_settings_values = DataloggerSettingsValues::default();
 
         if let Some(value) = self.logger_name {
@@ -50,8 +48,8 @@ impl DataloggerSetPayload {
                     let len = value_length(&target, value);
                     target[0..len].clone_from_slice(&value[0..len]);
                     datalogger_settings_values.logger_name = Some(target);
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
@@ -63,11 +61,11 @@ impl DataloggerSetPayload {
                     let len = value_length(&target, value);
                     target[0..len].clone_from_slice(&value[0..len]);
                     datalogger_settings_values.site_name = Some(target);
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
-        
+
         if let Some(value) = self.deployment_identifier {
             match value {
                 serde_json::Value::String(value) => {
@@ -76,19 +74,19 @@ impl DataloggerSetPayload {
                     let len = value_length(&target, value);
                     target[0..len].clone_from_slice(&value[0..len]);
                     datalogger_settings_values.deployment_identifier = Some(target);
-                },
-                _ => {},
+                }
+                _ => {}
             }
         }
 
         if let Some(interactive_logging_interval) = self.interactive_logging_interval {
-            datalogger_settings_values.interactive_logging_interval = Some(interactive_logging_interval);
+            datalogger_settings_values.interactive_logging_interval =
+                Some(interactive_logging_interval);
         }
 
         if let Some(sleep_interval) = self.sleep_interval {
             datalogger_settings_values.sleep_interval = Some(sleep_interval);
         }
-
 
         if let Some(bursts_per_cycle) = self.bursts_per_cycle {
             datalogger_settings_values.bursts_per_measurement_cycle = Some(bursts_per_cycle);
@@ -99,32 +97,76 @@ impl DataloggerSetPayload {
         }
 
         datalogger_settings_values
-
     }
 }
-
 
 #[derive(Serialize, Deserialize)]
 pub struct DataloggerGetPayload {
     pub object: Value,
     pub action: Value,
-    pub propery: Option<Value>
+    pub propery: Option<Value>,
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct DataloggerSetModeCommandPayload {
     pub object: Value,
     pub action: Value,
-    pub mode: Option<Value>
+    pub mode: Option<Value>,
 }
-
 
 #[derive(Serialize, Deserialize)]
 pub struct SensorSetPayload {
     pub object: Value,
-    pub action: Value, 
+    pub action: Value,
     pub id: Option<Value>, // option
-    pub r#type: Value, // option
+    pub r#type: Value,     // option
+}
+
+pub struct SensorSetPayloadValues {
+    pub sensor_type_id: u16,
+    pub sensor_id: Option<[u8; 6]>,
+}
+
+impl SensorSetPayload {
+    pub fn convert(&self) -> Result<SensorSetPayloadValues, &'static str> {
+        let sensor_type_id = match &self.r#type {
+            serde_json::Value::String(sensor_type) => {
+                match crate::registry::sensor_type_id_from_name(&sensor_type) {
+                    Ok(sensor_type_id) => sensor_type_id,
+                    Err(_) => {
+                        // responses::send_command_response_message(board, "sensor type not found");
+                        return Err("sensor type not found");
+                    }
+                }
+            }
+            _ => {
+                // responses::send_command_response_message(board, "sensor type not specified");
+                return Err("sensor type not specified");
+            }
+        };
+
+        let mut sensor_id = None;
+        if let Some(payload_id) = &self.id {
+            match payload_id {
+                serde_json::Value::String(id) => {
+                    let mut prepared_id: [u8; 6] = [0; 6];
+                    prepared_id[0..id.len()].copy_from_slice(id.as_bytes());
+                    sensor_id = Some(prepared_id);
+                }
+                _ => {
+                    // make a unique id
+                            // let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
+                    // make_unique_sensor_id(drivers, sensor_id)
+                }
+            };
+        }
+        
+        let values = SensorSetPayloadValues {
+            sensor_id: sensor_id,
+            sensor_type_id: sensor_type_id
+        };
+        Ok(values)
+    }
 }
 
 #[derive(Serialize, Deserialize)]
@@ -151,52 +193,46 @@ pub struct SensorListPayload {
 pub struct BoardRtcSetPayload {
     pub object: Value,
     pub action: Value,
-    pub epoch: Value
+    pub epoch: Value,
 }
-
 
 #[derive(Serialize, Deserialize)]
 pub struct BoardGetPayload {
     pub object: Value,
     pub action: Value,
-    pub parameter: Option<Value>
+    pub parameter: Option<Value>,
 }
-
-
 
 #[derive(Serialize, Deserialize)]
 pub struct BoardSerialSendPayload {
     pub object: Value,
     pub action: Value,
-    pub message: Value
+    pub message: Value,
 }
 
 pub struct BoardSerialSendCommandPayload {
-    pub message: [u8;20],
-    pub message_len: u8, 
+    pub message: [u8; 20],
+    pub message_len: u8,
 }
 
 impl BoardSerialSendPayload {
-    pub fn convert(&self) -> Result<BoardSerialSendCommandPayload, &'static str> { // TODO: this static lifetime is not good?  Need to pass in some storage or use a box?
+    pub fn convert(&self) -> Result<BoardSerialSendCommandPayload, &'static str> {
+        // TODO: this static lifetime is not good?  Need to pass in some storage or use a box?
         let message = match self.message {
-            serde_json::Value::String(ref message) => {
-                message
-            },
+            serde_json::Value::String(ref message) => message,
             _ => {
                 // board.usb_serial_send("bad sensor id\n");
                 return Err("bad message");
             }
         };
 
-        let mut message_bytes = [0u8;20];
+        let mut message_bytes = [0u8; 20];
         message_bytes[0..message.len()].clone_from_slice(&message.as_bytes()[0..message.len()]);
-        
-        Ok(
-        BoardSerialSendCommandPayload {
+
+        Ok(BoardSerialSendCommandPayload {
             message: message_bytes,
             message_len: message.len() as u8,
-        }
-        )
+        })
     }
 }
 
@@ -204,19 +240,17 @@ impl BoardSerialSendPayload {
 pub struct DeviceSetSerialNumberPayload {
     pub object: Value,
     pub action: Value,
-    pub serial_number: Option<Value>
+    pub serial_number: Option<Value>,
 }
 
 pub struct DeviceSetSerialNumberPayloadValues {
-    pub serial_number: [u8; 5]
+    pub serial_number: [u8; 5],
 }
 
 impl DeviceSetSerialNumberPayload {
-    pub fn convert(&self) -> Result<DeviceSetSerialNumberPayloadValues, &'static str> { 
+    pub fn convert(&self) -> Result<DeviceSetSerialNumberPayloadValues, &'static str> {
         let serial_number = match self.serial_number {
-            Some(serde_json::Value::String(ref serial_number)) => {
-                serial_number
-            },
+            Some(serde_json::Value::String(ref serial_number)) => serial_number,
             _ => {
                 // board.usb_serial_send("bad sensor id\n");
                 return Err("bad serial number");
@@ -226,16 +260,14 @@ impl DeviceSetSerialNumberPayload {
         // let mut bytes:
         let bytes = serial_number.as_str().as_bytes();
         if bytes.len() != 5 {
-            return Err("wrong length")
+            return Err("wrong length");
         }
-        let mut serial_number_bytes: [u8;5] = [0;5];
+        let mut serial_number_bytes: [u8; 5] = [0; 5];
         serial_number_bytes.clone_from_slice(bytes);
 
-        return Ok(
-            DeviceSetSerialNumberPayloadValues {
-                serial_number: serial_number_bytes
-            }
-        )
+        return Ok(DeviceSetSerialNumberPayloadValues {
+            serial_number: serial_number_bytes,
+        });
     }
 }
 
@@ -245,7 +277,6 @@ pub struct DeviceGetPayload {
     pub action: Value,
 }
 
-
 #[derive(Serialize, Deserialize)]
 pub struct SensorCalibratePointPayload {
     pub object: Value,
@@ -253,9 +284,8 @@ pub struct SensorCalibratePointPayload {
     pub id: Value,
     pub subcommand: Value,
     pub point: Number,
-    pub tag: Option<Value>
+    pub tag: Option<Value>,
 }
-
 
 #[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateListPayload {
@@ -265,14 +295,13 @@ pub struct SensorCalibrateListPayload {
     pub subcommand: Value,
 }
 
-
 #[derive(Serialize, Deserialize)]
 pub struct SensorCalibrateRemovePayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
     pub subcommand: Value,
-    pub tag: Value
+    pub tag: Value,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -295,7 +324,7 @@ pub struct SensorCalibrateSubcommand<'a> {
     pub object: &'a str,
     pub action: &'a str,
     pub id: &'a str,
-    pub subcommand: &'a str
+    pub subcommand: &'a str,
 }
 
 // TODO: these impls should be derived or ??
@@ -303,9 +332,7 @@ pub struct SensorCalibrateSubcommand<'a> {
 impl SensorCalibrateFitPayload {
     pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> {
         let id = match self.id {
-            serde_json::Value::String(ref payload_id) => {
-                payload_id
-            },
+            serde_json::Value::String(ref payload_id) => payload_id,
             _ => {
                 // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
@@ -316,17 +343,15 @@ impl SensorCalibrateFitPayload {
             object: "sensor", // TODO: what's the most ideal way to handle these?  no real reason to convert them again
             action: "calibrate",
             id,
-            subcommand: "fit"
-        })
+            subcommand: "fit",
+        });
     }
 }
 
 impl SensorCalibrateClearPayload {
     pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> {
         let id = match self.id {
-            serde_json::Value::String(ref payload_id) => {
-                payload_id
-            },
+            serde_json::Value::String(ref payload_id) => payload_id,
             _ => {
                 // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
@@ -337,19 +362,15 @@ impl SensorCalibrateClearPayload {
             object: "sensor", // TODO: what's the most ideal way to handle these?  no real reason to convert them again
             action: "calibrate",
             id,
-            subcommand: "clear"
-        })
+            subcommand: "clear",
+        });
     }
 }
-
-
 
 impl SensorCalibrateListPayload {
     pub fn convert(&self) -> Result<SensorCalibrateSubcommand, &'static str> {
         let id = match self.id {
-            serde_json::Value::String(ref payload_id) => {
-                payload_id
-            },
+            serde_json::Value::String(ref payload_id) => payload_id,
             _ => {
                 // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
@@ -360,11 +381,10 @@ impl SensorCalibrateListPayload {
             object: "sensor", // TODO: what's the most ideal way to handle these?  no real reason to convert them again
             action: "calibrate",
             id,
-            subcommand: "list"
-        })
+            subcommand: "list",
+        });
     }
 }
-
 
 pub struct SensorCalibrateRemove<'a> {
     pub object: &'a str,
@@ -377,9 +397,7 @@ pub struct SensorCalibrateRemove<'a> {
 impl SensorCalibrateRemovePayload {
     pub fn convert(&self) -> Result<SensorCalibrateRemove, &'static str> {
         let id = match self.id {
-            serde_json::Value::String(ref payload_id) => {
-                payload_id
-            },
+            serde_json::Value::String(ref payload_id) => payload_id,
             _ => {
                 // board.usb_serial_send("bad sensor id\n");
                 return Err("bad sensor id");
@@ -387,9 +405,7 @@ impl SensorCalibrateRemovePayload {
         };
 
         let tag = match self.tag {
-            serde_json::Value::String(ref tag) => {
-                tag
-            },
+            serde_json::Value::String(ref tag) => tag,
             _ => {
                 // board.usb_serial_send("bad sensor id\n");
                 return Err("bad calibration point tag");
@@ -401,9 +417,8 @@ impl SensorCalibrateRemovePayload {
             action: "calibrate",
             id,
             subcommand: "remove",
-            tag
-
-        })
+            tag,
+        });
     }
 }
 
@@ -429,12 +444,11 @@ pub enum CommandPayload {
     DeviceGet(DeviceGetPayload),
 }
 
-
 // errors to use in refactor
 pub enum CommandError {
     ParseError(serde_json::Error), // can we store a string with the error string in the the enum class?
     InvalidCommand,
-    InvalidPayload(serde_json::Error)
+    InvalidPayload(serde_json::Error),
 }
 
 impl Debug for CommandError {
@@ -460,9 +474,12 @@ impl Debug for CommandError {
 
 // }
 
-
-fn value_length( target: &[u8], value: &[u8]) -> usize {
-    if value.len() > target.len() { target.len() } else { value.len() }
+fn value_length(target: &[u8], value: &[u8]) -> usize {
+    if value.len() > target.len() {
+        target.len()
+    } else {
+        value.len()
+    }
 }
 
 // fn match_and_set(source: Option<Value>, target: &mut [u8]) -> Option<[u8]> {

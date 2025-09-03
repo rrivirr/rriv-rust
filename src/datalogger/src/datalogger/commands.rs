@@ -7,7 +7,7 @@ extern crate alloc;
 use crate::alloc::string::ToString;
 use crate::datalogger::bytes;
 use crate::datalogger::payloads::{
-    SensorCalibratePointPayload, SensorRemovePayload, SensorSetPayload,
+    SensorCalibratePointPayload, SensorRemovePayload, SensorSetPayload, SensorSetPayloadValues,
 };
 use crate::drivers::types::{SensorDriverGeneralConfiguration, SENSOR_SETTINGS_PARTITION_SIZE};
 use alloc::boxed::Box;
@@ -75,49 +75,49 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload) {
     }
 }
 
-// TODO: for instance, this method could return a Result that has either a message/error or the payload to send bad
-// TODO: better, this method does the editing on the drivers array and either succeeds or returns an error
-// TODO: then the caller devides what to send to the device (including any re-query)
-pub fn set_sensor(
-    board: &mut impl RRIVBoard,
-    drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-    payload: SensorSetPayload,
-    raw_payload_values: Value,
-) {
-    let registry = crate::registry::get_registry();
-    let sensor_type_id = match payload.r#type {
-        serde_json::Value::String(sensor_type) => {
-            match crate::registry::sensor_type_id_from_name(&sensor_type) {
-                Ok(sensor_type_id) => sensor_type_id,
-                Err(_) => {
-                    responses::send_command_response_message(board, "sensor type not found");
-                    return;
-                }
-            }
-        }
-        _ => {
-            responses::send_command_response_message(board, "sensor type not specified");
-            return;
-        }
-    };
+// convert values
+// build driver
+// check gpios / check if we can install it
+// get the unique id
+// set driver
+// save in eeprom
 
-    // get the sensor id or make a unique new one
-    let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
-    if let Some(payload_id) = payload.id {
-        sensor_id = match payload_id {
-            serde_json::Value::String(id) => {
-                let mut prepared_id: [u8; 6] = [0; 6];
-                prepared_id[0..id.len()].copy_from_slice(id.as_bytes());
-                prepared_id
-            }
-            _ => {
-                // make a unique id
-                make_unique_sensor_id(drivers, sensor_id)
-            }
+pub fn build_driver( 
+    payload_values: SensorSetPayloadValues,
+    raw_payload_values: Value,
+) -> Result<Box<dyn SensorDriver>, &'static str> {
+   
+
+    rprintln!("looking up funcs");
+    let registry = crate::registry::get_registry();
+    let create_function = registry[usize::from(payload_values.sensor_type_id)];
+
+    if let Some(functions) = create_function {
+        let sensor_id = match payload_values.sensor_id {
+            Some(id) => id,
+            None => [0;6],
         };
+        let general_settings = SensorDriverGeneralConfiguration::new(sensor_id, payload_values.sensor_type_id);
+
+        match functions.0(general_settings, raw_payload_values) {
+            Err(message) => {
+                // responses::send_command_response_error(board, message, "");
+                return Err(message);
+            }
+
+            Ok(driver) => return Ok(driver)
+        }
     }
 
-    // find the slot
+    Err("build fn missing") // panic?
+
+}
+
+pub fn find_driver_slot(
+        drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+        sensor_id: [u8; 6]
+) -> usize {
+      // find the slot
     let mut slot = usize::MAX;
     let mut empty_slot = usize::MAX;
     for i in 0..drivers.len() {
@@ -134,56 +134,120 @@ pub fn set_sensor(
 
     if slot == usize::MAX {
         slot = empty_slot
-    };
-
-    rprintln!("looking up funcs");
-    let create_function = registry[usize::from(sensor_type_id)];
-
-    if let Some(functions) = create_function {
-        let general_settings = SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
-
-        match functions.0(general_settings, raw_payload_values) {
-            Err(message) => {
-                responses::send_command_response_error(board, message, "");
-                return;
-            }
-
-            Ok((mut driver, special_settings_bytes)) => {
-                driver.setup(board.get_sensor_driver_services());
-                drivers[slot] = Some(driver);
-
-                // get the generic settings as bytes
-                let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&general_settings) };
-                let mut bytes_sized = bytes::empty_sensor_settings();
-                let copy_size = if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-                    SENSOR_SETTINGS_PARTITION_SIZE
-                } else {
-                    generic_settings_bytes.len()
-                };
-                bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
-
-                // get the special settings as bytes
-                let copy_size = if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
-                    SENSOR_SETTINGS_PARTITION_SIZE
-                } else {
-                    special_settings_bytes.len()
-                };
-                bytes_sized
-                    [SENSOR_SETTINGS_PARTITION_SIZE..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
-                    .copy_from_slice(&special_settings_bytes[0..copy_size]);
-
-                board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
-            }
-        }
     }
 
-    if let Some(driver) = &mut drivers[slot] {
-        responses::send_json(board, driver.get_configuration_json());
-        return;
-    }
+    return slot
 }
 
-fn make_unique_sensor_id(
+
+// NO LONGER USED
+// TODO: for instance, this method could return a Result that has either a message/error or the payload to send bad
+// TODO: better, this method does the editing on the drivers array and either succeeds or returns an error
+// TODO: then the caller devides what to send to the device (including any re-query)
+// pub fn set_sensor(
+//     board: &mut impl RRIVBoard,
+//     drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
+//     payload: SensorSetPayload,
+//     raw_payload_values: Value,
+// ) {
+   
+
+//     // get the sensor id or make a unique new one
+//     let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
+//     if let Some(payload_id) = payload.id {
+//         sensor_id = match payload_id {
+//             serde_json::Value::String(id) => {
+//                 let mut prepared_id: [u8; 6] = [0; 6];
+//                 prepared_id[0..id.len()].copy_from_slice(id.as_bytes());
+//                 prepared_id
+//             }
+//             _ => {
+//                 // make a unique id
+//                     let mut sensor_id: [u8; 6] = [b'0'; 6]; // base default value
+
+//                 make_unique_sensor_id(drivers, sensor_id)
+//             }
+//         };
+//     }
+
+//     // find the slot
+//     let mut slot = usize::MAX;
+//     let mut empty_slot = usize::MAX;
+//     for i in 0..drivers.len() {
+//         if let Some(driver) = &mut drivers[i] {
+//             if sensor_id == driver.get_id() {
+//                 slot = i;
+//             }
+//         } else {
+//             if empty_slot == usize::MAX {
+//                 empty_slot = i;
+//             }
+//         }
+//     }
+
+//     if slot == usize::MAX {
+//         slot = empty_slot
+//     };
+
+//     rprintln!("looking up funcs");
+//     let registry = crate::registry::get_registry();
+//     let create_function = registry[usize::from(sensor_type_id)];
+
+//     if let Some(functions) = create_function {
+//         let general_settings = SensorDriverGeneralConfiguration::new(sensor_id, sensor_type_id);
+
+//         match functions.0(general_settings, raw_payload_values) {
+//             Err(message) => {
+//                 responses::send_command_response_error(board, message, "");
+//                 return;
+//             }
+
+//             Ok((mut driver, special_settings_bytes)) => {
+//                 let requested_gpios = driver.get_requested_gpios();
+
+
+//                 driver.setup(board.get_sensor_driver_services());
+//                 driver.gen
+
+//                 // check the driver's gpio needs
+//                 self.assigned_gpios.check_conflict(requested_gpios);
+
+//                 drivers[slot] = Some(driver);
+
+//                 // get the generic settings as bytes
+//                 let generic_settings_bytes: &[u8] = unsafe { any_as_u8_slice(&general_settings) };
+//                 let mut bytes_sized = bytes::empty_sensor_settings();
+//                 let copy_size = if generic_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+//                     SENSOR_SETTINGS_PARTITION_SIZE
+//                 } else {
+//                     generic_settings_bytes.len()
+//                 };
+//                 bytes_sized[..copy_size].copy_from_slice(&generic_settings_bytes[0..copy_size]);
+
+//                 // get the special settings as bytes
+//                 let copy_size = if special_settings_bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE {
+//                     SENSOR_SETTINGS_PARTITION_SIZE
+//                 } else {
+//                     special_settings_bytes.len()
+//                 };
+//                 bytes_sized
+//                     [SENSOR_SETTINGS_PARTITION_SIZE..(SENSOR_SETTINGS_PARTITION_SIZE + copy_size)]
+//                     .copy_from_slice(&special_settings_bytes[0..copy_size]);
+
+//                 // just use this, don't need to use what was passed
+//                 driver.get_configuration_bytes(storage);
+//                 board.store_sensor_settings(slot.try_into().unwrap(), &bytes_sized);
+//             }
+//         }
+//     }
+
+//     if let Some(driver) = &mut drivers[slot] {
+//         responses::send_json(board, driver.get_configuration_json());
+//         return;
+//     }
+// }
+
+pub fn make_unique_sensor_id(
     drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
     default: [u8; 6],
 ) -> [u8; 6] {
