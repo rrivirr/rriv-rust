@@ -128,7 +128,7 @@ pub struct SensorSetPayloadValues {
 }
 
 impl SensorSetPayload {
-    pub fn convert(&self) -> Result<SensorSetPayloadValues, &'static str> {
+    pub fn  convert(&self) -> Result<SensorSetPayloadValues, &'static str> {
         let sensor_type_id = match &self.r#type {
             serde_json::Value::String(sensor_type) => {
                 match crate::registry::sensor_type_id_from_name(&sensor_type) {
@@ -181,6 +181,29 @@ pub struct SensorRemovePayload {
     pub object: Value,
     pub action: Value,
     pub id: Value,
+}
+
+pub struct SensorRemovePayloadValues {
+    pub id: [u8;6]
+}
+
+impl SensorRemovePayload {
+    pub fn convert(&self) -> Result<SensorRemovePayloadValues, &'static str> {
+        match &self.id {
+        serde_json::Value::String(id) => {
+            let mut prepared_id: [u8; 6] = [0; 6];
+            let len = id.as_bytes().len();
+            let len = if len <= 6 { len } else { 6 };
+            prepared_id[0..len].copy_from_slice(id.as_bytes());
+            return Ok(SensorRemovePayloadValues {
+                id: prepared_id
+            })
+        }
+        _ => {
+            return Err("Sensor id missing")
+        }
+    };
+    }
 }
 
 #[derive(Serialize, Deserialize)]

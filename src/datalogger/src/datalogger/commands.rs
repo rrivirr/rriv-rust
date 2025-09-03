@@ -83,7 +83,7 @@ pub fn get_board(board: &mut impl RRIVBoard, payload: BoardGetPayload) {
 // save in eeprom
 
 pub fn build_driver( 
-    payload_values: SensorSetPayloadValues,
+    payload_values: &SensorSetPayloadValues,
     raw_payload_values: Value,
 ) -> Result<Box<dyn SensorDriver>, &'static str> {
    
@@ -113,30 +113,16 @@ pub fn build_driver(
 
 }
 
-pub fn find_driver_slot(
-        drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-        sensor_id: [u8; 6]
-) -> usize {
-      // find the slot
-    let mut slot = usize::MAX;
-    let mut empty_slot = usize::MAX;
+pub fn find_empty_slot(
+        drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS]
+) -> Option<usize> {
     for i in 0..drivers.len() {
-        if let Some(driver) = &mut drivers[i] {
-            if sensor_id == driver.get_id() {
-                slot = i;
-            }
-        } else {
-            if empty_slot == usize::MAX {
-                empty_slot = i;
-            }
+        if drivers[i].is_none() {
+            return Some(i);
         }
     }
 
-    if slot == usize::MAX {
-        slot = empty_slot
-    }
-
-    return slot
+    return None;
 }
 
 
@@ -286,54 +272,6 @@ pub fn make_unique_sensor_id(
     sensor_id
 }
 
-// TODO: for instance, this method could return a Result that has either a message/error or the payload to send bad
-// TODO: better, this method does the editing on the drivers array and either succeeds or returns an error
-// TODO: then the caller devides what to send to the device (including any re-query)
-pub fn remove_sensor(
-    board: &mut impl RRIVBoard,
-    payload: SensorRemovePayload,
-    drivers: &mut [Option<Box<dyn SensorDriver>>; rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
-) {
-    let sensor_id = match payload.id {
-        serde_json::Value::String(id) => {
-            let mut prepared_id: [u8; 6] = [0; 6];
-            let mut len = id.as_bytes().len();
-            let len = if len <= 6 { len } else { 6 };
-            prepared_id[0..id.as_bytes().len()].copy_from_slice(id.as_bytes());
-            prepared_id
-        }
-        _ => {
-            responses::send_command_response_message(board, "Sensor not found");
-            return;
-        }
-    };
-
-    for i in 0..drivers.len() {
-        if let Some(driver) = &mut drivers[i] {
-            let mut found = i;
-
-            // bytewise comparison of sensor id to delete with sensor id of loaded sensor driver
-            for (_j, (u1, u2)) in driver.get_id().iter().zip(sensor_id.iter()).enumerate() {
-                if u1 != u2 {
-                    found = 256; // 256 mneans not found
-                    break;
-                }
-            }
-
-            // do the removal if we matched, and then return
-            if usize::from(found) < EEPROM_TOTAL_SENSOR_SLOTS {
-                // remove the sensor driver and write null to EEPROM
-                let bytes = bytes::empty_sensor_settings();
-                if let Some(found_u8) = found.try_into().ok() {
-                    board.store_sensor_settings(found_u8, &bytes);
-                    drivers[found] = None;
-                    responses::send_command_response_message(board, "sensor removed");
-                    return;
-                }
-            }
-        }
-    }
-}
 
 // TDOD: in this case it's not so clear what would be ideal
 // the list needs to be built, and we need to send it as we build it because it's too big to pass in memory

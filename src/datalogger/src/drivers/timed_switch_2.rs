@@ -117,12 +117,12 @@ impl TimedSwitch2 {
 
 impl SensorDriver for TimedSwitch2 {
     fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        // todo!()
+        board.set_gpio_pin_mode(self.special_config.gpio_pin, GpioMode::PushPullOutput);
     }
 
-    fn get_requested_gpios(&self) -> GpioRequest {
-        let mut gpio_request = GpioRequest::none();
-        gpio_request.use_pin(self.special_config.gpio_pin, GpioMode::PushPullOutput);
+    fn get_requested_gpios(&self) -> super::resources::gpio::GpioRequest {
+        let mut gpio_request = super::resources::gpio::GpioRequest::none();
+        gpio_request.use_pin(self.special_config.gpio_pin); // TODO:  is mode really necessary here?  setup will choose the mode or modes (which could change)
         gpio_request
     }
 
@@ -187,14 +187,25 @@ impl SensorDriver for TimedSwitch2 {
     
     fn get_configuration_json(&mut self) -> serde_json::Value {
         
-        let sensor_name_bytes = sensor_name_from_type_id(self.get_type_id().into());
-        let sensor_name_str = core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+        let mut sensor_id = self.get_id();
+        let sensor_id = match util::str_from_utf8(&mut sensor_id) {
+            Ok(sensor_id) => sensor_id,
+            Err(_) => "Invalid",
+        };
+
+
+        let mut sensor_name = sensor_name_from_type_id(self.get_type_id().into());
+        let sensor_name = match util::str_from_utf8(&mut sensor_name) {
+            Ok(sensor_name) => sensor_name,
+            Err(_) => "Invalid",
+        };
 
         json!({
-            "id" : self.get_id(),
-            "type" : sensor_name_str,
+            "id" : sensor_id,
+            "type" : sensor_name,
             "on_time_s": self.special_config.on_time_s,
-            "off_time_s": self.special_config.off_time_s
+            "off_time_s": self.special_config.off_time_s,
+            "gpio_pin": self.special_config.gpio_pin,
         })
     }
     

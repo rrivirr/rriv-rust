@@ -471,15 +471,35 @@ type OneWireGpio1 = OneWire<Pin<'B', 8, Dynamic>>;
 #[macro_export]
 macro_rules! write_gpio {
     ($gpio:ident, $value:expr) => {
-        // if $self.$gpio && $request.$gpio {
-        //     return Err(concat!(stringify!($gpio), "already requested"))
-        // }
         if $value {
             let _ = $gpio.set_high();
         } else {
             let _ = $gpio.set_low();
         }
     }
+}
+
+macro_rules! set_pin_mode {
+    ($pin: ident, $cr: ident, $mode: ident) => {
+        match $mode {
+                rriv_board::gpio::GpioMode::FloatingInput => {
+                    $pin.make_floating_input($cr);
+                },
+                rriv_board::gpio::GpioMode::PullUpInput => {
+                    $pin.make_pull_up_input($cr);
+                }
+                rriv_board::gpio::GpioMode::PullDownInput => {
+                    $pin.make_pull_down_input($cr);
+                },
+                rriv_board::gpio::GpioMode::PushPullOutput => {
+                    $pin.make_push_pull_output($cr); 
+                }
+                rriv_board::gpio::GpioMode::OpenDrainOutput => {
+                    $pin.make_open_drain_output($cr);
+                },
+                rriv_board::gpio::GpioMode::None => todo!()
+            }
+    };
 }
 
 
@@ -695,16 +715,57 @@ impl SensorDriverServices for Board {
     }
     
     fn set_gpio_pin_mode(&mut self, pin: u8, mode: rriv_board::gpio::GpioMode) {
-        match mode {
-            rriv_board::gpio::GpioMode::FloatingInput => todo!(),
-            rriv_board::gpio::GpioMode::PullUpInput => todo!(),
-            rriv_board::gpio::GpioMode::PullDownInput => todo!(),
-            rriv_board::gpio::GpioMode::PushPullOutput => {
-                self.gpio.gpio6.make_push_pull_output(&mut self.gpio_cr.gpioc_crh); // hmmmm
+
+        match pin {
+            1 => {
+                let cr = &mut self.gpio_cr.gpiob_crh;
+                let pin = &mut self.gpio.gpio1;
+                set_pin_mode!(pin, cr, mode);
             }
-            rriv_board::gpio::GpioMode::OpenDrainOutput => todo!(),
-            rriv_board::gpio::GpioMode::None => todo!()
+            2 => {
+                let cr = &mut self.gpio_cr.gpiob_crl;
+                let pin = &mut self.gpio.gpio2;
+                set_pin_mode!(pin, cr, mode);
+            }
+            3 => {
+                let cr = &mut self.gpio_cr.gpiob_crl;
+                let pin = &mut self.gpio.gpio3;
+                set_pin_mode!(pin, cr, mode);
+            }
+            4 => {
+                let cr = &mut self.gpio_cr.gpiob_crl;
+                let pin = &mut self.gpio.gpio4;
+                set_pin_mode!(pin, cr, mode);
+            }
+            5 => {
+                let cr = &mut self.gpio_cr.gpiod_crl;
+                let pin = &mut self.gpio.gpio5;
+                set_pin_mode!(pin, cr, mode);
+            }
+            6 => {
+                let cr = &mut self.gpio_cr.gpioc_crh;
+                let pin = &mut self.gpio.gpio6;
+                set_pin_mode!(pin, cr, mode);
+            }
+            7 => {
+                let cr = &mut self.gpio_cr.gpioc_crh;
+                let pin = &mut self.gpio.gpio7;
+                set_pin_mode!(pin, cr, mode);
+            }
+            8 => {
+                let cr = &mut self.gpio_cr.gpioc_crh;
+                let pin = &mut self.gpio.gpio8;
+                set_pin_mode!(pin, cr, mode);
+            }
+            _ => {
+                let cr = &mut self.gpio_cr.gpioc_crh;
+                let pin = &mut self.gpio.gpio6;
+                set_pin_mode!(pin, cr, mode);
+            }
         }
+        
+  
+        
     }
 }
 
@@ -1271,18 +1332,6 @@ impl BoardBuilder {
         let mut i2c2 =
             BoardBuilder::setup_i2c2(i2c2_pins, &mut gpio_cr, device_peripherals.I2C2, &clocks);
         rprintln!("set up i2c2 done");
-
-        rprintln!("i2c2 scanning for k30...");
-        // loop {
-        let mut buf = [b'\0'; 1];
-        let addr = 0x68; //7F - all
-        if i2c2.write(addr, &mut buf).is_ok() {
-            // Has to be a write in order to respond...
-            rprintln!("{:02x} good", addr);
-            delay.delay_ms(2000_u16);
-        }
-        //     delay.delay_ms(50_u16);
-        // }
 
         rprintln!("i2c1 scanning...");
 

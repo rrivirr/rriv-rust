@@ -1,5 +1,7 @@
 use alloc::boxed::Box;
 
+use super::resources::gpio::*;
+
 pub const SENSOR_SETTINGS_PARTITION_SIZE: usize = 32; // partitioning is part of the driver implemention, and not meaningful at the EEPROM level
 pub type SensorGeneralSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
 pub type SensorSpecialSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
@@ -56,91 +58,6 @@ impl CalibrationPair {
 
 
 
-pub struct GpioRequest {
-    gpio1 : bool,
-    mode1 : rriv_board::gpio::GpioMode,
-    gpio2 : bool,
-    mode2 : rriv_board::gpio::GpioMode,
-    gpio3 : bool,
-    mode3 : rriv_board::gpio::GpioMode,
-    gpio4 : bool,
-    mode4 : rriv_board::gpio::GpioMode,
-    gpio5 : bool,
-    mode5 : rriv_board::gpio::GpioMode,
-    gpio6 : bool,
-    mode6 : rriv_board::gpio::GpioMode,
-    gpio7 : bool,
-    mode7 : rriv_board::gpio::GpioMode,
-    gpio8 : bool,
-    mode8 : rriv_board::gpio::GpioMode,
-}
-
-
-#[macro_export]
-macro_rules! check_gpio {
-    ($self:ident, $gpio:ident, $request:ident) => {
-        if $self.$gpio && $request.$gpio {
-            return Err(concat!(stringify!($gpio), "already requested"))
-        }
-    }
-}
-
-#[macro_export]
-macro_rules! use_pin {
-    ($pin:expr, $pin_value:ident, $mode_value:expr, $self:ident, $gpio:ident, $mode:ident) => {
-        if $pin_value == $pin {
-            $self.$gpio = true;
-            $self.$mode = $mode_value;
-        }
-    };
-}
-
-impl GpioRequest {
-    pub fn none() -> GpioRequest {
-        GpioRequest { 
-            gpio1: false, 
-            mode1: rriv_board::gpio::GpioMode::None, 
-            gpio2: false, 
-            mode2: rriv_board::gpio::GpioMode::None, 
-            gpio3: false, 
-            mode3: rriv_board::gpio::GpioMode::None, 
-            gpio4: false, 
-            mode4: rriv_board::gpio::GpioMode::None, 
-            gpio5: false, 
-            mode5: rriv_board::gpio::GpioMode::None, 
-            gpio6: false, 
-            mode6: rriv_board::gpio::GpioMode::None, 
-            gpio7: false, 
-            mode7: rriv_board::gpio::GpioMode::None, 
-            gpio8: false, 
-            mode8: rriv_board::gpio::GpioMode::None 
-        }
-    }
-
-    pub fn update_or_conflict(&self, request: GpioRequest) -> Result<(), &'static str>{
-        check_gpio!(self, gpio1, request);
-        check_gpio!(self, gpio2, request);
-        check_gpio!(self, gpio3, request);
-        check_gpio!(self, gpio4, request);
-        check_gpio!(self, gpio5, request);
-        check_gpio!(self, gpio6, request);
-        check_gpio!(self, gpio7, request);
-        check_gpio!(self, gpio8, request);
-        Ok(())
-    }
-
-    pub fn use_pin(&mut self, pin: u8, mode: GpioMode){
-        use_pin!(1, pin, GpioMode::PushPullOutput, self, gpio1, mode1);
-        use_pin!(2, pin, GpioMode::PushPullOutput, self, gpio2, mode2);
-        use_pin!(3, pin, GpioMode::PushPullOutput, self, gpio3, mode3);
-        use_pin!(4, pin, GpioMode::PushPullOutput, self, gpio4, mode4);
-        use_pin!(5, pin, GpioMode::PushPullOutput, self, gpio5, mode5);
-        use_pin!(6, pin, GpioMode::PushPullOutput, self, gpio6, mode6);
-        use_pin!(7, pin, GpioMode::PushPullOutput, self, gpio7, mode7);
-        use_pin!(8, pin, GpioMode::PushPullOutput, self, gpio8, mode8);       
-    }
-}
-
 pub trait SensorDriver {
     fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]); // derivable
     fn get_configuration_json(&mut self) -> serde_json::Value;
@@ -165,10 +82,6 @@ pub trait SensorDriver {
 }
 
 
-pub trait ActuatorDriver {
-    fn setup(&mut self);
-}
-
 pub trait TelemeterDriver {
     fn setup(&mut self);
 }
@@ -186,7 +99,6 @@ macro_rules! getters {
 }
 
 pub(crate) use getters;
-use rriv_board::gpio::GpioMode;
 pub fn single_raw_or_cal_parameter_identifiers(index: usize, prefix: Option<u8>) -> [u8; 16] {
     let mut buf = [0u8; 16];
     let identifiers = ["raw", "cal"];
