@@ -1,7 +1,6 @@
 
 
 
-#[macro_export]
 macro_rules! check_gpio {
     ($self:ident, $gpio:ident, $request:ident) => {
         if $self.$gpio && $request.$gpio {
@@ -21,7 +20,6 @@ macro_rules! release_gpio {
 }
 
 
-#[macro_export]
 macro_rules! use_pin {
     ($pin:expr, $pin_value:ident, $self:ident, $gpio:ident) => {
         if $pin_value == $pin {
@@ -73,6 +71,12 @@ impl GpioRequest {
     }
 
     pub fn update_or_conflict(&mut self, request: GpioRequest) -> Result<(), &'static str>{
+        if request.gpio3 || request.gpio4 {
+            return Err("pin3 and pin4 are not supported");
+        }
+
+
+
         check_gpio!(self, gpio1, request);
         check_gpio!(self, gpio2, request);
         check_gpio!(self, gpio3, request);
@@ -81,8 +85,17 @@ impl GpioRequest {
         check_gpio!(self, gpio6, request);
         check_gpio!(self, gpio7, request);
         check_gpio!(self, gpio8, request);
+        if self.usart {
+            if request.gpio7 || request.gpio8 {
+                return Err("usart in use, conflicts with gpio7 and gpio8");
+            }
+        }
+
         // check_gpio!(self, usart, request); // allow multiple users are usart, we would need to have a users count
         if request.usart == true {
+            if self.gpio7 || self.gpio8 {
+                return Err("gpio7 and gpio8 must both be free to use usart");
+            }
             self.usart_count = self.usart_count + 1;
             self.usart = true;
             self.gpio7 = true;
@@ -94,9 +107,9 @@ impl GpioRequest {
     // TODO: this idiom should be handing the driver some kind of handle it can use to access the pin
     // TODO: since it is ONLY a way to register usage, it means another driver can be mis-implemented
     pub fn use_pin(&mut self, pin: u8){
-        use_pin!(1, pin, self, gpio1);
+        use_pin!(1, pin, self, gpio1); 
         use_pin!(2, pin, self, gpio2);
-        use_pin!(3, pin, self, gpio3);
+        use_pin!(3, pin, self, gpio3); // these pins are mapped wronly on the hardware
         use_pin!(4, pin, self, gpio4);
         use_pin!(5, pin, self, gpio5);
         use_pin!(6, pin, self, gpio6);
@@ -106,7 +119,6 @@ impl GpioRequest {
 
     pub fn use_usart(&mut self){
         self.usart = true;
-        self.usart_count = self.usart_count + 1;
     }
 
     pub fn release(&mut self, request: GpioRequest) {

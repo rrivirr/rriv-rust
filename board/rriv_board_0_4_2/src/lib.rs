@@ -669,14 +669,14 @@ impl SensorDriverServices for Board {
                 let gpio = &mut self.gpio.gpio2;
                 write_gpio!(gpio, value);
             }
-            3 => {
-                let gpio = &mut self.gpio.gpio3;
-                write_gpio!(gpio, value);
-            }
-            4 => {
-                let gpio = &mut self.gpio.gpio4;
-                write_gpio!(gpio, value);
-            }
+            // 3 => {
+            //     let gpio = &mut self.gpio.gpio3;
+            //     write_gpio!(gpio, value);
+            // }
+            // 4 => {
+            //     let gpio = &mut self.gpio.gpio4;
+            //     write_gpio!(gpio, value);
+            // }
             5 => {
                 let gpio = &mut self.gpio.gpio5;
                 write_gpio!(gpio, value);
@@ -727,16 +727,16 @@ impl SensorDriverServices for Board {
                 let pin = &mut self.gpio.gpio2;
                 set_pin_mode!(pin, cr, mode);
             }
-            3 => {
-                let cr = &mut self.gpio_cr.gpiob_crl;
-                let pin = &mut self.gpio.gpio3;
-                set_pin_mode!(pin, cr, mode);
-            }
-            4 => {
-                let cr = &mut self.gpio_cr.gpiob_crl;
-                let pin = &mut self.gpio.gpio4;
-                set_pin_mode!(pin, cr, mode);
-            }
+            // 3 => {
+            //     let cr = &mut self.gpio_cr.gpiob_crl;
+            //     let pin = &mut self.gpio.gpio3;
+            //     set_pin_mode!(pin, cr, mode);
+            // }
+            // 4 => {
+            //     let cr = &mut self.gpio_cr.gpiob_crl;
+            //     let pin = &mut self.gpio.gpio4;
+            //     set_pin_mode!(pin, cr, mode);
+            // }
             5 => {
                 let cr = &mut self.gpio_cr.gpiod_crl;
                 let pin = &mut self.gpio.gpio5;
@@ -757,11 +757,7 @@ impl SensorDriverServices for Board {
                 let pin = &mut self.gpio.gpio8;
                 set_pin_mode!(pin, cr, mode);
             }
-            _ => {
-                let cr = &mut self.gpio_cr.gpioc_crh;
-                let pin = &mut self.gpio.gpio6;
-                set_pin_mode!(pin, cr, mode);
-            }
+            _ => {}
         }
         
   
