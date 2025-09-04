@@ -1,5 +1,6 @@
 use core::time;
 
+use rriv_board::gpio::GpioMode;
 use serde_json::json;
 
 use crate::{any_as_u8_slice, sensor_name_from_type_id};
@@ -7,15 +8,16 @@ use crate::{any_as_u8_slice, sensor_name_from_type_id};
 use super::types::*;
 
 #[derive(Copy, Clone)]
-pub struct TimedSwitchSpecialConfiguration {
+pub struct TimedSwitch2SpecialConfiguration {
     on_time_s: usize,
     off_time_s: usize,
-    empty: [u8; 24],
+    gpio_pin: u8,
+    empty: [u8; 23],
 }
 
-impl TimedSwitchSpecialConfiguration {
+impl TimedSwitch2SpecialConfiguration {
 
-    pub fn new_from_values(value: serde_json::Value) -> TimedSwitchSpecialConfiguration {
+    pub fn parse_from_values(value: serde_json::Value) -> Result<TimedSwitch2SpecialConfiguration, &'static str> {
         // should we return a Result object here? because we are parsing?  parse_from_values?
         let mut on_time_s: usize = 10;
         match &value["on_time_s"] {
@@ -26,12 +28,12 @@ impl TimedSwitchSpecialConfiguration {
                         Ok(number) => {
                             on_time_s = number;
                         }
-                        Err(_) => todo!("need to handle invalid number"),
+                        Err(_) => return Err("invalid on time")
                     }
                 }
             }
             _ => {
-                todo!("need to handle missing sensor port")
+                return Err("on time is required");
             }
         }
 
@@ -44,46 +46,67 @@ impl TimedSwitchSpecialConfiguration {
                         Ok(number) => {
                             off_time_s = number;
                         }
-                        Err(_) => todo!("need to handle invalid number"),
+                        Err(_) => return Err("invalid off time")
                     }
                 }
             }
             _ => {
-                todo!("need to handle missing sensor port")
+                return Err("off time is required")
+            }
+        }
+
+        let mut gpio_pin : Option<u8> = None;
+        match &value["gpio_pin"] {
+            serde_json::Value::Number(number) => {
+                if let Some(number) = number.as_u64() {
+                    if number >= 1 && number <= 8 { //TODO: this is annoying to have to code into each driver
+                        gpio_pin = Some(number as u8);
+                    } else {
+                        return Err("invalid pin");
+                    }           
+                } else {
+                    return Err("invalid pin");
+                }
+            }
+            _ => {
+                return Err("gpio pin is required")
             }
         }
 
 
+
       
-        return Self {
+        let gpio_pin = gpio_pin.unwrap_or_default();
+        Ok ( Self {
             on_time_s,
             off_time_s,
-            empty: [b'\0'; 24],
-        };
+            gpio_pin,
+            empty: [b'\0'; 23],
+        } )
     }
 
 
     pub fn new_from_bytes(
         bytes: [u8; SENSOR_SETTINGS_PARTITION_SIZE],
-    ) -> TimedSwitchSpecialConfiguration {
-        let settings = bytes.as_ptr().cast::<TimedSwitchSpecialConfiguration>();
+    ) -> TimedSwitch2SpecialConfiguration {
+        let settings = bytes.as_ptr().cast::<TimedSwitch2SpecialConfiguration>();
         unsafe { *settings }
     }
 }
 
-pub struct TimedSwitch {
+pub struct TimedSwitch2 {
     general_config: SensorDriverGeneralConfiguration,
-    special_config: TimedSwitchSpecialConfiguration,
+    special_config: TimedSwitch2SpecialConfiguration,
     state: u8, // 0: off, 1: on, other: invalid for now
     last_state_updated_at: i64
 }
 
-impl TimedSwitch {
+impl TimedSwitch2 {
     pub fn new(
         general_config: SensorDriverGeneralConfiguration,
-        special_config: TimedSwitchSpecialConfiguration,
+        special_config: TimedSwitch2SpecialConfiguration,
     ) -> Self {
-        TimedSwitch {
+        TimedSwitch2 {
             general_config,
             special_config,
             state: 0,
@@ -92,9 +115,15 @@ impl TimedSwitch {
     }
 }
 
-impl SensorDriver for TimedSwitch {
+impl SensorDriver for TimedSwitch2 {
     fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        // todo!()
+        // board.set_gpio_pin_mode(self.special_config.gpio_pin, GpioMode::PushPullOutput);
+    }
+
+    fn get_requested_gpios(&self) -> super::resources::gpio::GpioRequest {
+        let mut gpio_request = super::resources::gpio::GpioRequest::none();
+        gpio_request.use_pin(self.special_config.gpio_pin); 
+        gpio_request
     }
 
     getters!();
@@ -136,12 +165,12 @@ impl SensorDriver for TimedSwitch {
         }
         if toggle_state {
             
-            board.write_gpio_pin(8, self.state != 0);
-            self.state = match self.state {
-                0 => 1,
-                1 => 0,
-                _ => 0,
-            };
+            // board.write_gpio_pin(self.special_config.gpio_pin, self.state != 0);
+            // self.state = match self.state {
+            //     0 => 1,
+            //     1 => 0,
+            //     _ => 0,
+            // };
             self.last_state_updated_at = timestamp;
         }
 
@@ -158,14 +187,25 @@ impl SensorDriver for TimedSwitch {
     
     fn get_configuration_json(&mut self) -> serde_json::Value {
         
-        let sensor_name_bytes = sensor_name_from_type_id(self.get_type_id().into());
-        let sensor_name_str = core::str::from_utf8(&sensor_name_bytes).unwrap_or_default();
+        let mut sensor_id = self.get_id();
+        let sensor_id = match util::str_from_utf8(&mut sensor_id) {
+            Ok(sensor_id) => sensor_id,
+            Err(_) => "Invalid",
+        };
+
+
+        let mut sensor_name = sensor_name_from_type_id(self.get_type_id().into());
+        let sensor_name = match util::str_from_utf8(&mut sensor_name) {
+            Ok(sensor_name) => sensor_name,
+            Err(_) => "Invalid",
+        };
 
         json!({
-            "id" : self.get_id(),
-            "type" : sensor_name_str,
+            "id" : sensor_id,
+            "type" : sensor_name,
             "on_time_s": self.special_config.on_time_s,
-            "off_time_s": self.special_config.off_time_s
+            "off_time_s": self.special_config.off_time_s,
+            "gpio_pin": self.special_config.gpio_pin,
         })
     }
     

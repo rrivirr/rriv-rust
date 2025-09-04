@@ -12,7 +12,7 @@ const SENSOR_NAMES: [&str; 9] = [
     "aht20",
     "mcp_9808",
     "ring_temperature",
-    "timed_switch",
+    "timed_switch_2",
     "ds18b20",
     "k30_co2",
 ];
@@ -42,28 +42,17 @@ macro_rules! driver_create_functions {
         (
             |general_settings: SensorDriverGeneralConfiguration,
              special_settings_values: serde_json::Value|
-             -> (Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE]) {
-                let special_settings =
-                    <$special_settings_type>::new_from_values(special_settings_values); // ok
+             -> Result<Box<dyn SensorDriver>, &'static str> {
+                
+                let special_settings_result = <$special_settings_type>::parse_from_values(special_settings_values);
+                let special_settings = match special_settings_result {
+                    Ok(special_settings) => special_settings,
+                    Err(message) => return Err(message)
+                };
+                
                 let driver = <$driver>::new(general_settings, special_settings); // seems ok
 
-                let bytes: &[u8] = unsafe { any_as_u8_slice(&special_settings) }; // must be this one, maybe size comes back wrong
-                if bytes.len() != SENSOR_SETTINGS_PARTITION_SIZE {
-                    // special_settings_type does not confrm to expected size.  this is a development fault
-                    rprintln!("{} is wrong size {}", "<$special_settings_type>", bytes.len());
-                    // causes crash later.  other way to gracefully handle?
-                    panic!();
-                }
-                let mut bytes_sized: [u8; SENSOR_SETTINGS_PARTITION_SIZE] =
-                    [0; SENSOR_SETTINGS_PARTITION_SIZE];
-                let copy_size = if bytes.len() >= SENSOR_SETTINGS_PARTITION_SIZE { // this was supposed to make it safe...
-                    SENSOR_SETTINGS_PARTITION_SIZE
-                } else {
-                    bytes.len()
-                };
-                bytes_sized[..SENSOR_SETTINGS_PARTITION_SIZE].copy_from_slice(&bytes[0..copy_size]);
-
-                (Box::new(driver), bytes_sized)
+                Ok(Box::new(driver))
             },
             |general_settings: SensorDriverGeneralConfiguration,
              special_settings_slice: &[u8]|
@@ -83,7 +72,7 @@ type DriverCreateFunctions = Option<(
     fn(
         SensorDriverGeneralConfiguration,
         serde_json::Value,
-    ) -> (Box<dyn SensorDriver>, [u8; SENSOR_SETTINGS_PARTITION_SIZE]),
+    ) -> Result<Box<dyn SensorDriver>, &'static str>,
     fn(SensorDriverGeneralConfiguration, &[u8]) -> Box<dyn SensorDriver>,
 )>;
 
@@ -109,8 +98,8 @@ pub fn get_registry() -> [DriverCreateFunctions; 256] {
         crate::drivers::ring_temperature::RingTemperatureDriverSpecialConfiguration
     ));
     driver_create_functions[6] = Some(driver_create_functions!(
-        crate::drivers::heater::TimedSwitch, 
-        crate::drivers::heater::TimedSwitchSpecialConfiguration
+        crate::drivers::timed_switch_2::TimedSwitch2, 
+        crate::drivers::timed_switch_2::TimedSwitch2SpecialConfiguration
     ));
     driver_create_functions[7] = Some(driver_create_functions!(
         crate::drivers::ds18b20::Ds18b20,

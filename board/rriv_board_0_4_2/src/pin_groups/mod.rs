@@ -43,7 +43,7 @@ pub fn build(
     Spi2Pins,
     UsbPins,
 ) {
-    let mut external_adc =
+    let external_adc =
         ExternalAdcPins::build(pins.enable_external_adc, pins.external_adc_reset, cr);
 
     let internal_adc = InternalAdcPins::build(

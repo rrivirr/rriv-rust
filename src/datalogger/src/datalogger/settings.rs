@@ -1,12 +1,33 @@
+use bitfield_struct::bitfield;
 use rriv_board::EEPROM_DATALOGGER_SETTINGS_SIZE;
 use util::{any_as_u8_slice, check_alphanumeric};
 
 use crate::datalogger::payloads::DataloggerSettingsValues;
 
 
-const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 14;
+const DATALOGGER_SETTINGS_UNUSED_BYTES: usize = 13;
+#[bitfield(u8)]
+pub struct DataloggerSettingsBitField {
+    #[bits(1)]
+    pub external_adc_enabled: bool,
 
-#[derive(Debug, Clone, Copy)]
+    #[bits(1)]
+    pub enable_telemetry: bool,
+
+    #[bits(1)]
+    pub debug_includes_values: bool,
+
+    #[bits(1)]
+    pub withhold_incomplete_readings: bool,
+
+    #[bits(1)]
+    pub log_raw_data: bool,
+
+    #[bits(3)]
+    unused: usize,
+}
+
+#[derive(Clone, Copy)]
 pub struct DataloggerSettings {
     pub deployment_identifier: [u8; 16],
     pub logger_name: [u8; 8],
@@ -18,11 +39,7 @@ pub struct DataloggerSettings {
     pub delay_between_bursts: u16,
     pub bursts_per_measurement_cycle: u8,
     pub mode: u8,
-    // external_adc_enabled: u8:1, // how we we handle bitfields? -> bitfield_struct crate works well
-    // debug_includes_values: u8:1,
-    // withold_incomplete_readings: u8:1,
-    // low_raw_data: u8:1,
-    // reserved: u8:4
+    pub toggles: DataloggerSettingsBitField,
     reserved: [u8; DATALOGGER_SETTINGS_UNUSED_BYTES],
 }
 
@@ -39,6 +56,7 @@ impl DataloggerSettings {
             start_up_delay: 0,
             delay_between_bursts: 0,
             mode: b'i',
+            toggles: DataloggerSettingsBitField::new(),
             reserved: [b'\0'; DATALOGGER_SETTINGS_UNUSED_BYTES],
         }
     }
@@ -125,6 +143,7 @@ impl DataloggerSettings {
         settings.start_up_delay = values.start_up_delay.unwrap_or(self.start_up_delay);
         settings.delay_between_bursts = values.delay_between_bursts.unwrap_or(self.delay_between_bursts);
         settings.mode = values.mode.unwrap_or(self.mode);
+        settings.toggles.set_enable_telemetry(values.enable_telemetry.unwrap_or(self.toggles.enable_telemetry()));
         settings
     }
 

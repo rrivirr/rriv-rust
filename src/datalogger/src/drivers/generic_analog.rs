@@ -175,7 +175,7 @@ pub struct GenericAnalogSpecialConfiguration {
 }
 
 impl GenericAnalogSpecialConfiguration {
-    pub fn new_from_values(value: serde_json::Value) -> GenericAnalogSpecialConfiguration {
+    pub fn parse_from_values(value: serde_json::Value) -> Result<GenericAnalogSpecialConfiguration, &'static str> {
         // should we return a Result object here? because we are parsing?  parse_from_values?
         let mut sensor_port: u8 = 0;
         match &value["sensor_port"] {
@@ -186,12 +186,12 @@ impl GenericAnalogSpecialConfiguration {
                         Ok(number) => {
                             sensor_port = number;
                         }
-                        Err(_) => todo!("need to handle invalid number"),
+                        Err(_) => return Err("invalid number"),
                     }
                 }
             }
             _ => {
-                todo!("need to handle missing sensor port")
+                return Err("missing sensor port")
             }
         }
 
@@ -205,21 +205,21 @@ impl GenericAnalogSpecialConfiguration {
                     bitfield.set_adc_select(1);
                 }
                 _ => {
-                    todo!("need to handle bad adc select string");
+                    return Err("bad adc select string");
                 }
             },
             _ => {
-                todo!("need to handle missing adc selection")
+                return Err("missing adc selection")
             }
         }
 
-        return Self {
+        Ok(Self {
             m: 0_f32,
             b: 0_f32,
             sensor_port: sensor_port,
             settings: bitfield,
             empty: [b'\0'; 22],
-        };
+        })
     }
 
     pub fn new_from_bytes(

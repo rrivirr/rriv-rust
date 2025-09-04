@@ -18,16 +18,13 @@ use crate::datalogger::bytes;
 use crate::datalogger::helper;
 use crate::datalogger::modes::DataLoggerMode;
 use crate::datalogger::modes::DataLoggerSerialTxMode;
-use crate::{
-    alloc::string::ToString, protocol::responses, services::*,
-    telemetry::telemeters::lorawan::RakWireless3172,
-};
+use crate::{protocol::responses, services::*, telemetry::telemeters::lorawan::RakWireless3172};
 use alloc::boxed::Box;
 use alloc::format;
 use rtt_target::rprintln;
 
 mod drivers;
-use drivers::{types::*, *};
+use drivers::{resources::gpio::*, types::*, *};
 
 mod protocol;
 mod registry;
@@ -43,9 +40,7 @@ pub struct DataLogger {
 
     last_interactive_log_time: i64,
 
-    _debug_values: bool, // serial out of values as they are read
-    _log_raw_data: bool, // both raw and summary data writting to storage
-    use_telemetry: bool,
+    assigned_gpios: GpioRequest,
 
     mode: DataLoggerMode,
     serial_tx_mode: DataLoggerSerialTxMode,
@@ -74,9 +69,7 @@ impl DataLogger {
             _telemeter_drivers: [TELEMETER_DRIVER_INIT_VALUE;
                 rriv_board::EEPROM_TOTAL_SENSOR_SLOTS],
             last_interactive_log_time: 0,
-            _debug_values: true,
-            _log_raw_data: true,
-            use_telemetry: true,
+            assigned_gpios: GpioRequest::none(),
             mode: DataLoggerMode::Interactive,
             serial_tx_mode: DataLoggerSerialTxMode::Normal,
             calibration_point_values: [CALIBRATION_INIT_VALUE; EEPROM_TOTAL_SENSOR_SLOTS],
@@ -104,7 +97,7 @@ impl DataLogger {
         rprintln!("stored {:?}", bytes);
     }
 
-    fn get_driver_index_by_id(&self, id: &str) -> Option<usize> {
+    fn get_driver_slot_by_id(&self, id: &str) -> Option<usize> {
         let drivers = &self.sensor_drivers;
         for i in 0..self.sensor_drivers.len() {
             // create json and output it
@@ -127,7 +120,7 @@ impl DataLogger {
             }
         };
 
-        return self.get_driver_index_by_id(id);
+        return self.get_driver_slot_by_id(id);
     }
 
     pub fn setup(&mut self, board: &mut impl RRIVBoard) {
@@ -135,7 +128,7 @@ impl DataLogger {
 
         // rprintln!("retrieving settings");
         self.settings = self.retrieve_settings(board);
-        rprintln!("retrieved settings {:?}", self.settings);
+        // rprintln!("retrieved settings {:?}", self.settings);
         self.mode = DataLoggerMode::from_u8(self.settings.mode);
 
         // setup each service
@@ -168,11 +161,38 @@ impl DataLogger {
                 let mut special_settings_partition = bytes::empty_sensor_settings_partition();
                 special_settings_partition.clone_from_slice(special_settings_slice); // explicitly define the size of the arra
                 let mut driver = functions.1(settings, &special_settings_partition);
+
+                // check for dedicated resources
+                match self
+                    .assigned_gpios
+                    .update_or_conflict(driver.get_requested_gpios())
+                {
+                    Ok(_) => {}
+                    Err(message) => {
+                        // if we have a conflict, what should happen?
+                        // definitely don't load the driver, but also this should never happen
+                        // should we send something on serial? this is during startup.
+                        //responses::send_command_response_error(board, message, "");
+                        return;
+                    }
+                };
+
                 driver.setup(board.get_sensor_driver_services());
                 self.sensor_drivers[i] = Some(driver);
             }
         }
         rprintln!("done loading sensors");
+
+        let requested_gpios = self.telemeter.get_requested_gpios();
+        if self.settings.toggles.enable_telemetry() {
+            match self.assigned_gpios.update_or_conflict(requested_gpios) {
+                Ok(_) => {}
+                Err(_) => {
+                    // need a way to tell the telemeter so it can respond at a better time, or some similar strategy
+                    responses::send_command_response_error(board, "usart pin conflict", "");
+                }
+            }
+        }
 
         self.write_column_headers_to_storage(board);
         rprintln!("done with setup");
@@ -205,7 +225,9 @@ impl DataLogger {
         //
         //  Process any telemetry setup or QOS
         //
-        self.telemeter.run_loop_iteration(board);
+        if self.settings.toggles.enable_telemetry() {
+            self.telemeter.run_loop_iteration(board);
+        }
 
         self.update_actuators(board);
 
@@ -233,7 +255,9 @@ impl DataLogger {
                                                                   // fileSystemWriteCache->flushCache();
                     self.write_raw_measurement_to_storage(board);
 
-                    self.process_telemetry(board); // telemeterize the measured values
+                    if self.settings.toggles.enable_telemetry() {
+                        self.process_telemetry(board); // telemeterize the measured values
+                    }
 
                     self.last_interactive_log_time = board.timestamp();
                 }
@@ -579,8 +603,10 @@ impl DataLogger {
         // rprintln!("executing command {:?}", command_payload);
         match command_payload {
             CommandPayload::DataloggerSet(payload) => {
-                self.update_datalogger_settings(board, payload);
-                responses::send_json(board, self.datalogger_settings_payload());
+                match self.update_datalogger_settings(board, payload) {
+                    Ok(_) => responses::send_json(board, self.datalogger_settings_payload()),
+                    Err(message) => responses::send_command_response_error(board, message, ""),
+                }
             }
             CommandPayload::DataloggerGet(_) => {
                 responses::send_json(board, self.datalogger_settings_payload());
@@ -594,8 +620,80 @@ impl DataLogger {
 
                 responses::send_json(board, self.datalogger_settings_payload());
             }
-            CommandPayload::SensorSet(payload, values) => {
-                datalogger::commands::set_sensor(board, &mut self.sensor_drivers, payload, values);
+            CommandPayload::SensorSet(payload, raw_values) => {
+                // convert to values
+                let mut payload_values = match payload.convert() {
+                    Ok(values) => values,
+                    Err(message) => {
+                        responses::send_command_response_error(board, message, "");
+                        return;
+                    }
+                };
+
+                // make sure the id is unique
+                if payload_values.sensor_id == None {
+                    let sensor_id: [u8; 6] = [b'0'; 6]; // base default value
+                    payload_values.sensor_id =
+                        Some(make_unique_sensor_id(&mut self.sensor_drivers, sensor_id));
+                }
+
+                // build the driver
+                let mut driver =
+                    match datalogger::commands::build_driver(&payload_values, raw_values) {
+                        Ok(driver) => driver,
+                        Err(message) => {
+                            responses::send_command_response_error(board, message, "");
+                            return;
+                        }
+                    };
+
+                let mut slot = None;
+                if let Some(sensor_id) = &mut payload_values.sensor_id {
+                    match util::str_from_utf8(sensor_id) {
+                        Ok(sensor_id) => slot = self.get_driver_slot_by_id(sensor_id),
+                        Err(_) => {}
+                    }
+                }
+
+                if slot.is_some() {
+                    if let Some(existing_driver) = &self.sensor_drivers[slot.unwrap()] {
+                        // release bound resources so they can be checked and rebound or changed in next step
+                        self.assigned_gpios
+                            .release(existing_driver.get_requested_gpios());
+                    }
+                }
+
+                // check for dedicated resources if this is a new sensor
+                match self
+                    .assigned_gpios
+                    .update_or_conflict(driver.get_requested_gpios())
+                {
+                    Ok(_) => {}
+                    Err(message) => {
+                        responses::send_command_response_error(board, message, "");
+                        return;
+                    }
+                };
+
+                driver.setup(board.get_sensor_driver_services());
+
+                if slot.is_none() {
+                    slot = find_empty_slot(&mut self.sensor_drivers);
+                }
+                let slot = slot.unwrap();
+
+                let mut configuration_bytes: [u8; EEPROM_SENSOR_SETTINGS_SIZE] =
+                    [0; EEPROM_SENSOR_SETTINGS_SIZE];
+                driver.get_configuration_bytes(&mut configuration_bytes);
+                board.store_sensor_settings(slot as u8, &configuration_bytes);
+                self.sensor_drivers[slot] = Some(driver);
+
+                if let Some(driver) = &mut self.sensor_drivers[slot] {
+                    responses::send_json(board, driver.get_configuration_json());
+                    return;
+                } else {
+                    responses::send_command_response_error(board, "sensor not configured", "");
+                }
             }
             CommandPayload::SensorGet(payload) => {
                 if let Some(index) = self.get_driver_index_by_id_value(payload.id) {
@@ -609,7 +707,34 @@ impl DataLogger {
                 // TODO: send 404
             }
             CommandPayload::SensorRemove(payload) => {
-                datalogger::commands::remove_sensor(board, payload, &mut self.sensor_drivers);
+                let mut values = match payload.convert() {
+                    Ok(values) => values,
+                    Err(message) => {
+                        responses::send_command_response_error(board, message, "");
+                        return;
+                    }
+                };
+
+                let id = util::str_from_utf8(&mut values.id).unwrap_or_default();
+                let slot = self.get_driver_slot_by_id(id);
+                if slot.is_none() {
+                    responses::send_command_response_error(board, "sensor not found", "");
+                    return;
+                }
+                let slot = slot.unwrap();
+
+                let driver = &self.sensor_drivers[slot];
+                if let Some(driver) = driver {
+                    self.assigned_gpios.release(driver.get_requested_gpios());
+                } else {
+                    responses::send_command_response_error(board, "sensor not found", "");
+                    return;
+                }
+
+                let bytes = bytes::empty_sensor_settings();
+                board.store_sensor_settings(slot as u8, &bytes);
+                self.sensor_drivers[slot] = None;
+                responses::send_command_response_message(board, "sensor removed");
             }
             CommandPayload::SensorList(_) => {
                 datalogger::commands::list_sensors(board, &mut self.sensor_drivers);
@@ -648,7 +773,7 @@ impl DataLogger {
                         }
                     };
 
-                if let Some(index) = self.get_driver_index_by_id(args.0) {
+                if let Some(index) = self.get_driver_slot_by_id(args.0) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         // read sensor values
                         driver.take_measurement(board.get_sensor_driver_services());
@@ -712,7 +837,7 @@ impl DataLogger {
                 };
 
                 // list the values
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                if let Some(index) = self.get_driver_slot_by_id(payload_values.id) {
                     rprintln!("driver index{}", index);
                     let pairs: &Option<Box<[CalibrationPair]>> =
                         &self.calibration_point_values[index];
@@ -759,7 +884,7 @@ impl DataLogger {
                     }
                 };
 
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                if let Some(index) = self.get_driver_slot_by_id(payload_values.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         let pairs: &Option<Box<[CalibrationPair]>> =
                             &self.calibration_point_values[index];
@@ -805,7 +930,7 @@ impl DataLogger {
                     }
                 };
 
-                if let Some(index) = self.get_driver_index_by_id(payload_values.id) {
+                if let Some(index) = self.get_driver_slot_by_id(payload_values.id) {
                     if let Some(driver) = &mut self.sensor_drivers[index] {
                         driver.clear_calibration();
                         responses::send_command_response_message(board, "Cleared payload");
@@ -901,9 +1026,7 @@ impl DataLogger {
                 match device_set_serial_number_payload.convert() {
                     Ok(values) => {
                         if board.set_serial_number(values.serial_number) {
-                            let serial_number = board.get_serial_number();
-                            let uid = board.get_uid();
-                            responses::device_get(board, serial_number, uid);
+                            self.device_get(board);
                         } else {
                             responses::send_command_response_error(
                                 board,
@@ -918,9 +1041,7 @@ impl DataLogger {
                 }
             }
             CommandPayload::DeviceGet(device_get_payload) => {
-                let serial_number = board.get_serial_number();
-                let uid = board.get_uid();
-                responses::device_get(board, serial_number, uid);
+                self.device_get(board);
             }
         }
     }
@@ -929,14 +1050,31 @@ impl DataLogger {
         &mut self,
         board: &mut impl RRIVBoard,
         set_command_payload: DataloggerSetPayload,
-    ) {
+    ) -> Result<(), &'static str> {
         let mode = set_command_payload.mode.clone(); // TODO: clean this up
         let values = set_command_payload.values();
-        self.settings = self.settings.with_values(values);
+        if let Some(enable_telemetry) = &values.enable_telemetry {
+            if !self.settings.toggles.enable_telemetry() && *enable_telemetry {
+                match self
+                    .assigned_gpios
+                    .update_or_conflict(self.telemeter.get_requested_gpios())
+                {
+                    Ok(_) => {}
+                    Err(message) => return Err(message),
+                }
+            } else if self.settings.toggles.enable_telemetry() && !*enable_telemetry {
+                self.assigned_gpios
+                    .release(self.telemeter.get_requested_gpios());
+            }
+        }
+
+        let new_settings = self.settings.with_values(values);
+        self.settings = new_settings;
         if let Some(mode) = mode {
             self.set_mode(board, mode);
         }
-        self.store_settings(board)
+        self.store_settings(board);
+        Ok(())
     }
 
     fn datalogger_settings_payload(&mut self) -> Value {
@@ -950,7 +1088,54 @@ impl DataLogger {
            "start_up_delay" : self.settings.start_up_delay,
            "delay_between_bursts" : self.settings.delay_between_bursts,
            "bursts_per_measurement_cycle" : self.settings.bursts_per_measurement_cycle,
-           "mode" : datalogger::modes::mode_text(&self.mode)
+           "mode" : datalogger::modes::mode_text(&self.mode),
+           "enable_telemetry" : self.settings.toggles.enable_telemetry()
         })
+    }
+
+    fn device_get(&self, board: &mut impl RRIVBoard) {
+        let serial_number = board.get_serial_number();
+        let uid = board.get_uid();
+        // let gpio_assignments = &self.assigned_gpios;
+        let mut assignments: [[u8; 6]; 9] = [[b'\0'; 6]; 9];
+        for i in 0..self.sensor_drivers.len() {
+            if let Some(driver) = &self.sensor_drivers[i] {
+                let gpios = driver.get_requested_gpios();
+                if gpios.gpio1() {
+                    assignments[0] = driver.get_id()
+                }
+                if gpios.gpio2() {
+                    assignments[1] = driver.get_id()
+                }
+                if gpios.gpio3() {
+                    assignments[2] = driver.get_id()
+                }
+                if gpios.gpio4() {
+                    assignments[3] = driver.get_id()
+                }
+                if gpios.gpio5() {
+                    assignments[4] = driver.get_id()
+                }
+                if gpios.gpio6() {
+                    assignments[5] = driver.get_id()
+                }
+                if gpios.gpio7() {
+                    assignments[6] = driver.get_id()
+                }
+                if gpios.gpio8() {
+                    assignments[7] = driver.get_id()
+                }
+                if gpios.usart() {
+                    assignments[8] = driver.get_id()
+                }
+            }
+        }
+        if self.settings.toggles.enable_telemetry() {
+            let id = b"lorawn";
+            assignments[6].clone_from_slice(id);
+            assignments[7].clone_from_slice(id);
+            assignments[8].clone_from_slice(id);
+        }
+        responses::device_get(board, serial_number, uid, assignments);
     }
 }

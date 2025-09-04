@@ -2,6 +2,10 @@
 extern crate alloc;
 use alloc::boxed::Box;
 
+pub mod gpio;
+
+use crate::gpio::GpioMode;
+
 pub const EEPROM_DATALOGGER_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SENSOR_SETTINGS_SIZE: usize = 64;
 pub const EEPROM_SERIAL_NUMBER_SIZE: usize = 5;
@@ -80,6 +84,7 @@ pub trait RRIVBoard: Send {
 }
 
 
+// move this out of the board level.  it's application defined bus.
 pub trait OneWireBusInterface {
     // fn send_command(
     //     &mut self,
@@ -106,7 +111,8 @@ pub trait SensorDriverServices {
 
 
     fn write_gpio_pin(&mut self, pin: u8, value: bool);
-    // fn read_gpio_pin(&mut self, pin: u8) -> bool;
+    fn read_gpio_pin(&mut self, pin: u8) -> bool;
+    fn set_gpio_pin_mode(&mut self, pin: u8, mode: GpioMode);
 
     // fn borrow_one_wire_bus(&mut self) -> &mut dyn OneWireBusInterface;
 

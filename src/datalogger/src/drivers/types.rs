@@ -1,5 +1,7 @@
 use alloc::boxed::Box;
 
+use super::resources::gpio::*;
+
 pub const SENSOR_SETTINGS_PARTITION_SIZE: usize = 32; // partitioning is part of the driver implemention, and not meaningful at the EEPROM level
 pub type SensorGeneralSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
 pub type SensorSpecialSettingsSlice = [u8; SENSOR_SETTINGS_PARTITION_SIZE];
@@ -54,6 +56,8 @@ impl CalibrationPair {
     }
 }
 
+
+
 pub trait SensorDriver {
     fn get_configuration_bytes(&self, storage: &mut [u8; rriv_board::EEPROM_SENSOR_SETTINGS_SIZE]); // derivable
     fn get_configuration_json(&mut self) -> serde_json::Value;
@@ -71,12 +75,12 @@ pub trait SensorDriver {
     fn fit(&mut self, pairs: &[CalibrationPair]) -> Result<(), ()>;
     fn clear_calibration(&mut self);
     // fn get_required_calibration_point_count(&self) -> usize;  // TODO
+
+    fn get_requested_gpios(&self) -> GpioRequest {
+        GpioRequest::none()
+    }
 }
 
-
-pub trait ActuatorDriver {
-    fn setup(&mut self);
-}
 
 pub trait TelemeterDriver {
     fn setup(&mut self);

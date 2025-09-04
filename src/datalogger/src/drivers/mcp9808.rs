@@ -13,13 +13,13 @@ pub struct MCP9808TemperatureDriverSpecialConfiguration {
 }
 
 impl MCP9808TemperatureDriverSpecialConfiguration {
-    pub fn new_from_values(
+    pub fn parse_from_values(
         value: serde_json::Value,
-    ) -> MCP9808TemperatureDriverSpecialConfiguration {
-        Self {
+    ) -> Result<MCP9808TemperatureDriverSpecialConfiguration, &'static str>  {
+        Ok(Self {
             calibration_offset: 0,
             empty: [b'\0'; 30] 
-        }
+        })
     }
 
     pub fn new_from_bytes(

@@ -211,12 +211,12 @@ pub struct K30CO2SpecialConfiguration {
 }
 
 impl K30CO2SpecialConfiguration {
-    pub fn new_from_values(value: serde_json::Value) -> K30CO2SpecialConfiguration {
-        return Self {
+    pub fn parse_from_values(value: serde_json::Value) -> Result<K30CO2SpecialConfiguration, &'static str> {
+        Ok( Self {
             m: 0_f32,
             b: 0_f32,
             empty: [b'\0'; 24]
-        };
+        } )
     }
 
     pub fn new_from_bytes(

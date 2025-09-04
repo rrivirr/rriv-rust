@@ -1,10 +1,12 @@
 use core::fmt::Write;
 
+use rriv_board::gpio::GpioMode;
 use rriv_board::RRIVBoard;
 use rtt_target::rprintln;
 use serde_json::json;
 use util::str_from_utf8;
 
+use crate::drivers::resources::gpio::GpioRequest;
 use crate::services::usart_service;
 use alloc::string::{String,ToString};
 use alloc::format;
@@ -337,5 +339,11 @@ impl RakWireless3172 {
 
         Ok(identity)
 
+    }
+
+    pub fn get_requested_gpios(&self) -> GpioRequest {
+        let mut request = GpioRequest::none();
+        request.use_usart();
+        return request;
     }
 }
