@@ -5,11 +5,21 @@ macro_rules! check_gpio {
     ($self:ident, $gpio:ident, $request:ident) => {
         if $self.$gpio && $request.$gpio {
             return Err(concat!(stringify!($gpio), " already requested"))
-        } else if $request.$gpio {
+        } 
+        // else if $request.$gpio {
+        //     $self.$gpio = true;
+        // }
+    }
+}
+
+macro_rules! bind_gpio {
+    ($self:ident, $gpio:ident, $request:ident) => {
+        if $request.$gpio {
             $self.$gpio = true;
         }
     }
 }
+
 
 macro_rules! release_gpio {
     ($self:ident, $gpio:ident, $request:ident) => {
@@ -76,20 +86,30 @@ impl GpioRequest {
         }
 
 
-
+        //TODO this has a problem, we can't assign the true value in the check, because it remains if we have a failure
         check_gpio!(self, gpio1, request);
         check_gpio!(self, gpio2, request);
         check_gpio!(self, gpio3, request);
         check_gpio!(self, gpio4, request);
         check_gpio!(self, gpio5, request);
         check_gpio!(self, gpio6, request);
-        check_gpio!(self, gpio7, request);
-        check_gpio!(self, gpio8, request);
+
         if self.usart {
             if request.gpio7 || request.gpio8 {
                 return Err("usart in use, conflicts with gpio7 and gpio8");
             }
         }
+        check_gpio!(self, gpio7, request);
+        check_gpio!(self, gpio8, request);
+
+        bind_gpio!(self, gpio1, request);
+        bind_gpio!(self, gpio2, request);
+        bind_gpio!(self, gpio3, request);
+        bind_gpio!(self, gpio4, request);
+        bind_gpio!(self, gpio5, request);
+        bind_gpio!(self, gpio6, request);
+        bind_gpio!(self, gpio7, request);
+        bind_gpio!(self, gpio8, request);
 
         // check_gpio!(self, usart, request); // allow multiple users are usart, we would need to have a users count
         if request.usart == true {
@@ -103,6 +123,47 @@ impl GpioRequest {
         }
         Ok(())
     }
+
+    pub fn gpio1(&self) -> bool {
+        return self.gpio1
+    }
+
+    pub fn gpio2(&self) -> bool {
+        return self.gpio2
+    }
+
+    pub fn gpio3(&self) -> bool {
+        return self.gpio3
+    }
+
+    pub fn gpio4(&self) -> bool {
+        return self.gpio4
+    }
+
+    pub fn gpio5(&self) -> bool {
+        return self.gpio5
+    }
+
+    pub fn gpio6(&self) -> bool {
+        return self.gpio6
+    }
+
+    pub fn gpio7(&self) -> bool {
+        return self.gpio7
+    }
+
+    pub fn gpio8(&self) -> bool {
+        return self.gpio8
+    }
+
+    pub fn usart(&self) -> bool {
+        return self.usart
+    }
+
+    pub fn usart_count(&self) -> u8 {
+        return self.usart_count
+    }
+
 
     // TODO: this idiom should be handing the driver some kind of handle it can use to access the pin
     // TODO: since it is ONLY a way to register usage, it means another driver can be mis-implemented
@@ -133,6 +194,7 @@ impl GpioRequest {
         if request.usart {
             self.usart_count = self.usart_count - 1;
             if self.usart_count == 0 {
+                self.usart = false;
                 self.gpio7 = false;
                 self.gpio8 = false;
             }

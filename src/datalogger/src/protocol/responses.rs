@@ -1,10 +1,10 @@
 use alloc::boxed::Box;
 use alloc::format;
-use rriv_board::RRIVBoard;
+use rriv_board::{gpio::GpioMode, RRIVBoard};
 use rtt_target::rprintln;
 use serde_json::{json, Value};
 
-use crate::{alloc::string::ToString, drivers::types::CalibrationPair};
+use crate::{alloc::string::ToString, drivers::{resources::gpio::GpioRequest, types::CalibrationPair}};
 
 pub fn send_command_response_message(board: &mut impl RRIVBoard, message: &str) {
     rprintln!("{}", message);
@@ -51,7 +51,7 @@ pub fn calibration_point_list(board: &mut impl RRIVBoard, pairs: &Option<Box<[Ca
     board.usb_serial_send("]}\n");
 }
 
-pub fn device_get(board: &mut impl RRIVBoard, mut serial_number: [u8;5], mut uid : [u8;12]){
+pub fn device_get(board: &mut impl RRIVBoard, mut serial_number: [u8;5], uid : [u8;12], mut gpio_assignments: [[u8;6];9]){
     rprintln!("{:?}", serial_number);
     let serial_number = util::str_from_utf8(&mut serial_number).unwrap_or_default();
     let uid = format!("{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}{:X?}",            
@@ -70,7 +70,19 @@ pub fn device_get(board: &mut impl RRIVBoard, mut serial_number: [u8;5], mut uid
     let uid = uid.as_str();
     let json = json!({
         "serial_number": serial_number,
-        "uid": uid
+        "uid": uid,
+        "gpio_bound" : {
+            "gpio1" : util::str_from_utf8(&mut gpio_assignments[0]).unwrap_or_default(),
+            "gpio2" : util::str_from_utf8(&mut gpio_assignments[1]).unwrap_or_default(),
+            "gpio3" : "disabled",
+            "gpio4" : "disabled",
+            "gpio5" : util::str_from_utf8(&mut gpio_assignments[4]).unwrap_or_default(),
+            "gpio6" : util::str_from_utf8(&mut gpio_assignments[5]).unwrap_or_default(),
+            "gpio7" : util::str_from_utf8(&mut gpio_assignments[6]).unwrap_or_default(),
+            "gpio8" : util::str_from_utf8(&mut gpio_assignments[7]).unwrap_or_default(),
+            "usart" : util::str_from_utf8(&mut gpio_assignments[8]).unwrap_or_default(),
+            // "usart_count" : gpio_assignments.usart_count(),
+        }
     });
     send_json(board, json);
 }
