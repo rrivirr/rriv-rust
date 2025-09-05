@@ -44,6 +44,7 @@ pub struct DataLogger {
 
     mode: DataLoggerMode,
     serial_tx_mode: DataLoggerSerialTxMode,
+    interactive_logging: bool,
 
     // naive calibration value book keeping
     // not memory efficient
@@ -76,6 +77,7 @@ impl DataLogger {
             telemeter: RakWireless3172::new(),
             completed_bursts: 0,
             readings_completed_in_current_burst: 0,
+            interactive_logging: false,
         }
     }
 
@@ -253,7 +255,9 @@ impl DataLogger {
                                                                   // Serial2.print(F("CMD >> "));
                                                                   // writeRawMeasurementToLogFile();
                                                                   // fileSystemWriteCache->flushCache();
-                    self.write_raw_measurement_to_storage(board);
+                    if self.interactive_logging {
+                        self.write_raw_measurement_to_storage(board);
+                    }
 
                     if self.settings.toggles.enable_telemetry() {
                         self.process_telemetry(board); // telemeterize the measured values
