@@ -138,7 +138,7 @@ impl DataloggerSettings {
         settings.site_name = values.site_name.unwrap_or(self.site_name);
         settings.deployment_timestamp = values.deployment_timestamp.unwrap_or(self.deployment_timestamp);
         settings.interactive_logging_interval = values.interactive_logging_interval.unwrap_or(self.interactive_logging_interval);
-        settings.sleep_interval = values.sleep_interval.unwrap_or(self.interactive_logging_interval);
+        settings.sleep_interval = values.sleep_interval.unwrap_or(self.sleep_interval);
         settings.bursts_per_measurement_cycle = values.bursts_per_measurement_cycle.unwrap_or(self.bursts_per_measurement_cycle);
         settings.start_up_delay = values.start_up_delay.unwrap_or(self.start_up_delay);
         settings.delay_between_bursts = values.delay_between_bursts.unwrap_or(self.delay_between_bursts);
