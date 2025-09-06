@@ -12,6 +12,7 @@ const USART_BUFFER_NUM: usize = 3; // Includes an extra empty cell for end marke
 const USART_BUFFER_SIZE: usize = 40;
 
 static mut MESSAGE_DATA: MessageData = MessageData::default();
+pub static mut RECEIVE_DATALOGGER_COMMANDS: bool = false;
 
 pub struct MessageData {
     buffer: [[u8; USART_BUFFER_SIZE]; USART_BUFFER_NUM],
@@ -42,11 +43,10 @@ impl<'a> USARTCharacterProcessor {
 impl<'a, 'b> RXProcessor for USARTCharacterProcessor {
     fn process_character(&self, character: u8) {
 
-        let receive_datalogger_commands = false;
-        if receive_datalogger_commands {
-            command_service::process_character(character);
-        } else {
-            unsafe {
+        unsafe {
+            if RECEIVE_DATALOGGER_COMMANDS {
+                command_service::process_character(character);
+            } else {
                 let message_data = MESSAGE_DATA.borrow_mut();
                 process_character(message_data, character);
             }
