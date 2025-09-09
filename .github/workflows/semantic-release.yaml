@@ -18,12 +18,18 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: board
     needs:
       - get-next-version
 
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      
+      - name: change directory
+
 
       - name: Install semantic-release-cargo
         if: needs.get-next-version.outputs.new-release-published == 'true'
