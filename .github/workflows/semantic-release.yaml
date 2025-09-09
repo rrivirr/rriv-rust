@@ -28,9 +28,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v3
       
-      - name: change directory
-
-
       - name: Install semantic-release-cargo
         if: needs.get-next-version.outputs.new-release-published == 'true'
         uses: EricCrosson/install-github-release-binary@v2
