@@ -29,7 +29,7 @@ jobs:
         if: needs.get-next-version.outputs.new-release-published == 'true'
         uses: EricCrosson/install-github-release-binary@v2
         with:
-          targets: EricCrosson/semantic-release-cargo@2
+          targets: semantic-release-cargo/semantic-release-cargo@v2
 
       - name: Prepare semantic-release for Rust
         if: needs.get-next-version.outputs.new-release-published == 'true'
