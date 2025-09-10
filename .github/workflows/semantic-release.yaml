@@ -12,34 +12,52 @@ on:
       - "[0-9]+.x"
 
 jobs:
-  get-next-version:
-    uses: semantic-release-action/next-release-version/.github/workflows/next-release-version.yml@v4
-
-  build:
-    name: Build
+  release:
+    name: Release
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: board
-    needs:
-      - get-next-version
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
+    - name: Configure Node.js
+      uses: actions/setup-node@v5
+      with:
+        node-version: lts/*
+
+    - name: Install Semantic Release
+      run: npm i -g semantic-release @semantic-release/{git,exec,changelog}
+
+    - name: Run Semantic Release
+      run: semantic-release
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+  # get-next-version:
+  #   uses: semantic-release-action/next-release-version/.github/workflows/next-release-version.yml@v4
+
+  # build:
+  #   name: Build
+  #   runs-on: ubuntu-latest
+  #   defaults:
+  #     run:
+  #       working-directory: board
+  #   needs:
+  #     - get-next-version
+
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v3
       
-      - name: Install semantic-release-cargo
-        if: needs.get-next-version.outputs.new-release-published == 'true'
-        uses: EricCrosson/install-github-release-binary@v2
-        with:
-          targets: semantic-release-cargo/semantic-release-cargo@v2
+  #     - name: Install semantic-release-cargo
+  #       if: needs.get-next-version.outputs.new-release-published == 'true'
+  #       uses: EricCrosson/install-github-release-binary@v2
+  #       with:
+  #         targets: semantic-release-cargo/semantic-release-cargo@v2
 
-      - name: Prepare semantic-release for Rust
-        if: needs.get-next-version.outputs.new-release-published == 'true'
-        run: semantic-release-cargo prepare ${{ needs.get-next-version.outputs.new-release-version }}
+  #     - name: Prepare semantic-release for Rust
+  #       if: needs.get-next-version.outputs.new-release-published == 'true'
+  #       run: semantic-release-cargo prepare ${{ needs.get-next-version.outputs.new-release-version }}
 
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@master
+  #     - name: Install Rust toolchain
+  #       uses: dtolnay/rust-toolchain@master
 
-      - name: Cargo build
-        run: cargo build --release --target=x86_64-unknown-linux-gnu --all-targets
+  #     - name: Cargo build
+  #       run: cargo build --release --target=x86_64-unknown-linux-gnu --all-targets
