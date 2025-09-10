@@ -117,7 +117,7 @@ impl TimedSwitch2 {
 
 impl SensorDriver for TimedSwitch2 {
     fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
-        // board.set_gpio_pin_mode(self.special_config.gpio_pin, GpioMode::PushPullOutput);
+        board.set_gpio_pin_mode(self.special_config.gpio_pin, GpioMode::PushPullOutput);
     }
 
     fn get_requested_gpios(&self) -> super::resources::gpio::GpioRequest {
