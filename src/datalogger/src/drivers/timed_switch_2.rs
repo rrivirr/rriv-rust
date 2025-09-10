@@ -165,12 +165,12 @@ impl SensorDriver for TimedSwitch2 {
         }
         if toggle_state {
             
-            // board.write_gpio_pin(self.special_config.gpio_pin, self.state != 0);
-            // self.state = match self.state {
-            //     0 => 1,
-            //     1 => 0,
-            //     _ => 0,
-            // };
+            board.write_gpio_pin(self.special_config.gpio_pin, self.state != 0);
+            self.state = match self.state {
+                0 => 1,
+                1 => 0,
+                _ => 0,
+            };
             self.last_state_updated_at = timestamp;
         }
 
