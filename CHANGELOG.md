@@ -1,3 +1,10 @@
+## [1.0.3](https://github.com/rrivirr/rriv-rust/compare/v1.0.2...v1.0.3) (2025-09-11)
+
+
+### Bug Fixes
+
+* test CD ([f8b1b99](https://github.com/rrivirr/rriv-rust/commit/f8b1b99aa8546a874f59ac845cd30a352c99060a))
+
 ## [1.0.2](https://github.com/rrivirr/rriv-rust/compare/v1.0.1...v1.0.2) (2025-09-11)
 
 
