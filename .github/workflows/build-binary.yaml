@@ -3,7 +3,7 @@ name: Publish Firmware Binary
 on:
   push:
     tags:
-      - '**'
+      - 'v**'
 
 jobs:
   build:
