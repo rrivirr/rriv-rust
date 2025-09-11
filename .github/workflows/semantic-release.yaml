@@ -31,7 +31,7 @@ jobs:
     - name: Run Semantic Release
       run: semantic-release
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        GITHUB_TOKEN: ${{ secrets.RRIV_RUST_GH_TOKEN }}
         
   # get-next-version:
   #   uses: semantic-release-action/next-release-version/.github/workflows/next-release-version.yml@v4
