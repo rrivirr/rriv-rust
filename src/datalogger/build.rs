@@ -29,7 +29,7 @@ fn main() {
         .arg("--short")
         .arg("HEAD")
         .output()
-        .expect("Failed to get git branch");
+        .expect("Failed to get git ref");
     let ref_name = String::from_utf8_lossy(&gitref.stdout).trim().to_string();
 
     println!("cargo:rustc-env=GIT_BRANCH={}", branch_name);
