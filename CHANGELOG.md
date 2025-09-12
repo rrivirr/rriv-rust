@@ -1,3 +1,10 @@
+## [1.0.1-beta.3](https://github.com/rrivirr/rriv-firmware/compare/v1.0.1-beta.2...v1.0.1-beta.3) (2025-09-12)
+
+
+### Bug Fixes
+
+* test CD ([67bd076](https://github.com/rrivirr/rriv-firmware/commit/67bd0769a519264450753dedd31975973180031e))
+
 ## [1.0.1-beta.2](https://github.com/rrivirr/rriv-rust/compare/v1.0.1-beta.1...v1.0.1-beta.2) (2025-09-10)
 
 
