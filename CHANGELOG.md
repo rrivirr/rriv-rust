@@ -1,3 +1,11 @@
+## [1.1.1-beta.3](https://github.com/rrivirr/rriv-firmware/compare/v1.1.1-beta.2...v1.1.1-beta.3) (2025-09-12)
+
+
+### Bug Fixes
+
+* get firmware version from tag ([21ddb3c](https://github.com/rrivirr/rriv-firmware/commit/21ddb3cd38b0ba88ca208225c0ed8d503946a9ab))
+* test CD ([52556cd](https://github.com/rrivirr/rriv-firmware/commit/52556cdba01d334c9de2cd9f200066c7acf238a5))
+
 ## [1.1.1-beta.2](https://github.com/rrivirr/rriv-firmware/compare/v1.1.1-beta.1...v1.1.1-beta.2) (2025-09-12)
 
 
