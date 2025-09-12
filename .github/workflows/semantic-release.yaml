@@ -27,7 +27,7 @@ jobs:
     - name: Configure Node.js
       uses: actions/setup-node@v5
       with:
-        node-version: lts/*
+          node-version: lts/*
 
     - name: Install Semantic Release
       run: npm i -g semantic-release @semantic-release/{git,exec,changelog}
@@ -47,7 +47,7 @@ jobs:
     needs: release
 
     steps:
-    - uses: actions/checkout@v4
+    #- uses: actions/checkout@v4
   
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@nightly
