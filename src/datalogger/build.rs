@@ -32,8 +32,19 @@ fn main() {
         .expect("Failed to get git ref");
     let ref_name = String::from_utf8_lossy(&gitref.stdout).trim().to_string();
 
+    let gittag = Command::new("git")
+        .arg("tag")
+        .arg("-l")
+        .arg("--contains")
+        .arg("HEAD")
+        .output()
+        .expect("Failed to get git tag");
+    let tag_name = String::from_utf8_lossy(&gittag.stdout).trim().to_string();
+
     println!("cargo:rustc-env=GIT_BRANCH={}", branch_name);
     println!("cargo:rustc-env=GIT_REF={}", ref_name);
+    println!("cargo:rustc-env=FIRMWARE_VERSION={}", tag_name);
+
 
 
 }
