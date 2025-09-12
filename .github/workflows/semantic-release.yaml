@@ -28,10 +28,18 @@ jobs:
     - name: Install Semantic Release
       run: npm i -g semantic-release @semantic-release/{git,exec,changelog}
 
+    - name: Install Semantic-Release-Export Plugin
+      run: npm install --save-dev semantic-release-export-data
+
     - name: Run Semantic Release
       run: semantic-release
+      id: next-version
       env:
         GITHUB_TOKEN: ${{ secrets.RRIV_RUST_GH_TOKEN }}
+      outputs:
+        new-release-published: ${{ steps.next-version.outputs.new-release-published }}
+        new-release-version: ${{ steps.next-version.outputs.new-release-version }}
+        new-release-git-tag: ${{ steps.next-version.outputs.new-release-git-tag }}
         
   # get-next-version:
   #   uses: semantic-release-action/next-release-version/.github/workflows/next-release-version.yml@v4
