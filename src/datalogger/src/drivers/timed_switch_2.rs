@@ -1,6 +1,7 @@
 use core::time;
 
 use rriv_board::gpio::GpioMode;
+use rtt_target::rprintln;
 use serde_json::json;
 
 use crate::{any_as_u8_slice, sensor_name_from_type_id};
@@ -12,7 +13,9 @@ pub struct TimedSwitch2SpecialConfiguration {
     on_time_s: usize,
     off_time_s: usize,
     gpio_pin: u8,
-    empty: [u8; 23],
+    initial_state: bool, // 'on' 'off'
+    // polarity // 'low_is_on', 'high_is_on'
+    _empty: [u8; 22],
 }
 
 impl TimedSwitch2SpecialConfiguration {
@@ -73,6 +76,16 @@ impl TimedSwitch2SpecialConfiguration {
             }
         }
 
+        let mut initial_state  = false;
+        match &value["initial_state"] {
+            serde_json::Value::Bool(value) => {
+                initial_state = *value;
+            }
+            _ => {
+                return Err("initial state is requiresd")
+            }
+        }
+
 
 
       
@@ -81,7 +94,8 @@ impl TimedSwitch2SpecialConfiguration {
             on_time_s,
             off_time_s,
             gpio_pin,
-            empty: [b'\0'; 23],
+            initial_state,
+            _empty: [b'\0'; 22],
         } )
     }
 
@@ -118,6 +132,14 @@ impl TimedSwitch2 {
 impl SensorDriver for TimedSwitch2 {
     fn setup(&mut self, board: &mut dyn rriv_board::SensorDriverServices) {
         board.set_gpio_pin_mode(self.special_config.gpio_pin, GpioMode::PushPullOutput);
+        self.state = match self.special_config.initial_state {
+            true => 1,
+            false => 0,
+        };
+        board.write_gpio_pin(self.special_config.gpio_pin, self.state == 1);
+        let timestamp = board.timestamp();
+        self.last_state_updated_at = timestamp;
+
     }
 
     fn get_requested_gpios(&self) -> super::resources::gpio::GpioRequest {
@@ -154,22 +176,26 @@ impl SensorDriver for TimedSwitch2 {
         if self.state == 0 {
             // heater is off
             if timestamp - self.special_config.off_time_s as i64 > self.last_state_updated_at {
+                rprintln!("state is 0, toggle triggered");
                 toggle_state = true;
             }
         } else if self.state == 1 {
             // heater is on
             if timestamp - self.special_config.on_time_s as i64 > self.last_state_updated_at {
+                rprintln!("state is 1, toggle triggered");
                 toggle_state = true;
-
             }
         }
+
         if toggle_state { 
+            rprintln!("toggle state timed switch");
             self.state = match self.state {
                 0 => 1,
                 1 => 0,
                 _ => 0,
             };
-            board.write_gpio_pin(self.special_config.gpio_pin, self.state != 0);
+            rprintln!("toggled to {}", self.state );
+            board.write_gpio_pin(self.special_config.gpio_pin, self.state == 1);
             self.last_state_updated_at = timestamp;
         }
 
@@ -205,6 +231,7 @@ impl SensorDriver for TimedSwitch2 {
             "on_time_s": self.special_config.on_time_s,
             "off_time_s": self.special_config.off_time_s,
             "gpio_pin": self.special_config.gpio_pin,
+            "initial_state" : self.special_config.initial_state
         })
     }
     
