@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/rrivirr/rriv-firmware/compare/v1.0.3...v1.1.0) (2025-09-12)
+
+
+### Features
+
+* initial state for timed switch ([ab7b4e0](https://github.com/rrivirr/rriv-firmware/commit/ab7b4e00170e583e2d8e36a53ca0c368a7e2578c))
+
 ## [1.0.3](https://github.com/rrivirr/rriv-rust/compare/v1.0.2...v1.0.3) (2025-09-11)
 
 
