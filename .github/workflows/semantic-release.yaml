@@ -15,6 +15,10 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
+    outputs:
+      new-release-published: ${{ steps.next-version.outputs.new-release-published }}
+      new-release-version: ${{ steps.next-version.outputs.new-release-version }}
+      new-release-git-tag: ${{ steps.next-version.outputs.new-release-git-tag }}
 
     steps:
 
@@ -36,11 +40,7 @@ jobs:
       id: next-version
       env:
         GITHUB_TOKEN: ${{ secrets.RRIV_RUST_GH_TOKEN }}
-      outputs:
-        new-release-published: ${{ steps.next-version.outputs.new-release-published }}
-        new-release-version: ${{ steps.next-version.outputs.new-release-version }}
-        new-release-git-tag: ${{ steps.next-version.outputs.new-release-git-tag }}
-
+ 
   build:
     name: Publish binaries
     runs-on: ubuntu-latest
