@@ -1,3 +1,10 @@
+## [1.1.1-beta.2](https://github.com/rrivirr/rriv-firmware/compare/v1.1.1-beta.1...v1.1.1-beta.2) (2025-09-12)
+
+
+### Bug Fixes
+
+* test CD ([dea9fae](https://github.com/rrivirr/rriv-firmware/commit/dea9faeb338ac54ca8e8f085859e98c9fed78410))
+
 ## [1.1.1-beta.1](https://github.com/rrivirr/rriv-firmware/compare/v1.1.0...v1.1.1-beta.1) (2025-09-12)
 
 
