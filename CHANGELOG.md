@@ -1,3 +1,10 @@
+## [1.1.1-beta.4](https://github.com/rrivirr/rriv-firmware/compare/v1.1.1-beta.3...v1.1.1-beta.4) (2025-09-13)
+
+
+### Bug Fixes
+
+* always call the firmware as firmware.bin ([9e01213](https://github.com/rrivirr/rriv-firmware/commit/9e012138bfe6d35facd0d083c5aea85b23814c8b))
+
 ## [1.1.1-beta.3](https://github.com/rrivirr/rriv-firmware/compare/v1.1.1-beta.2...v1.1.1-beta.3) (2025-09-12)
 
 
